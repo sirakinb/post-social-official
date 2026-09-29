@@ -8,6 +8,12 @@ import {
 } from "./lib/postState";
 import { internal } from "./_generated/api";
 import { createDraftCore, requestPublishCore } from "./lib/postService";
+import { paginationOptsValidator } from "convex/server";
+import type { QueryCtx } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
+import { captionProblems, planCaptionEdit } from "./lib/captionEdit";
+import { statusesForGroup } from "./lib/postFilters";
+import type { PostState } from "./lib/postState";
 
 const destinationInput = v.object({
   connectedAccountId: v.id("connectedAccounts"),
@@ -122,6 +128,110 @@ export const get = query({
     const approvals = await ctx.db.query("approvals").withIndex("by_post", (q) => q.eq("postId", postId)).collect();
     const approvalRequests = await ctx.db.query("approvalRequests").withIndex("by_post", (q) => q.eq("postId", postId)).collect();
     return { ...post, destinations, approvals, approvalRequests };
+  },
+});
+
+const statusGroupArg = v.union(v.literal("all"), v.literal("upcoming"), v.literal("published"), v.literal("attention"), v.literal("drafts"));
+
+// A post with its destinations and media (with playable URLs), as the app shows it.
+async function hydratePost(ctx: QueryCtx, post: Doc<"posts">) {
+  return {
+    ...post,
+    destinations: await ctx.db.query("destinations").withIndex("by_post", (q) => q.eq("postId", post._id)).collect(),
+    media: (await Promise.all(post.mediaAssetIds.map(async (mediaId) => {
+      const asset = await ctx.db.get(mediaId);
+      return asset ? { ...asset, url: await ctx.storage.getUrl(asset.storageId) } : null;
+    }))).filter((asset) => asset !== null),
+  };
+}
+
+// Every post, newest first, a page at a time, so history is not capped at the latest 100.
+export const listPage = query({
+  args: { workspaceId: v.id("workspaces"), paginationOpts: paginationOptsValidator, statusGroup: v.optional(statusGroupArg) },
+  handler: async (ctx, { workspaceId, paginationOpts, statusGroup }) => {
+    await requireWorkspaceMember(ctx, workspaceId);
+    const statuses = statusesForGroup(statusGroup);
+    const base = ctx.db.query("posts").withIndex("by_workspace_created", (q) => q.eq("workspaceId", workspaceId)).order("desc");
+    const filtered = statuses ? base.filter((q) => q.or(...statuses.map((status) => q.eq(q.field("status"), status)))) : base;
+    const result = await filtered.paginate(paginationOpts);
+    return { ...result, page: await Promise.all(result.page.map((post) => hydratePost(ctx, post))) };
+  },
+});
+
+// One post by id, for the preview page. Returns null (never throws) for a malformed or foreign id.
+export const getForPreview = query({
+  args: { workspaceId: v.id("workspaces"), postId: v.string() },
+  handler: async (ctx, { workspaceId, postId }) => {
+    await requireWorkspaceMember(ctx, workspaceId);
+    const id = ctx.db.normalizeId("posts", postId);
+    if (!id) return null;
+    const post = await ctx.db.get(id);
+    if (!post || post.workspaceId !== workspaceId) return null;
+    return await hydratePost(ctx, post);
+  },
+});
+
+// Posts scheduled inside a window, for the calendar month view.
+export const listInRange = query({
+  args: { workspaceId: v.id("workspaces"), from: v.number(), to: v.number() },
+  handler: async (ctx, { workspaceId, from, to }) => {
+    await requireWorkspaceMember(ctx, workspaceId);
+    const posts = await ctx.db.query("posts")
+      .withIndex("by_workspace_schedule", (q) => q.eq("workspaceId", workspaceId).gte("scheduledAt", from).lt("scheduledAt", to))
+      .take(500);
+    return await Promise.all(posts.map(async (post) => ({
+      _id: post._id,
+      caption: post.caption,
+      status: post.status,
+      scheduledAt: post.scheduledAt,
+      destinations: (await ctx.db.query("destinations").withIndex("by_post", (q) => q.eq("postId", post._id)).collect()).map((destination) => ({ platform: destination.platform })),
+    })));
+  },
+});
+
+export const updateCaption = mutation({
+  args: { workspaceId: v.id("workspaces"), postId: v.id("posts"), caption: v.string() },
+  handler: async (ctx, args) => {
+    const { user, membership } = await requireWorkspaceMember(ctx, args.workspaceId);
+    const post = await ctx.db.get(args.postId);
+    if (!post || post.workspaceId !== args.workspaceId) throw new Error("Post not found.");
+    const mayManage = post.createdBy === user._id || membership.role === "owner" || membership.role === "admin";
+    if (!mayManage) throw new Error("You do not have permission to edit this post.");
+
+    const caption = args.caption.trim();
+    const destinations = await ctx.db.query("destinations").withIndex("by_post", (q) => q.eq("postId", post._id)).collect();
+    const problems = captionProblems(caption, destinations);
+    if (problems.length > 0) throw new Error(problems[0]);
+
+    const jobs = (await Promise.all(destinations.map((destination) => ctx.db.query("publishJobs").withIndex("by_destination", (q) => q.eq("destinationId", destination._id)).collect()))).flat();
+    const sending = destinations.some((destination) => ["uploading", "processing"].includes(destination.status)) || jobs.some((job) => job.state === "running");
+    const plan = planCaptionEdit({ status: post.status, policy: post.effectiveApprovalPolicy, sending });
+    if (plan.kind === "blocked") throw new Error(plan.reason);
+    if (caption === post.caption) return { status: post.status, needsReapproval: false, changed: false };
+
+    const now = Date.now();
+    if (plan.kind === "in_place") {
+      await ctx.db.patch(post._id, { caption, updatedAt: now });
+    } else {
+      // A human approved the old wording. Stop the queued sends and ask for approval again.
+      assertPostTransition(post.status as PostState, "awaiting_approval");
+      for (const job of jobs) if (["queued", "retry_wait"].includes(job.state)) await ctx.db.patch(job._id, { state: "cancelled", updatedAt: now });
+      await ctx.db.patch(post._id, { caption, status: "awaiting_approval", requestedAt: now, approvedAt: undefined, updatedAt: now });
+      for (const destination of destinations) await ctx.db.patch(destination._id, { status: "awaiting_approval", updatedAt: now });
+      await ctx.db.insert("approvalRequests", { workspaceId: args.workspaceId, postId: post._id, policy: post.effectiveApprovalPolicy, status: "pending", requestedBy: user._id, requestedAt: now });
+    }
+    await ctx.db.insert("auditEvents", {
+      workspaceId: args.workspaceId,
+      actorUserId: user._id,
+      entryPoint: "ui",
+      eventType: "post.caption_edited",
+      entityType: "post",
+      entityId: post._id,
+      summary: plan.kind === "reapproval" ? "Caption edited; the post was sent back for approval" : "Caption edited",
+      safeMetadata: { reapproval: plan.kind === "reapproval", length: caption.length },
+      occurredAt: now,
+    });
+    return { status: plan.kind === "reapproval" ? "awaiting_approval" : post.status, needsReapproval: plan.kind === "reapproval", changed: true };
   },
 });
 

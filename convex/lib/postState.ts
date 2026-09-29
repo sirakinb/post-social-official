@@ -13,8 +13,9 @@ export type PostState =
 const transitions: Record<PostState, readonly PostState[]> = {
   draft: ["awaiting_approval", "approved", "cancelled"],
   awaiting_approval: ["approved", "draft", "cancelled"],
-  approved: ["scheduled", "processing", "cancelled"],
-  scheduled: ["processing", "cancelled"],
+  // approved/scheduled can return to awaiting_approval when a human-approved post's caption is edited.
+  approved: ["scheduled", "processing", "awaiting_approval", "cancelled"],
+  scheduled: ["processing", "awaiting_approval", "cancelled"],
   processing: ["published", "partially_published", "failed"],
   published: [],
   partially_published: [],

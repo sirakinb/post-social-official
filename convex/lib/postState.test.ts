@@ -24,6 +24,13 @@ describe("post publishing state machine", () => {
     expect(() => assertPostTransition("draft", "published")).toThrow(/Invalid post transition/);
   });
 
+  it("lets an approved or scheduled post return for approval after a caption edit, but nothing that was sent", () => {
+    expect(() => assertPostTransition("scheduled", "awaiting_approval")).not.toThrow();
+    expect(() => assertPostTransition("approved", "awaiting_approval")).not.toThrow();
+    expect(() => assertPostTransition("processing", "awaiting_approval")).toThrow(/Invalid post transition/);
+    expect(() => assertPostTransition("published", "awaiting_approval")).toThrow(/Invalid post transition/);
+  });
+
   it("uses the safest policy when selected accounts differ", () => {
     expect(strictestPolicy(["autonomous", "confirm_each", "approve_after_draft"])).toBe("confirm_each");
   });

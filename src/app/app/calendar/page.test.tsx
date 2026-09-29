@@ -20,7 +20,7 @@ vi.mock("convex/react", () => ({ useQuery: vi.fn(() => mocks.posts) }));
 vi.mock("@/components/workspace-provider", () => ({
   useWorkspace: () => ({ mode: "live", workspaceId: "ws_1", name: "Test Workspace", approvalPolicy: "confirm_each" }),
 }));
-vi.mock("../../../../convex/_generated/api", () => ({ api: { posts: { list: "posts.list" } } }));
+vi.mock("../../../../convex/_generated/api", () => ({ api: { posts: { listInRange: "posts.listInRange" } } }));
 
 describe("CalendarPage", () => {
   beforeEach(() => { mocks.posts = []; });
@@ -49,6 +49,20 @@ describe("CalendarPage", () => {
     expect(screen.getByRole("button", { name: /Next month/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Today/i })).toBeInTheDocument();
     expect(screen.getAllByText("Launch day post")).not.toHaveLength(0);
+  });
+
+  it("links each scheduled post to its preview page", () => {
+    mocks.posts = [{
+      _id: "post_1",
+      caption: "Launch day post",
+      status: "scheduled",
+      scheduledAt: Date.now(),
+      destinations: [{ platform: "tiktok" }],
+    }];
+    render(<CalendarPage />);
+    const previewLinks = screen.getAllByRole("link", { name: /Launch day post/i });
+    expect(previewLinks.length).toBeGreaterThan(0);
+    for (const link of previewLinks) expect(link).toHaveAttribute("href", "/app/posts/post_1");
   });
 
   it("shows the Threads channel abbreviation", () => {
