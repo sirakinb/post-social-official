@@ -79,6 +79,27 @@ describe("TikTokPanel", () => {
     expect(screen.getByTestId("tiktok-duet")).toBeDisabled();
   });
 
+  it("sends direct posts by default and offers a draft-to-inbox option", () => {
+    setup();
+    expect((screen.getByTestId("tiktok-inbox-mode") as HTMLInputElement).checked).toBe(false);
+    expect(screen.queryByTestId("tiktok-inbox-note")).not.toBeInTheDocument();
+  });
+
+  it("switching to draft upload calls onChange with the inbox delivery mode", async () => {
+    const { user, onChange } = setup();
+    await user.click(screen.getByTestId("tiktok-inbox-mode"));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ deliveryMode: "inbox" }));
+  });
+
+  it("hides privacy, interactions and disclosure controls in draft mode and explains what happens", () => {
+    setup({ ...defaultOptions, deliveryMode: "inbox" });
+    expect(screen.queryByTestId("tiktok-privacy")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("tiktok-comment")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("tiktok-disclosure")).not.toBeInTheDocument();
+    expect(screen.getByTestId("tiktok-inbox-note")).toHaveTextContent(/caption/i);
+    expect((screen.getByTestId("tiktok-inbox-mode") as HTMLInputElement).checked).toBe(true);
+  });
+
   it("selecting privacy calls onChange", async () => {
     const { user, onChange } = setup();
     await user.selectOptions(screen.getByTestId("tiktok-privacy"), "Public");

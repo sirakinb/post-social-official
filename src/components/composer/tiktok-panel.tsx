@@ -17,6 +17,7 @@ export function TikTokPanel({ creatorInfo, options, onChange }: TikTokPanelProps
   function update(partial: Partial<TikTokOptions>) {
     onChange({ ...options, ...partial });
   }
+  const inbox = options.deliveryMode === "inbox";
 
   return (
     <Card>
@@ -41,6 +42,25 @@ export function TikTokPanel({ creatorInfo, options, onChange }: TikTokPanelProps
           </div>
         )}
 
+        <div className="space-y-2">
+          <label className="flex items-center gap-3">
+            <Checkbox
+              checked={inbox}
+              onChange={() => update({ deliveryMode: inbox ? "direct" : "inbox" })}
+              data-testid="tiktok-inbox-mode"
+            />
+            <span className="text-sm font-medium text-ink">
+              Send as a draft to my TikTok inbox
+            </span>
+          </label>
+          {inbox && (
+            <p className="text-xs text-ink-subtle" data-testid="tiktok-inbox-note">
+              The video is uploaded to your TikTok inbox. Open TikTok to add the caption, choose who can watch and post it. Your caption and settings here are not sent.
+            </p>
+          )}
+        </div>
+
+        {!inbox && <>
         <div className="space-y-2">
           <label
             htmlFor="tiktok-privacy"
@@ -168,6 +188,7 @@ export function TikTokPanel({ creatorInfo, options, onChange }: TikTokPanelProps
             <span className="text-sm font-medium text-ink">Label as AI-generated</span>
           </label>
         </div>
+        </>}
 
         <div className="rounded-lg border border-border bg-canvas-ivory p-3 text-sm text-ink-muted">
           <div className="flex items-start gap-2">

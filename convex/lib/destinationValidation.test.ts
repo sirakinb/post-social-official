@@ -28,6 +28,23 @@ describe("destination publish validation", () => {
     expect(() => validateDestinationForPublish({ options: tiktok, media: [{ mediaType: "video", mimeType: "video/mp4", durationSeconds: 30 }], caption: "Hello", now })).not.toThrow();
   });
 
+  it("accepts a TikTok draft upload without privacy, disclosure or fresh creator info", () => {
+    const inbox = { ...tiktok, deliveryMode: "inbox" as const, privacyLevel: "", disclosureEnabled: false, yourBrandEnabled: true, creatorInfoCheckedAt: now - 60 * 60 * 1000, creatorInfoSnapshot: { ...tiktok.creatorInfoSnapshot, canPost: false } };
+    expect(() => validateDestinationForPublish({ options: inbox, media: [{ mediaType: "video", mimeType: "video/mp4", durationSeconds: 30 }], caption: "", now })).not.toThrow();
+  });
+
+  it("limits TikTok draft uploads to a single valid video", () => {
+    const inbox = { ...tiktok, deliveryMode: "inbox" as const };
+    expect(() => validateDestinationForPublish({ options: inbox, media: [{ mediaType: "image", mimeType: "image/jpeg" }], caption: "", now })).toThrow("exactly one video");
+    expect(() => validateDestinationForPublish({ options: inbox, media: [{ mediaType: "video", mimeType: "video/mp4" }, { mediaType: "video", mimeType: "video/mp4" }], caption: "", now })).toThrow("exactly one video");
+    expect(() => validateDestinationForPublish({ options: inbox, media: [{ mediaType: "video", mimeType: "video/webm" }], caption: "", now })).toThrow("MP4 or MOV");
+    expect(() => validateDestinationForPublish({ options: inbox, media: [{ mediaType: "video", mimeType: "video/mp4", durationSeconds: 61 }], caption: "", now })).toThrow("longer than this TikTok account allows");
+  });
+
+  it("still enforces direct-post rules when delivery mode is direct", () => {
+    expect(() => validateDestinationForPublish({ options: { ...tiktok, deliveryMode: "direct" as const, privacyLevel: "" }, media: [{ mediaType: "video", mimeType: "video/mp4" }], caption: "Hello", now })).toThrow("Choose a TikTok privacy setting");
+  });
+
   it("rejects mixed TikTok video and photo media", () => {
     expect(() => validateDestinationForPublish({ options: tiktok, media: [{ mediaType: "video", mimeType: "video/mp4" }, { mediaType: "image", mimeType: "image/jpeg" }], caption: "Hello", now })).toThrow("one video");
   });

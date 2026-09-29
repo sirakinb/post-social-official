@@ -131,7 +131,7 @@ export function Composer({
     caption.trim().length > 0 &&
     (!mediaRequired || hasMedia) &&
     selectedDestinations.length > 0 &&
-    (!tiktokSelected || tiktokOptions.privacyLevel !== "") &&
+    (!tiktokSelected || tiktokOptions.deliveryMode === "inbox" || tiktokOptions.privacyLevel !== "") &&
     tiktokErrors.length === 0 &&
     facebookErrors.length === 0 &&
     threadsErrors.length === 0 &&
@@ -269,7 +269,7 @@ export function Composer({
             ? "Select at least one destination."
             : mediaRequired && !hasMedia
               ? "Add media before publishing or scheduling. You can still save this draft."
-            : tiktokSelected && !tiktokOptions.privacyLevel
+            : tiktokSelected && tiktokOptions.deliveryMode !== "inbox" && !tiktokOptions.privacyLevel
               ? "Choose a TikTok privacy setting before publishing."
             : tiktokErrors.length > 0
               ? tiktokErrors[0]

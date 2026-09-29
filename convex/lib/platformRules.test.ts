@@ -43,6 +43,13 @@ describe("platform publishing rules", () => {
     expect(classifyTikTokStatus({ status: "PROCESSING_UPLOAD" }, 0, 10 * 60 * 1000 + 1)).toEqual({ kind: "timed_out" });
   });
 
+  it("treats SEND_TO_USER_INBOX as done only for draft uploads", () => {
+    expect(classifyTikTokStatus({ status: "SEND_TO_USER_INBOX" }, 0, 1, "inbox")).toEqual({ kind: "sent_to_inbox" });
+    expect(classifyTikTokStatus({ status: "SEND_TO_USER_INBOX" }, 0, 1)).toEqual({ kind: "processing" });
+    expect(classifyTikTokStatus({ status: "PROCESSING_UPLOAD" }, 0, 1, "inbox")).toEqual({ kind: "processing" });
+    expect(classifyTikTokStatus({ status: "FAILED", fail_reason: "file_format_check_failed" }, 0, 1, "inbox")).toEqual({ kind: "failed", reason: "file_format_check_failed" });
+  });
+
   it("waits for Threads image containers and surfaces terminal preparation failures", () => {
     expect(classifyThreadsContainerStatus({ status: "FINISHED" })).toEqual({ kind: "ready" });
     expect(classifyThreadsContainerStatus({ status: "IN_PROGRESS" })).toEqual({ kind: "processing" });

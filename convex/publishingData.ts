@@ -12,6 +12,7 @@ function settingsMetadata(options: any): Record<string, string | number | boolea
     yourBrandEnabled: options.yourBrandEnabled,
     brandedContentEnabled: options.brandedContentEnabled,
     aiGenerated: options.aiGenerated ?? false,
+    deliveryMode: options.deliveryMode ?? "direct",
   };
   if (options.kind === "youtube") return {
     privacyStatus: options.privacyStatus,

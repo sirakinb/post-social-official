@@ -8,7 +8,7 @@ import { assertConnectionWorkspace, canPublishToFacebookPage, platformResponseEr
 import { buildAuthUrl as buildYouTubeAuthUrl, exchangeCodeForTokens as exchangeYouTubeCode } from "./lib/youtubeService";
 
 const API_VERSION = "v25.0";
-const TIKTOK_SCOPES = ["user.info.basic", "video.publish"];
+const TIKTOK_SCOPES = ["user.info.basic", "video.publish", "video.upload"];
 const INSTAGRAM_SCOPES = ["instagram_business_basic", "instagram_business_content_publish"];
 const FACEBOOK_SCOPES = ["pages_show_list", "pages_read_engagement", "pages_manage_posts"];
 const THREADS_SCOPES = ["threads_basic", "threads_content_publish"];

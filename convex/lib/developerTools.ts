@@ -18,6 +18,7 @@ const destinationSchema = {
             yourBrandEnabled: { type: "boolean" },
             brandedContentEnabled: { type: "boolean" },
             aiGenerated: { type: "boolean" },
+            deliveryMode: { enum: ["direct", "inbox"], description: "Defaults to direct. Use inbox to upload the video as a draft to the creator's TikTok inbox; privacy, interaction and caption settings are then chosen inside TikTok. The account must have been connected with the video.upload permission." },
             creatorInfoCheckedAt: { type: "number", description: "Copy checkedAt from the latest list_accounts creatorInfo result." },
             creatorInfoSnapshot: {
               type: "object",

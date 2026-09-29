@@ -18,6 +18,15 @@ export function validateDestinationForPublish(args: {
   if (options.kind === "tiktok") {
     const videos = media.filter((asset) => asset.mediaType === "video");
     const images = media.filter((asset) => asset.mediaType === "image");
+    if (options.deliveryMode === "inbox") {
+      // Draft upload sends only the video. Privacy, interactions, disclosure and caption are set by the creator inside TikTok.
+      if (videos.length !== 1 || images.length > 0) throw new Error("TikTok draft upload takes exactly one video.");
+      for (const asset of videos) {
+        if (!["video/mp4", "video/quicktime"].includes(asset.mimeType)) throw new Error("TikTok video posts require an MP4 or MOV file.");
+        if (asset.durationSeconds !== undefined && asset.durationSeconds > options.creatorInfoSnapshot.maxVideoDurationSec) throw new Error("A video is longer than this TikTok account allows.");
+      }
+      return;
+    }
     if (videos.length === 0 && images.length === 0) throw new Error("TikTok needs a video or at least one image.");
     if (videos.length > 1 || (videos.length === 1 && images.length > 0)) throw new Error("A TikTok video post accepts one video; a photo post accepts images only.");
     if (images.length > 35) throw new Error("TikTok accepts up to 35 images in one photo post.");

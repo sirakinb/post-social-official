@@ -61,6 +61,9 @@ export const tiktokOptions = v.object({
   yourBrandEnabled: v.boolean(),
   brandedContentEnabled: v.boolean(),
   aiGenerated: v.optional(v.boolean()),
+  // "inbox" uploads the video as a draft to the creator's TikTok inbox (video.upload)
+  // instead of Direct Post. TikTok ignores privacy, interaction and caption settings for drafts.
+  deliveryMode: v.optional(v.union(v.literal("direct"), v.literal("inbox"))),
   creatorInfoCheckedAt: v.number(),
   creatorInfoSnapshot: v.object({
     nickname: v.string(),

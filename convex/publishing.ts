@@ -48,6 +48,12 @@ async function threadsJson(response: Response, stage: "create" | "publish") {
 
 async function submitTikTok(bundle: any, token: string) {
   const asset = bundle.media.find((item: any) => item.mediaType === "video");
+  const inbox = bundle.destination.options.deliveryMode === "inbox";
+  if (inbox) {
+    if (!asset?.url) throw new PublishError("media_missing", "TikTok draft upload needs one video.");
+    // Accounts connected before draft upload existed lack this permission and must reconnect once.
+    if (!(bundle.account.scopes ?? []).includes("video.upload")) throw new PublishError("tiktok_reconnect_required", "Reconnect this TikTok account to allow draft uploads (it needs the video.upload permission).");
+  }
   if (!asset?.url) return await submitTikTokPhotos(bundle, token);
   let plan;
   try { plan = buildTikTokChunkPlan(Number(asset.sizeBytes)); }
@@ -57,7 +63,13 @@ async function submitTikTok(bundle: any, token: string) {
   }
   const { videoSize, chunkSize, totalChunkCount, ranges } = plan;
   const options = bundle.destination.options;
-  const initialized = await platformJson(await fetch("https://open.tiktokapis.com/v2/post/publish/video/init/", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json; charset=UTF-8" }, body: JSON.stringify({ post_info: { title: bundle.post.caption, privacy_level: options.privacyLevel, disable_duet: !options.duetEnabled, disable_comment: !options.commentEnabled, disable_stitch: !options.stitchEnabled, brand_content_toggle: options.brandedContentEnabled, brand_organic_toggle: options.yourBrandEnabled, is_aigc: options.aiGenerated ?? false }, source_info: { source: "FILE_UPLOAD", video_size: videoSize, chunk_size: chunkSize, total_chunk_count: totalChunkCount } }) }));
+  const sourceInfo = { source: "FILE_UPLOAD", video_size: videoSize, chunk_size: chunkSize, total_chunk_count: totalChunkCount };
+  // Drafts go to the creator's inbox and take no post_info; the creator sets caption and privacy in TikTok.
+  const initUrl = inbox ? "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/" : "https://open.tiktokapis.com/v2/post/publish/video/init/";
+  const initBody = inbox
+    ? { source_info: sourceInfo }
+    : { post_info: { title: bundle.post.caption, privacy_level: options.privacyLevel, disable_duet: !options.duetEnabled, disable_comment: !options.commentEnabled, disable_stitch: !options.stitchEnabled, brand_content_toggle: options.brandedContentEnabled, brand_organic_toggle: options.yourBrandEnabled, is_aigc: options.aiGenerated ?? false }, source_info: sourceInfo };
+  const initialized = await platformJson(await fetch(initUrl, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json; charset=UTF-8" }, body: JSON.stringify(initBody) }));
   for (const { start, end, length: expectedLength } of ranges) {
     const fileResponse = await fetch(asset.url, {
       headers: videoSize > chunkSize ? { Range: `bytes=${start}-${end}` } : undefined,
@@ -441,9 +453,16 @@ export const checkTikTokStatus = internalAction({
       const credential = await ctx.runAction(internal.credentialVault.decrypt, { credentialId: bundle.account.credentialId });
       await reservePlatformCall(ctx, bundle, "status_fetch", 30, 60_000);
       const result = await fetchTikTokStatus(publishId, credential.accessToken);
-      const outcome = classifyTikTokStatus(result.data ?? {}, bundle.job.createdAt, Date.now());
+      const options = bundle.destination.options;
+      const deliveryMode = options.kind === "tiktok" ? options.deliveryMode ?? "direct" : "direct";
+      const outcome = classifyTikTokStatus(result.data ?? {}, bundle.job.createdAt, Date.now(), deliveryMode);
       if (outcome.kind === "published") {
         await ctx.runMutation(internal.publishingData.markSucceeded, { jobId, platformRequestId: publishId, liveUrl: tiktokLiveUrl(outcome.postId, bundle.account.handle) });
+        return;
+      }
+      if (outcome.kind === "sent_to_inbox") {
+        // A draft has no public URL; the creator finishes and posts it inside TikTok.
+        await ctx.runMutation(internal.publishingData.markSucceeded, { jobId, platformRequestId: publishId });
         return;
       }
       if (outcome.kind === "failed") {

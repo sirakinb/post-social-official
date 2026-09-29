@@ -53,12 +53,14 @@ export function canPublishToFacebookPage(tasks: unknown): boolean {
 
 export type TikTokStatusOutcome =
   | { kind: "published"; postId?: string }
+  | { kind: "sent_to_inbox" }
   | { kind: "failed"; reason: string }
   | { kind: "processing" }
   | { kind: "timed_out" };
 
-export function classifyTikTokStatus(data: Record<string, unknown>, createdAt: number, now: number): TikTokStatusOutcome {
+export function classifyTikTokStatus(data: Record<string, unknown>, createdAt: number, now: number, deliveryMode: "direct" | "inbox" = "direct"): TikTokStatusOutcome {
   const status = String(data.status ?? "");
+  if (deliveryMode === "inbox" && status === "SEND_TO_USER_INBOX") return { kind: "sent_to_inbox" };
   if (status === "PUBLISH_COMPLETE") {
     const rawIds = data.publicly_available_post_id ?? data.publicaly_available_post_id;
     const postId = Array.isArray(rawIds) ? rawIds[0] : rawIds;

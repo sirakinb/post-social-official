@@ -61,6 +61,7 @@ export interface TikTokOptions {
   yourBrandEnabled: boolean;
   brandedContentEnabled: boolean;
   aiGenerated?: boolean;
+  deliveryMode?: "direct" | "inbox";
 }
 
 export interface YouTubeOptions {
