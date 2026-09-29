@@ -1,0 +1,21 @@
+# dependencies and build output
+node_modules/
+.next/
+dist/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# env and local tooling
+.env
+.env.*
+!.env.example
+.vercel
+.claude/settings.local.json
+
+# OS
+.DS_Store
+
+# App review videos and caption files (large binaries, kept locally)
+submission/**/*.mp4
+submission/**/*.ass

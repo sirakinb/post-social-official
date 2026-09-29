@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title description">
+  <title id="title">Post Social app icon</title>
+  <description id="description">A plum signal entering a white publishing gateway and leaving as three routes, with a yellow spark.</description>
+  <defs>
+    <pattern id="grid" width="96" height="96" patternUnits="userSpaceOnUse">
+      <path d="M 96 0 L 0 0 0 96" fill="none" stroke="#9B6CFF" stroke-opacity="0.08" stroke-width="2"/>
+    </pattern>
+    <pattern id="grooves" width="8" height="8" patternUnits="userSpaceOnUse">
+      <path d="M0 1H8" stroke="#FFFFFF" stroke-opacity="0.12" stroke-width="1"/>
+      <path d="M0 5H8" stroke="#040208" stroke-opacity="0.16" stroke-width="1"/>
+    </pattern>
+    <filter id="plumGlow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="28"/>
+    </filter>
+    <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="28" stdDeviation="34" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+    <clipPath id="iconClip"><rect x="32" y="32" width="960" height="960" rx="224"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#iconClip)">
+    <rect x="32" y="32" width="960" height="960" rx="224" fill="#0C081A"/>
+    <rect x="32" y="32" width="960" height="960" rx="224" fill="url(#grid)"/>
+    <rect x="32" y="32" width="960" height="960" rx="224" fill="url(#grooves)" opacity="0.32"/>
+    <circle cx="251" cy="501" r="108" fill="#9B6CFF" opacity="0.2" filter="url(#plumGlow)"/>
+
+    <g>
+      <circle cx="251" cy="501" r="72" fill="#9B6CFF"/>
+      <circle cx="228" cy="474" r="18" fill="#D8C5FF" opacity="0.72"/>
+
+      <path d="M352 282 L610 385 L610 639 L352 742 L435 600 L435 424 Z" fill="#F8F6FF"/>
+
+      <rect x="630" y="372" width="218" height="54" rx="14" fill="#F8F6FF"/>
+      <rect x="630" y="485" width="274" height="54" rx="14" fill="#F8F6FF"/>
+      <rect x="630" y="598" width="188" height="54" rx="14" fill="#F8F6FF"/>
+    </g>
+
+    <g transform="translate(842 724)" fill="#FFD65A">
+      <path d="M40 0 C46 27 53 34 80 40 C53 46 46 53 40 80 C34 53 27 46 0 40 C27 34 34 27 40 0Z"/>
+      <circle cx="40" cy="40" r="9" fill="#FFF1A8"/>
+    </g>
+  </g>
+  <rect x="33" y="33" width="958" height="958" rx="223" fill="none" stroke="#9B6CFF" stroke-opacity="0.35" stroke-width="2"/>
+</svg>

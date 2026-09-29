@@ -1,0 +1,248 @@
+import { cn } from "@/lib/utils";
+
+const TIKTOK_PATH =
+  "M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z";
+const INSTAGRAM_PATH =
+  "M7.0301.084c-1.2768.0602-2.1487.264-2.911.5634-.7888.3075-1.4575.72-2.1228 1.3877-.6652.6677-1.075 1.3368-1.3802 2.127-.2954.7638-.4956 1.6365-.552 2.914-.0564 1.2775-.0689 1.6882-.0626 4.947.0062 3.2586.0206 3.6671.0825 4.9473.061 1.2765.264 2.1482.5635 2.9107.308.7889.72 1.4573 1.388 2.1228.6679.6655 1.3365 1.0743 2.1285 1.38.7632.295 1.6361.4961 2.9134.552 1.2773.056 1.6884.069 4.9462.0627 3.2578-.0062 3.668-.0207 4.9478-.0814 1.28-.0607 2.147-.2652 2.9098-.5633.7889-.3086 1.4578-.72 2.1228-1.3881.665-.6682 1.0745-1.3378 1.3795-2.1284.2957-.7632.4966-1.636.552-2.9124.056-1.2809.0692-1.6898.063-4.948-.0063-3.2583-.021-3.6668-.0817-4.9465-.0607-1.2797-.264-2.1487-.5633-2.9117-.3084-.7889-.72-1.4568-1.3876-2.1228C21.2982 1.33 20.628.9208 19.8378.6165 19.074.321 18.2017.1197 16.9244.0645 15.6471.0093 15.236-.005 11.977.0014 8.718.0076 8.31.0215 7.0301.0839m.1402 21.6932c-1.17-.0509-1.8053-.2453-2.2287-.408-.5606-.216-.96-.4771-1.3819-.895-.422-.4178-.6811-.8186-.9-1.378-.1644-.4234-.3624-1.058-.4171-2.228-.0595-1.2645-.072-1.6442-.079-4.848-.007-3.2037.0053-3.583.0607-4.848.05-1.169.2456-1.805.408-2.2282.216-.5613.4762-.96.895-1.3816.4188-.4217.8184-.6814 1.3783-.9003.423-.1651 1.0575-.3614 2.227-.4171 1.2655-.06 1.6447-.072 4.848-.079 3.2033-.007 3.5835.005 4.8495.0608 1.169.0508 1.8053.2445 2.228.408.5608.216.96.4754 1.3816.895.4217.4194.6816.8176.9005 1.3787.1653.4217.3617 1.056.4169 2.2263.0602 1.2655.0739 1.645.0796 4.848.0058 3.203-.0055 3.5834-.061 4.848-.051 1.17-.245 1.8055-.408 2.2294-.216.5604-.4763.96-.8954 1.3814-.419.4215-.8181.6811-1.3783.9-.4224.1649-1.0577.3617-2.2262.4174-1.2656.0595-1.6448.072-4.8493.079-3.2045.007-3.5825-.006-4.848-.0608M16.953 5.5864A1.44 1.44 0 1 0 18.39 4.144a1.44 1.44 0 0 0-1.437 1.4424M5.8385 12.012c.0067 3.4032 2.7706 6.1557 6.173 6.1493 3.4026-.0065 6.157-2.7701 6.1506-6.1733-.0065-3.4032-2.771-6.1565-6.174-6.1498-3.403.0067-6.156 2.771-6.1496 6.1738M8 12.0077a4 4 0 1 1 4.008 3.9921A3.9996 3.9996 0 0 1 8 12.0077";
+const FACEBOOK_PATH =
+  "M9.101 23.691v-7.98H6.627v-3.667h2.474v-1.58c0-4.085 1.848-5.978 5.858-5.978.401 0 .955.042 1.468.103a8.68 8.68 0 0 1 1.141.195v3.325a8.623 8.623 0 0 0-.653-.036 26.805 26.805 0 0 0-.733-.009c-.707 0-1.259.096-1.675.309a1.686 1.686 0 0 0-.679.622c-.258.42-.374.995-.374 1.752v1.297h3.919l-.386 2.103-.287 1.564h-3.246v8.245C19.396 23.238 24 18.179 24 12.044c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.628 3.874 10.35 9.101 11.647Z";
+const YOUTUBE_PATH =
+  "M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z";
+const THREADS_PATH =
+  "M141.537 88.9883C140.71 88.5919 139.87 88.2104 139.019 87.8451C137.537 60.5382 122.616 44.905 97.5619 44.745C97.4484 44.7443 97.3355 44.7443 97.222 44.7443C82.2364 44.7443 69.7731 51.1409 62.102 62.7807L75.881 72.2328C81.6116 63.5383 90.6052 61.6848 97.2286 61.6848C97.3051 61.6848 97.3819 61.6848 97.4576 61.6855C105.707 61.7381 111.932 64.1366 115.961 68.814C118.893 72.2193 120.854 76.925 121.825 82.8638C114.511 81.6207 106.601 81.2385 98.145 81.7233C74.3247 83.0954 59.0111 96.9879 60.0396 116.292C60.5615 126.084 65.4397 134.508 73.775 140.011C80.8224 144.663 89.899 146.938 99.3323 146.423C111.79 145.74 121.563 140.987 128.381 132.296C133.559 125.696 136.834 117.143 138.28 106.366C144.217 109.949 148.617 114.664 151.047 120.332C155.179 129.967 155.42 145.8 142.501 158.708C131.182 170.016 117.576 174.908 97.0135 175.059C74.2042 174.89 56.9538 167.575 45.7381 153.317C35.2355 139.966 29.8077 120.682 29.6052 96C29.8077 71.3178 35.2355 52.0336 45.7381 38.6827C56.9538 24.4249 74.2039 17.11 97.0132 16.9405C119.988 17.1113 137.539 24.4614 149.184 38.788C154.894 45.8136 159.199 54.6488 162.037 64.9503L178.184 60.6422C174.744 47.9622 169.331 37.0357 161.965 27.974C147.036 9.60668 125.202 0.195148 97.0695 0H96.9569C68.8816 0.19447 47.2921 9.6418 32.7883 28.0793C19.8819 44.4864 13.2244 67.3157 13.0007 95.9325L13 96L13.0007 96.0675C13.2244 124.684 19.8819 147.514 32.7883 163.921C47.2921 182.358 68.8816 191.806 96.9569 192H97.0695C122.03 191.827 139.624 185.292 154.118 170.811C173.081 151.866 172.51 128.119 166.26 113.541C161.776 103.087 153.227 94.5962 141.537 88.9883ZM98.4405 129.507C88.0005 130.095 77.1544 125.409 76.6196 115.372C76.2232 107.93 81.9158 99.626 99.0812 98.6368C101.047 98.5234 102.976 98.468 104.871 98.468C111.106 98.468 116.939 99.0737 122.242 100.233C120.264 124.935 108.662 128.946 98.4405 129.507Z";
+
+// LinkedIn "in" bug — https://brand.linkedin.com/downloads
+const LINKEDIN_PATH =
+  "M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z";
+
+// Bluesky butterfly — https://bsky.social/about/support/icons
+const BLUESKY_PATH =
+  "M12 10.8c-1.087-2.114-4.046-6.053-6.798-7.995C2.566.944 1.561 1.501.895 2.225.088 3.111-.211 4.259.152 5.417.727 7.34 2.46 10.508 2.46 10.508c-.983 1.764-1.854 3.979-1.854 5.784 0 3.34 2.538 5.35 5.352 5.35 1.232 0 2.56-.365 3.583-1.187.923-.74 1.645-1.805 2.459-3.084.814 1.279 1.536 2.344 2.459 3.084 1.023.822 2.351 1.187 3.583 1.187 2.814 0 5.352-2.01 5.352-5.35 0-1.805-.871-4.02-1.854-5.784 0 0 1.733-3.168 2.308-5.09.363-1.158.064-2.306-.743-3.192-.666-.724-1.671-1.281-3.307-1.42-2.752 1.942-5.711 5.881-6.798 7.995z";
+
+// X mark — https://about.x.com/en/who-we-are/brand-toolkit
+const XLOGO_PATH =
+  "M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z";
+
+interface LogoProps {
+  className?: string;
+  "aria-label"?: string;
+}
+
+export function TikTokLogo({ className, "aria-label": ariaLabel }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={cn("inline-block", className)}
+      aria-label={ariaLabel ?? "TikTok"}
+      role="img"
+    >
+      <path fill="#25F4EE" d={TIKTOK_PATH} transform="translate(-0.3 -0.3)" />
+      <path fill="#FE2C55" d={TIKTOK_PATH} transform="translate(0.3 0.3)" />
+      <path fill="white" d={TIKTOK_PATH} />
+    </svg>
+  );
+}
+
+export function InstagramLogo({ className, "aria-label": ariaLabel }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={cn("inline-block", className)}
+      aria-label={ariaLabel ?? "Instagram"}
+      role="img"
+    >
+      <path fill="currentColor" d={INSTAGRAM_PATH} />
+    </svg>
+  );
+}
+
+export function FacebookLogo({ className, "aria-label": ariaLabel }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={cn("inline-block", className)}
+      aria-label={ariaLabel ?? "Facebook"}
+      role="img"
+    >
+      <path fill="currentColor" d={FACEBOOK_PATH} />
+    </svg>
+  );
+}
+
+export function ThreadsLogo({ className, "aria-label": ariaLabel }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 192 192"
+      className={cn("inline-block", className)}
+      aria-label={ariaLabel ?? "Threads"}
+      role="img"
+    >
+      <path fill="currentColor" d={THREADS_PATH} />
+    </svg>
+  );
+}
+
+export function YouTubeLogo({ className, "aria-label": ariaLabel }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={cn("inline-block", className)}
+      aria-label={ariaLabel ?? "YouTube"}
+      role="img"
+    >
+      <path fill="currentColor" d={YOUTUBE_PATH} />
+    </svg>
+  );
+}
+
+export function LinkedInLogo({ className, "aria-label": ariaLabel }: LogoProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={cn("inline-block", className)} aria-label={ariaLabel ?? "LinkedIn"} role="img">
+      <path fill="currentColor" d={LINKEDIN_PATH} />
+    </svg>
+  );
+}
+
+export function BlueskyLogo({ className, "aria-label": ariaLabel }: LogoProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={cn("inline-block", className)} aria-label={ariaLabel ?? "Bluesky"} role="img">
+      <path fill="currentColor" d={BLUESKY_PATH} />
+    </svg>
+  );
+}
+
+export function XLogo({ className, "aria-label": ariaLabel }: LogoProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={cn("inline-block", className)} aria-label={ariaLabel ?? "X"} role="img">
+      <path fill="currentColor" d={XLOGO_PATH} />
+    </svg>
+  );
+}
+
+interface PlatformCardIconProps {
+  platform: "tiktok" | "instagram" | "facebook" | "threads" | "youtube" | "linkedin" | "bluesky" | "x";
+  className?: string;
+  size?: "sm" | "md";
+}
+
+export function PlatformCardIcon({ platform, className, size = "md" }: PlatformCardIconProps) {
+  const styles = {
+    tiktok: "bg-[#010101]",
+    instagram: "bg-gradient-to-tr from-[#f09433] via-[#dc2743] to-[#bc1888] text-white",
+    facebook: "bg-[#1877F2] text-white",
+    threads: "bg-[#0A0A0A] text-white",
+    youtube: "bg-[#FF0000] text-white",
+    linkedin: "bg-[#0A66C2] text-white",
+    bluesky: "bg-[#0560FF] text-white",
+    x: "bg-[#000000] text-white",
+  };
+  const sizes = {
+    sm: { container: "h-5 w-5 rounded-full", icon: "h-3 w-3" },
+    md: { container: "h-11 w-11 rounded-xl", icon: "h-6 w-6" },
+  };
+  const s = sizes[size];
+
+  return (
+    <span className={cn("inline-flex items-center justify-center", styles[platform], s.container, className)}>
+      {platform === "tiktok" && <TikTokLogo className={s.icon} aria-hidden="true" />}
+      {platform === "instagram" && <InstagramLogo className={s.icon} aria-hidden="true" />}
+      {platform === "facebook" && <FacebookLogo className={s.icon} aria-hidden="true" />}
+      {platform === "threads" && <ThreadsLogo className={s.icon} aria-hidden="true" />}
+      {platform === "youtube" && <YouTubeLogo className={s.icon} aria-hidden="true" />}
+      {platform === "linkedin" && <LinkedInLogo className={s.icon} aria-hidden="true" />}
+      {platform === "bluesky" && <BlueskyLogo className={s.icon} aria-hidden="true" />}
+      {platform === "x" && <XLogo className={s.icon} aria-hidden="true" />}
+    </span>
+  );
+}
+
+interface PlatformStripProps {
+  className?: string;
+  size?: "sm" | "md" | "lg";
+}
+
+const stripSizes = {
+  sm: { item: "h-10 w-10 rounded-lg", icon: "h-5 w-5" },
+  md: {
+    item: "h-12 w-12 rounded-xl sm:h-14 sm:w-14",
+    icon: "h-6 w-6 sm:h-7 sm:w-7",
+  },
+  lg: {
+    item: "h-14 w-14 rounded-xl sm:h-16 sm:w-16 md:h-20 md:w-20",
+    icon: "h-7 w-7 sm:h-8 sm:w-8 md:h-10 md:w-10",
+  },
+};
+
+const stripTileStyles = {
+  tiktok: "grooved-surface bg-[#010101]",
+  instagram: "grooved-instagram text-white",
+  facebook: "grooved-surface bg-[#1877F2] text-white",
+  threads: "grooved-surface bg-[#0A0A0A] text-white",
+  youtube: "grooved-surface bg-[#FF0000] text-white",
+  linkedin: "grooved-surface bg-[#0A66C2] text-white",
+  bluesky: "grooved-surface bg-[#0560FF] text-white",
+  x: "grooved-surface bg-[#000000] text-white",
+};
+
+export function PlatformStrip({
+  className,
+  size = "md",
+}: PlatformStripProps) {
+  const s = stripSizes[size];
+  const items = [
+    { platform: "tiktok" as const, name: "TikTok" },
+    { platform: "instagram" as const, name: "Instagram" },
+    { platform: "facebook" as const, name: "Facebook" },
+    { platform: "threads" as const, name: "Threads" },
+    { platform: "youtube" as const, name: "YouTube" },
+    { platform: "linkedin" as const, name: "LinkedIn" },
+    { platform: "bluesky" as const, name: "Bluesky" },
+    { platform: "x" as const, name: "X" },
+  ];
+
+  return (
+    <span
+      className={cn(
+        "inline-grid w-full max-w-[18rem] grid-cols-4 gap-3 sm:max-w-[40rem] sm:grid-cols-8 md:max-w-[48rem]",
+        className,
+      )}
+      aria-label="TikTok, Instagram, Facebook Pages, Threads, YouTube, LinkedIn, Bluesky, and X"
+    >
+      {items.map(({ platform, name }) => (
+        <span
+          key={platform}
+          className={cn(
+            "inline-flex items-center justify-center border border-white/10 shadow-soft ring-1 ring-white/5",
+            stripTileStyles[platform],
+            s.item,
+          )}
+        >
+          {platform === "tiktok" && (
+            <TikTokLogo className={s.icon} aria-label={name} />
+          )}
+          {platform === "instagram" && (
+            <InstagramLogo className={s.icon} aria-label={name} />
+          )}
+          {platform === "facebook" && (
+            <FacebookLogo className={s.icon} aria-label={name} />
+          )}
+          {platform === "threads" && (
+            <ThreadsLogo className={s.icon} aria-label={name} />
+          )}
+          {platform === "youtube" && (
+            <YouTubeLogo className={s.icon} aria-label={name} />
+          )}
+          {platform === "linkedin" && (
+            <LinkedInLogo className={s.icon} aria-label={name} />
+          )}
+          {platform === "bluesky" && (
+            <BlueskyLogo className={s.icon} aria-label={name} />
+          )}
+          {platform === "x" && (
+            <XLogo className={s.icon} aria-label={name} />
+          )}
+        </span>
+      ))}
+    </span>
+  );
+}
