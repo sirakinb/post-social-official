@@ -25,7 +25,10 @@ trap 'rm -f "$env_file"' EXIT
 {
   echo "INSFORGE_BASE_URL=$(secret INSFORGE_BASE_URL)"
   echo "INSFORGE_API_KEY=$(secret API_KEY)"
-  for name in R2_ACCOUNT_ID R2_BUCKET R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY; do echo "$name=$(secret "$name")"; done
+  for name in R2_ACCOUNT_ID R2_BUCKET R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY \
+    CREDENTIAL_ENCRYPTION_KEY TIKTOK_CLIENT_KEY TIKTOK_CLIENT_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET; do
+    echo "$name=$(secret "$name")"
+  done
   echo "MEDIA_RETENTION_DAYS=30"
   echo "WORKER_CONCURRENCY=2"
 } > "$env_file"

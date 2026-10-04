@@ -2,6 +2,7 @@
 // change checks workspace membership, runs the plan-limit check in the same statement as
 // the write, and records an audit event naming the actor.
 import type { R2 } from "./r2";
+import { ApiError as MediaError, membership as membershipShared, requireUuid as requireUuidShared, type Caller, type Sql } from "../access";
 import {
   UPLOAD_LINK_SECONDS,
   importUrlProblem,
@@ -14,52 +15,16 @@ import {
   uploadProblem,
 } from "./rules";
 
-export class MediaError extends Error {
-  constructor(public status: number, message: string) {
-    super(message);
-  }
-}
-
-export type Sql = <T = Record<string, unknown>>(query: string, params: unknown[]) => Promise<T[]>;
-
-export type Caller = { userId: string; displayName: string; entryPoint: "ui" | "api" | "mcp" };
+// MediaError is the shared ApiError; the alias keeps existing imports and instanceof checks.
+export { ApiError as MediaError } from "../access";
+export type { Caller, Sql } from "../access";
 
 export type MediaDeps = { sql: Sql; r2: R2; newId: () => string };
 
-type Membership = { role: string; actor_id: string };
+const requireUuid = requireUuidShared;
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function requireUuid(value: unknown, label: string): string {
-  if (typeof value !== "string" || !UUID.test(value)) throw new MediaError(400, `${label} is missing or not valid.`);
-  return value;
-}
-
-// Finds the caller's role and their actor in the workspace, creating the actor on first use.
-async function membership(deps: MediaDeps, caller: Caller, workspaceId: string, write: boolean): Promise<Membership> {
-  const rows = await deps.sql<Membership>(
-    `WITH member AS (
-       SELECT m.workspace_id, m.user_id, m.role
-       FROM public.workspace_members m
-       WHERE m.workspace_id = $1 AND m.user_id = $2
-     ), inserted AS (
-       INSERT INTO public.actors (workspace_id, kind, user_id, display_name)
-       SELECT workspace_id, 'user', user_id, $3 FROM member
-       ON CONFLICT (workspace_id, user_id) WHERE kind = 'user' DO NOTHING
-       RETURNING id
-     )
-     SELECT member.role,
-            coalesce((SELECT id FROM inserted),
-                     (SELECT a.id FROM public.actors a
-                      WHERE a.workspace_id = $1 AND a.user_id = $2 AND a.kind = 'user')) AS actor_id
-     FROM member`,
-    [workspaceId, caller.userId, caller.displayName],
-  );
-  const found = rows[0];
-  // Same answer for "no such workspace" and "not a member", so ids cannot be probed.
-  if (!found) throw new MediaError(404, "That workspace was not found.");
-  if (write && found.role === "reviewer") throw new MediaError(403, "Reviewers can view media but not change it.");
-  return found;
+async function membership(deps: MediaDeps, caller: Caller, workspaceId: string, write: boolean) {
+  return membershipShared(deps.sql, caller, workspaceId, write, "Reviewers can view media but not change it.");
 }
 
 type AssetRow = {

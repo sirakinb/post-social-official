@@ -61,6 +61,7 @@ export default async function BetaMediaPage({ searchParams }: { searchParams: Pr
             <Brand />
             <nav className="flex gap-4 text-sm">
               <Link href="/beta" className="text-ink-muted hover:text-ink">Home</Link>
+              <Link href="/beta/accounts" className="text-ink-muted hover:text-ink">Accounts</Link>
               <Link href="/beta/media" aria-current="page" className="font-medium text-ink">Media</Link>
             </nav>
           </div>
