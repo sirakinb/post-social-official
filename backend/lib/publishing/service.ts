@@ -247,6 +247,8 @@ export async function updatePost(deps: PostsDeps, caller: Caller, input: Record<
 
   // Changing an approved or scheduled post takes it out of the queue first.
   const queued = post.status === "approved" || post.status === "scheduled";
+  // An edit can put a queued post straight back in the queue, which test keys may not do.
+  if (queued) assertMayPublish(caller);
   if (queued) {
     const [{ unqueue_post: pulled }] = await deps.sql<{ unqueue_post: boolean }>(`SELECT public.unqueue_post($1)`, [postId]);
     if (!pulled) throw new ApiError(409, "This post started sending, so it can't be changed.");

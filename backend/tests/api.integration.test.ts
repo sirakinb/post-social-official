@@ -121,6 +121,17 @@ describe.skipIf(!enabled)("API keys, REST API and MCP on the dev backend (US-040
     expect(deleted.body).toEqual({ post_id: draft.body.id, deleted: true });
   });
 
+  it("test keys cannot change a post that is already queued to go out", async () => {
+    const [queued] = await sql<{ id: string }>(
+      `INSERT INTO public.posts (workspace_id, entry_point, caption, effective_approval_policy, status) VALUES ($1, 'ui', 'Queued', 'autonomous', 'scheduled') RETURNING id`,
+      [owner.workspaceId],
+    );
+    const edit = await call(testKey, "PATCH", `/v1/posts/${queued.id}`, { caption: "Changed by a test key" });
+    expect(edit.status).toBe(403);
+    const [after] = await sql<{ caption: string; status: string }>(`SELECT caption, status FROM public.posts WHERE id = $1`, [queued.id]);
+    expect(after).toEqual({ caption: "Queued", status: "scheduled" });
+  });
+
   it("a repeated write with the same Idempotency-Key acts once", async () => {
     const body = textPost(`Once only ${suffix}`, { draft: true });
     const first = await call(liveKey, "POST", "/v1/posts", body, { "Idempotency-Key": `create-${suffix}` });

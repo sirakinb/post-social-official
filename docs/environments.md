@@ -119,3 +119,25 @@ cannot give. Use `prod` instead of `dev` for prod (asks you to type `prod`). The
 Before media goes to prod: create `postsocial-media-prod` with CORS for the prod web
 origin, a bucket-scoped token stored as prod secrets, set prod `WEB_APP_ORIGINS`, then
 deploy the `media` function and the worker to prod after `db:promote`.
+
+## REST API and MCP server
+
+The `api` function serves the REST API (`/v1/...`, description at `/v1/openapi.json`), the
+MCP server (`/mcp`) and key management for the web app (`/keys`). Deploy it like the
+other functions: `npm run functions:deploy -- <dev|prod> api`. It uses the existing
+secrets (database, R2, `WEB_APP_HOME`, `WEB_APP_ORIGINS`).
+
+The website gives it public addresses through rewrites in `next.config.ts`:
+`https://www.postsocial.xyz/api/v1/...` and `https://www.postsocial.xyz/mcp`. They need
+`API_BASE_URL` in the web environment (the function URL plus `/api`):
+
+| | Prod (Vercel Production) | Dev (Vercel Preview, `.env.local`) |
+|---|---|---|
+| `API_BASE_URL` | `https://syydd6ck.function2.insforge.app/api` | `https://syydd6ck-zqc.function2.insforge.app/api` |
+
+Rewrites are read at build time, so redeploy the site after changing it.
+
+People create keys at `/beta/keys`. Test keys (`ps_test_...`) can do everything except
+publish or schedule. Keys act only within their own workspace and appear by name in the
+audit log. Not yet built: per-key rate limits (Phase 7) and revoking a person's keys when
+they leave a workspace (Phase 5C).
