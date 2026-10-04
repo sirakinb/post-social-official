@@ -1,0 +1,373 @@
+// Per-platform sign-in, token exchange, refresh and revoke. Ported from convex/oauth.ts,
+// convex/tokenLifecycle.ts and convex/lib/platformRevocation.ts; runtime-neutral (fetch
+// only). Scopes are exactly those in the PRD, section 6.
+
+export type Platform = "instagram" | "facebook" | "threads" | "youtube" | "tiktok";
+export const PLATFORMS: Platform[] = ["instagram", "facebook", "threads", "youtube", "tiktok"];
+
+export type Settings = (name: string) => string;
+
+export type Identity = {
+  externalAccountId: string;
+  ownerExternalId?: string;
+  handle: string;
+  displayName: string;
+  avatarUrl?: string;
+  scopes: string[];
+  tokens: { accessToken: string; refreshToken?: string };
+  accessTokenExpiresAt?: Date;
+  refreshTokenExpiresAt?: Date;
+  capabilities: Capabilities;
+};
+
+export type Capabilities = {
+  post_types: string[];
+  caption_max_chars: number;
+  video_max_seconds?: number;
+  video_min_seconds?: number;
+  carousel_max_items?: number;
+  image_types?: string[];
+  notes?: string;
+};
+
+export class PlatformError extends Error {
+  constructor(message: string, public code = "platform_error") {
+    super(message);
+  }
+}
+
+const META_VERSION = "v25.0";
+
+export const SCOPES: Record<Platform, string[]> = {
+  tiktok: ["user.info.basic", "video.publish", "video.upload"],
+  instagram: ["instagram_business_basic", "instagram_business_content_publish"],
+  facebook: ["pages_show_list", "pages_read_engagement", "pages_manage_posts"],
+  threads: ["threads_basic", "threads_content_publish"],
+  youtube: ["https://www.googleapis.com/auth/youtube.upload"],
+};
+
+export const DISPLAY_NAMES: Record<Platform, string> = {
+  instagram: "Instagram",
+  facebook: "Facebook Pages",
+  threads: "Threads",
+  youtube: "YouTube",
+  tiktok: "TikTok",
+};
+
+// What each platform accepts through its API (2026 documentation). Stored on each account
+// so AI clients can plan posts without guessing.
+export const CAPABILITIES: Record<Platform, Capabilities> = {
+  instagram: {
+    post_types: ["image", "reel", "carousel"],
+    caption_max_chars: 2200,
+    video_min_seconds: 3,
+    video_max_seconds: 900,
+    carousel_max_items: 10,
+    image_types: ["image/jpeg"],
+    notes: "Images must be JPEG.",
+  },
+  facebook: {
+    post_types: ["text", "link", "image", "reel", "video"],
+    caption_max_chars: 63206,
+    video_min_seconds: 3,
+    video_max_seconds: 90,
+    notes: "Reels are 3-90 seconds; longer videos post as Page videos.",
+  },
+  threads: { post_types: ["text", "image", "video", "carousel"], caption_max_chars: 500, video_max_seconds: 300, carousel_max_items: 20 },
+  youtube: { post_types: ["short"], caption_max_chars: 5000, video_max_seconds: 180, notes: "Titles are at most 100 characters." },
+  tiktok: {
+    post_types: ["video", "photo", "inbox_draft"],
+    caption_max_chars: 2200,
+    video_max_seconds: 600,
+    notes: "Each creator's own maximum video length is checked before posting.",
+  },
+};
+
+async function json(response: Response, what: string) {
+  const text = await response.text();
+  let body: Record<string, unknown> = {};
+  try {
+    body = text ? JSON.parse(text) : {};
+  } catch {
+    // keep empty
+  }
+  const error = body.error as { code?: string; message?: string } | string | undefined;
+  const platformOk = !error || (typeof error === "object" && error.code === "ok");
+  if (!response.ok || !platformOk) {
+    const message = typeof error === "object" ? error.message : typeof body.error_description === "string" ? body.error_description : undefined;
+    throw new PlatformError(`${what} failed${message ? `: ${message}` : ` (${response.status})`}.`, typeof error === "object" && error.code ? String(error.code) : `http_${response.status}`);
+  }
+  return body as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+}
+
+const inSeconds = (seconds: unknown) => (seconds ? new Date(Date.now() + Number(seconds) * 1000) : undefined);
+
+export function authorizeUrl(platform: Platform, state: string, redirectUri: string, setting: Settings) {
+  let url: URL;
+  switch (platform) {
+    case "tiktok":
+      url = new URL("https://www.tiktok.com/v2/auth/authorize/");
+      url.searchParams.set("client_key", setting("TIKTOK_CLIENT_KEY"));
+      url.searchParams.set("scope", SCOPES.tiktok.join(","));
+      break;
+    case "instagram":
+      url = new URL("https://www.instagram.com/oauth/authorize");
+      url.searchParams.set("client_id", setting("INSTAGRAM_APP_ID"));
+      url.searchParams.set("scope", SCOPES.instagram.join(","));
+      break;
+    case "facebook":
+      url = new URL(`https://www.facebook.com/${META_VERSION}/dialog/oauth`);
+      url.searchParams.set("client_id", setting("META_APP_ID"));
+      url.searchParams.set("scope", SCOPES.facebook.join(","));
+      url.searchParams.set("config_id", setting("META_LOGIN_CONFIG_ID"));
+      url.searchParams.set("override_default_response_type", "true");
+      break;
+    case "threads":
+      url = new URL("https://threads.net/oauth/authorize");
+      url.searchParams.set("client_id", setting("THREADS_APP_ID"));
+      url.searchParams.set("scope", SCOPES.threads.join(","));
+      break;
+    case "youtube":
+      url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+      url.searchParams.set("client_id", setting("GOOGLE_CLIENT_ID"));
+      url.searchParams.set("scope", SCOPES.youtube.join(" "));
+      // offline + consent makes Google return a refresh token every time.
+      url.searchParams.set("access_type", "offline");
+      url.searchParams.set("prompt", "consent");
+      url.searchParams.set("include_granted_scopes", "false");
+      break;
+  }
+  url.searchParams.set("redirect_uri", redirectUri);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("state", state);
+  return url.toString();
+}
+
+export async function exchangeCode(platform: Platform, code: string, redirectUri: string, setting: Settings, http: typeof fetch = fetch): Promise<Identity[]> {
+  const form = (fields: Record<string, string>) => ({
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams(fields),
+  });
+
+  if (platform === "tiktok") {
+    const token = await json(
+      await http("https://open.tiktokapis.com/v2/oauth/token/", form({
+        client_key: setting("TIKTOK_CLIENT_KEY"), client_secret: setting("TIKTOK_CLIENT_SECRET"), code, grant_type: "authorization_code", redirect_uri: redirectUri,
+      })),
+      "TikTok sign-in",
+    );
+    const creator = await json(
+      await http("https://open.tiktokapis.com/v2/post/publish/creator_info/query/", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token.access_token}`, "Content-Type": "application/json; charset=UTF-8" },
+      }),
+      "Reading the TikTok account",
+    );
+    const info = creator.data ?? {};
+    return [{
+      externalAccountId: String(token.open_id),
+      handle: String(info.creator_username ?? info.creator_nickname ?? "tiktok"),
+      displayName: String(info.creator_nickname ?? info.creator_username ?? "TikTok account"),
+      avatarUrl: info.creator_avatar_url,
+      scopes: String(token.scope ?? SCOPES.tiktok.join(",")).split(","),
+      tokens: { accessToken: token.access_token, refreshToken: token.refresh_token },
+      accessTokenExpiresAt: inSeconds(token.expires_in),
+      refreshTokenExpiresAt: inSeconds(token.refresh_expires_in),
+      capabilities: { ...CAPABILITIES.tiktok, video_max_seconds: Number(info.max_video_post_duration_sec) || CAPABILITIES.tiktok.video_max_seconds },
+    }];
+  }
+
+  if (platform === "instagram") {
+    const short = await json(
+      await http("https://api.instagram.com/oauth/access_token", form({
+        client_id: setting("INSTAGRAM_APP_ID"), client_secret: setting("INSTAGRAM_APP_SECRET"), grant_type: "authorization_code", redirect_uri: redirectUri, code,
+      })),
+      "Instagram sign-in",
+    );
+    const longUrl = new URL("https://graph.instagram.com/access_token");
+    longUrl.searchParams.set("grant_type", "ig_exchange_token");
+    longUrl.searchParams.set("client_secret", setting("INSTAGRAM_APP_SECRET"));
+    longUrl.searchParams.set("access_token", short.access_token);
+    const long = await json(await http(longUrl), "Getting a long-lived Instagram token");
+    const accessToken = long.access_token ?? short.access_token;
+    const profileUrl = new URL(`https://graph.instagram.com/${META_VERSION}/me`);
+    profileUrl.searchParams.set("fields", "id,user_id,username,name,profile_picture_url");
+    profileUrl.searchParams.set("access_token", accessToken);
+    const profile = await json(await http(profileUrl), "Reading the Instagram account");
+    const externalId = String(profile.id ?? profile.user_id ?? short.user_id ?? "");
+    if (!externalId) throw new PlatformError("Instagram did not return a professional account. Switch the account to Business or Creator and try again.");
+    return [{
+      externalAccountId: externalId,
+      ownerExternalId: externalId,
+      handle: String(profile.username ?? profile.name ?? "instagram"),
+      displayName: String(profile.name ?? profile.username ?? "Instagram account"),
+      avatarUrl: profile.profile_picture_url,
+      scopes: SCOPES.instagram,
+      tokens: { accessToken },
+      accessTokenExpiresAt: inSeconds(long.expires_in),
+      capabilities: CAPABILITIES.instagram,
+    }];
+  }
+
+  if (platform === "facebook") {
+    const graph = (path: string, params: Record<string, string>) => {
+      const url = new URL(`https://graph.facebook.com/${META_VERSION}/${path}`);
+      for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
+      return url;
+    };
+    const short = await json(
+      await http(graph("oauth/access_token", { client_id: setting("META_APP_ID"), client_secret: setting("META_APP_SECRET"), redirect_uri: redirectUri, code })),
+      "Facebook sign-in",
+    );
+    const user = await json(
+      await http(graph("oauth/access_token", { grant_type: "fb_exchange_token", client_id: setting("META_APP_ID"), client_secret: setting("META_APP_SECRET"), fb_exchange_token: short.access_token })),
+      "Getting a long-lived Facebook token",
+    );
+    const me = await json(await http(graph("me", { fields: "id", access_token: user.access_token })), "Reading the Facebook account");
+    const pages = await json(await http(graph("me/accounts", { fields: "id,name,access_token,tasks,picture", access_token: user.access_token })), "Listing Facebook Pages");
+    const candidates = (Array.isArray(pages.data) ? pages.data : []) as Array<Record<string, any>>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    const usable = candidates.filter((page) => typeof page.access_token === "string" && page.access_token);
+    if (!usable.length) {
+      throw new PlatformError(
+        candidates.length
+          ? `Meta returned ${candidates.length} Facebook Page(s), but none allow posting. Reconnect and give Post Social access to manage a Page.`
+          : "Meta connected but shared no Facebook Pages. Reconnect and choose at least one Page in Edit settings.",
+      );
+    }
+    // Page tokens from a long-lived user token do not expire.
+    return usable.map((page) => ({
+      externalAccountId: String(page.id),
+      ownerExternalId: String(me.id),
+      handle: String(page.name),
+      displayName: String(page.name),
+      avatarUrl: page.picture?.data?.url,
+      scopes: SCOPES.facebook,
+      tokens: { accessToken: page.access_token },
+      capabilities: CAPABILITIES.facebook,
+    }));
+  }
+
+  if (platform === "threads") {
+    const short = await json(
+      await http("https://graph.threads.net/oauth/access_token", form({
+        client_id: setting("THREADS_APP_ID"), client_secret: setting("THREADS_APP_SECRET"), grant_type: "authorization_code", redirect_uri: redirectUri, code,
+      })),
+      "Threads sign-in",
+    );
+    const longUrl = new URL("https://graph.threads.net/access_token");
+    longUrl.searchParams.set("grant_type", "th_exchange_token");
+    longUrl.searchParams.set("client_secret", setting("THREADS_APP_SECRET"));
+    longUrl.searchParams.set("access_token", short.access_token);
+    const long = await json(await http(longUrl), "Getting a long-lived Threads token");
+    const accessToken = long.access_token ?? short.access_token;
+    const profileUrl = new URL("https://graph.threads.net/v1.0/me");
+    profileUrl.searchParams.set("fields", "id,username,threads_profile_picture_url");
+    profileUrl.searchParams.set("access_token", accessToken);
+    const profile = await json(await http(profileUrl), "Reading the Threads account");
+    const externalId = String(profile.id ?? short.user_id ?? "");
+    if (!externalId) throw new PlatformError("Threads did not return an account.");
+    const username = String(profile.username ?? "threads");
+    return [{
+      externalAccountId: externalId,
+      ownerExternalId: externalId,
+      handle: username,
+      displayName: username,
+      avatarUrl: profile.threads_profile_picture_url,
+      scopes: SCOPES.threads,
+      tokens: { accessToken },
+      accessTokenExpiresAt: inSeconds(long.expires_in),
+      capabilities: CAPABILITIES.threads,
+    }];
+  }
+
+  // YouTube. The youtube.upload scope cannot read channel details, so the account is
+  // shown as "YouTube channel" and keyed by the Google grant (see completeConnection).
+  const tokens = await json(
+    await http("https://oauth2.googleapis.com/token", form({
+      code, client_id: setting("GOOGLE_CLIENT_ID"), client_secret: setting("GOOGLE_CLIENT_SECRET"), redirect_uri: redirectUri, grant_type: "authorization_code",
+    })),
+    "YouTube sign-in",
+  );
+  if (!tokens.refresh_token) {
+    throw new PlatformError("Google did not return lasting access. Remove Post Social at myaccount.google.com/permissions, then connect again.");
+  }
+  return [{
+    externalAccountId: "",
+    handle: "youtube",
+    displayName: "YouTube channel",
+    scopes: String(tokens.scope ?? SCOPES.youtube.join(" ")).split(" "),
+    tokens: { accessToken: tokens.access_token, refreshToken: tokens.refresh_token },
+    // Refresh five minutes early.
+    accessTokenExpiresAt: new Date(Date.now() + (Number(tokens.expires_in) - 300) * 1000),
+    capabilities: CAPABILITIES.youtube,
+  }];
+}
+
+export type Refreshed = { tokens: { accessToken: string; refreshToken?: string }; accessTokenExpiresAt?: Date; refreshTokenExpiresAt?: Date };
+
+export async function refreshTokens(platform: Platform, current: { accessToken: string; refreshToken?: string }, setting: Settings, http: typeof fetch = fetch): Promise<Refreshed | null> {
+  if (platform === "facebook") return null; // Page tokens do not expire.
+  if (platform === "tiktok") {
+    if (!current.refreshToken) throw new PlatformError("TikTok refresh token is missing.");
+    const token = await json(
+      await http("https://open.tiktokapis.com/v2/oauth/token/", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ client_key: setting("TIKTOK_CLIENT_KEY"), client_secret: setting("TIKTOK_CLIENT_SECRET"), grant_type: "refresh_token", refresh_token: current.refreshToken }),
+      }),
+      "Refreshing TikTok access",
+    );
+    return {
+      tokens: { accessToken: token.access_token, refreshToken: token.refresh_token ?? current.refreshToken },
+      accessTokenExpiresAt: inSeconds(token.expires_in),
+      refreshTokenExpiresAt: inSeconds(token.refresh_expires_in),
+    };
+  }
+  if (platform === "instagram" || platform === "threads") {
+    const url = platform === "instagram" ? new URL("https://graph.instagram.com/refresh_access_token") : new URL("https://graph.threads.net/refresh_access_token");
+    url.searchParams.set("grant_type", platform === "instagram" ? "ig_refresh_token" : "th_refresh_token");
+    url.searchParams.set("access_token", current.accessToken);
+    const token = await json(await http(url), `Refreshing ${DISPLAY_NAMES[platform]} access`);
+    return { tokens: { accessToken: token.access_token }, accessTokenExpiresAt: inSeconds(token.expires_in) };
+  }
+  if (!current.refreshToken) throw new PlatformError("YouTube refresh token is missing.");
+  const token = await json(
+    await http("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ refresh_token: current.refreshToken, client_id: setting("GOOGLE_CLIENT_ID"), client_secret: setting("GOOGLE_CLIENT_SECRET"), grant_type: "refresh_token" }),
+    }),
+    "Refreshing YouTube access",
+  );
+  return {
+    tokens: { accessToken: token.access_token, refreshToken: current.refreshToken },
+    accessTokenExpiresAt: new Date(Date.now() + (Number(token.expires_in) - 300) * 1000),
+  };
+}
+
+// Revokes access at the platform. Returns a short outcome code; never throws.
+export async function revokeTokens(platform: Platform, tokens: { accessToken: string; refreshToken?: string }, setting: Settings, http: typeof fetch = fetch): Promise<string> {
+  try {
+    let response: Response;
+    if (platform === "youtube") {
+      // Revoking the refresh token ends the whole Google grant, as the privacy policy says.
+      response = await http(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(tokens.refreshToken ?? tokens.accessToken)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      });
+    } else if (platform === "tiktok") {
+      response = await http("https://open.tiktokapis.com/v2/oauth/revoke/", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ client_key: setting("TIKTOK_CLIENT_KEY"), client_secret: setting("TIKTOK_CLIENT_SECRET"), token: tokens.accessToken }),
+      });
+    } else {
+      const host = platform === "instagram" ? "https://graph.instagram.com" : platform === "threads" ? "https://graph.threads.net/v1.0" : `https://graph.facebook.com/${META_VERSION}`;
+      response = await http(`${host}/me/permissions`, { method: "DELETE", headers: { Authorization: `Bearer ${tokens.accessToken}` } });
+    }
+    return response.ok ? "confirmed" : `platform_http_${response.status}`;
+  } catch {
+    return "platform_unreachable";
+  }
+}

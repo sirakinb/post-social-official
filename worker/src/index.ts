@@ -7,6 +7,7 @@ import { expireUnusedMedia, removeOrphanedFiles } from "./cleanup";
 import { runNextJob, type WorkerDeps } from "./jobs";
 import { probeStoredFile } from "./probe";
 import { safeFetch } from "./safe-fetch";
+import { refreshDueTokens } from "./tokens";
 
 function setting(name: string, fallback?: string) {
   const value = process.env[name] ?? fallback;
@@ -80,3 +81,4 @@ log("worker started", { concurrency, retentionDays });
 for (let slot = 0; slot < concurrency; slot++) void jobLoop(slot);
 void every(60 * 60 * 1000, "retention sweep", () => expireUnusedMedia(sql, r2, retentionDays));
 void every(6 * 60 * 60 * 1000, "orphan sweep", () => removeOrphanedFiles(sql, r2));
+void every(5 * 60 * 1000, "token refresh", () => refreshDueTokens({ sql, setting: (name) => setting(name) }));
