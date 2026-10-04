@@ -15,7 +15,8 @@ required.
 
 1. Work on a feature branch, never directly on `main`.
 2. Write tests for the feature, then run `npm run typecheck`, `npm run lint`,
-   `npm test` and `npm run build`. All must pass before anything is pushed.
+   `npm test` and `npm run build`. All must pass before anything is pushed. For
+   database changes, also apply them to dev and run `npm run test:db`.
 3. Push the branch and open a pull request. Greptile reviews every pull request.
 4. Fix or explicitly answer every Greptile finding, re-run the checks, and wait
    for Greptile to re-review.

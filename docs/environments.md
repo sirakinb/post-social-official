@@ -51,13 +51,18 @@ in order to dev, then to prod, exactly the same files.
 
 1. **Write the change on a feature branch.**
    `npm run db:new -- <name>` creates `migrations/<version>_<name>.sql`.
-2. **Apply to dev and test.** `npm run db:dev` applies pending migrations to dev.
-   Test the feature against dev with test social accounts.
+2. **Apply to dev and test.** `npm run db:dev` applies pending migrations to dev, and
+   `npm run config:dev` applies `insforge.toml` (sign-up, password policy, redirects).
+   `npm run test:db` runs the database tests against dev: they create throwaway users
+   and workspaces, check access rules, and delete everything afterwards. They refuse to
+   run unless the folder is linked to dev.
 3. **Review.** Push, open a pull request, CI runs checks, Greptile reviews.
    Fix findings, then merge to `main` with the owner's OK.
 4. **Promote.** On `main`, in sync with GitHub: `npm run db:promote`. It refuses to
    run from any other branch, refuses if any migration in git was never applied to
    dev, lists what prod is missing, and asks you to type `prod` before applying it.
+   It then shows any differences between `insforge.toml` and prod's settings and asks
+   again before applying them.
 5. **Deploy the web app.** Vercel builds a preview for every pull request (pointing at
    dev). Merging to `main` does not deploy production (set in `vercel.json`).
    Production goes out only with the owner's OK, via `npm run deploy:prod`, which
