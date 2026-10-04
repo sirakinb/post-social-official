@@ -16,9 +16,12 @@ Vercel environment variables (set in the Vercel project, not in git):
 | `NEXT_PUBLIC_INSFORGE_ANON_KEY` | dev anon key | prod anon key |
 | `NEXT_PUBLIC_CONVEX_URL`, `NEXT_PUBLIC_CONVEX_SITE_URL` | same Convex deployment | same Convex deployment |
 
-Until the InsForge migration lands, the running app still talks to the single Convex
-deployment in both environments; only the InsForge variables differ. Previews show an
-amber badge with the environment and the InsForge host; production shows none.
+**Warning: previews use live data until Phase 1.** There is only one Convex deployment,
+and it holds the real accounts and posts. A PR preview reads and writes that same data,
+so editing or approving a post in a preview affects the real one. Do not invite testers
+to previews until the web app runs on InsForge, where previews use the dev branch.
+Previews show an amber badge with the environment, the InsForge host and
+"LIVE Convex data"; production shows none.
 
 This folder is linked to **dev** by default. Keys live in `.insforge/project.json` and
 `.env.local`, both gitignored. Never commit them.

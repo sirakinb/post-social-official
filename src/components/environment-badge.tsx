@@ -14,9 +14,11 @@ export function resolveAppEnv(
 export function EnvironmentBadge({
   appEnv = resolveAppEnv(),
   insforgeUrl = process.env.NEXT_PUBLIC_INSFORGE_URL,
+  convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL,
 }: {
   appEnv?: string;
   insforgeUrl?: string;
+  convexUrl?: string;
 }) {
   if (appEnv === "production") return null;
 
@@ -27,6 +29,8 @@ export function EnvironmentBadge({
       className="fixed bottom-3 left-3 z-50 rounded-full bg-amber-400 px-3 py-1 font-mono text-xs font-semibold text-black shadow"
     >
       {appEnv} · InsForge {hostOf(insforgeUrl)}
+      {/* Until the InsForge migration, every environment runs on the one live Convex deployment. */}
+      {convexUrl ? " · LIVE Convex data" : null}
     </div>
   );
 }
