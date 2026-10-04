@@ -251,16 +251,17 @@ export async function updatePost(deps: PostsDeps, caller: Caller, input: Record<
     newDestinations = parsed.destinations;
   }
 
-  // An edit to something already approved goes back for approval, unless every account
-  // is autonomous (the approval was for the old version).
-  const policies = await deps.sql<{ policy: Policy }>(
-    `SELECT coalesce(a.approval_policy_override, w.default_approval_policy) AS policy
-     FROM public.destinations d JOIN public.connected_accounts a ON a.id = d.connected_account_id JOIN public.workspaces w ON w.id = a.workspace_id
-     WHERE d.post_id = $1`,
-    [postId],
-  );
-  const backToApproval = queued && policies.some((p) => p.policy !== "autonomous");
-  const nextStatus = queued ? (backToApproval ? "awaiting_approval" : "approved") : post.status;
+  // An edit to something already approved goes back for approval unless every account
+  // the post will FINALLY go to is autonomous and would not need approval from this
+  // caller under the submit rule (e.g. AI posts to TikTok always do). Judged on the final
+  // account list, so adding an account cannot slip past approval.
+  const finalAccountIds = newDestinations ? newDestinations.map((d) => d.account_id) : destinations.map((d) => d.connected_account_id);
+  const finalAccounts = await loadAccounts(deps, post.workspace_id, finalAccountIds);
+  const backToApproval = queued && finalAccountIds.some((id) => {
+    const account = finalAccounts.get(id)!;
+    return account.policy !== "autonomous" || needsApproval(caller.entryPoint, account.policy, account.platform);
+  });
+  let nextStatus = queued ? (backToApproval ? "awaiting_approval" : "approved") : post.status;
 
   await deps.sql(
     `WITH p AS (
@@ -276,17 +277,37 @@ export async function updatePost(deps: PostsDeps, caller: Caller, input: Record<
     [postId, caption, scheduledAt, nextStatus, mediaIds, post.workspace_id],
   );
   if (newDestinations) {
+    // Accounts kept on the post are updated in place; removed ones are deleted. (A single
+    // delete-then-insert statement would collide with the rows it is replacing.)
+    const destinationStatus = nextStatus === "awaiting_approval" ? "awaiting_approval" : nextStatus === "approved" ? "approved" : "draft";
     await deps.sql(
-      `WITH gone AS (DELETE FROM public.destinations WHERE post_id = $1)
-       INSERT INTO public.destinations (workspace_id, post_id, connected_account_id, platform, actor_id, effective_approval_policy, options, status)
-       SELECT $2, $1, (d->>'account_id')::uuid, a.platform, $3, coalesce(a.approval_policy_override, w.default_approval_policy), d->'options',
-              CASE WHEN $4 = 'draft' THEN 'draft' ELSE $4 END
+      `DELETE FROM public.destinations WHERE post_id = $1 AND connected_account_id <> ALL($2::uuid[])`,
+      [postId, newDestinations.map((d) => d.account_id)],
+    );
+    await deps.sql(
+      `INSERT INTO public.destinations (workspace_id, post_id, connected_account_id, platform, actor_id, effective_approval_policy, options, status)
+       SELECT $2, $1, (d->>'account_id')::uuid, a.platform, $3, coalesce(a.approval_policy_override, w.default_approval_policy), d->'options', $4
        FROM jsonb_array_elements($5::jsonb) AS d
-       JOIN public.connected_accounts a ON a.id = (d->>'account_id')::uuid JOIN public.workspaces w ON w.id = a.workspace_id`,
-      [postId, post.workspace_id, member.actor_id, nextStatus === "awaiting_approval" ? "awaiting_approval" : nextStatus === "approved" ? "approved" : "draft", JSON.stringify(newDestinations)],
+       JOIN public.connected_accounts a ON a.id = (d->>'account_id')::uuid JOIN public.workspaces w ON w.id = a.workspace_id
+       ON CONFLICT (post_id, connected_account_id) DO UPDATE SET
+         options = EXCLUDED.options, status = EXCLUDED.status, effective_approval_policy = EXCLUDED.effective_approval_policy,
+         error_code = NULL, error_message = NULL`,
+      [postId, post.workspace_id, member.actor_id, destinationStatus, JSON.stringify(newDestinations)],
     );
   }
-  if (backToApproval) {
+  // An autonomous edit goes straight back into the queue only if it still passes the
+  // checks; otherwise it waits for review instead of failing later at send time.
+  let invalidEdit = false;
+  if (nextStatus === "approved" && !(await validatePost(deps, caller, { post_id: postId })).ok) {
+    invalidEdit = true;
+    nextStatus = "awaiting_approval";
+    await deps.sql(
+      `WITH p AS (UPDATE public.posts SET status = 'awaiting_approval' WHERE id = $1)
+       UPDATE public.destinations SET status = 'awaiting_approval' WHERE post_id = $1 AND status = 'approved'`,
+      [postId],
+    );
+  }
+  if (backToApproval || invalidEdit) {
     await deps.sql(
       `WITH closed AS (UPDATE public.approval_requests SET status = 'cancelled', closed_at = now() WHERE post_id = $1 AND status = 'pending')
        INSERT INTO public.approval_requests (workspace_id, post_id, policy, requested_by_actor_id) VALUES ($2, $1, 'confirm_each', $3)`,
@@ -294,8 +315,7 @@ export async function updatePost(deps: PostsDeps, caller: Caller, input: Record<
     );
   }
   if (nextStatus === "approved") await deps.sql(`SELECT public.start_publishing($1)`, [postId]);
-  await audit(deps, post.workspace_id, member.actor_id, caller, postId, "post.updated", backToApproval ? "Edited the post; it needs approval again" : "Edited the post", { caption: post.caption, scheduled_at: post.scheduled_at }, { caption, scheduled_at: scheduledAt });
-  void destinations;
+  await audit(deps, post.workspace_id, member.actor_id, caller, postId, "post.updated", backToApproval || invalidEdit ? "Edited the post; it needs approval again" : "Edited the post", { caption: post.caption, scheduled_at: post.scheduled_at }, { caption, scheduled_at: scheduledAt });
   return { ...(await view(deps, postId)), check: await validatePost(deps, caller, { post_id: postId }) };
 }
 

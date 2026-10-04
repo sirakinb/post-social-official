@@ -197,6 +197,26 @@ describe.skipIf(!enabled)("publishing engine on the dev backend (US-027 to US-03
     expect(states.map((s) => s.state)).toEqual(["cancelled"]);
   });
 
+  it("adding an account to an approved autonomous post cannot skip approval", async () => {
+    await sql(`UPDATE public.connected_accounts SET approval_policy_override = 'autonomous' WHERE id = $1`, [threads]);
+    await sql(`UPDATE public.connected_accounts SET approval_policy_override = NULL WHERE id = $1`, [facebook]);
+    const at = new Date(Date.now() + 3600_000).toISOString();
+    const draft = await act(ai(), "create", { ...textPost(threads, `Autonomous scheduled ${suffix}`), scheduled_at: at });
+    expect((await act(ai(), "submit", { post_id: draft.id })).status).toBe("scheduled");
+
+    // The AI adds an "ask me first" account to the queued post.
+    const edited = await act(ai(), "update", {
+      post_id: draft.id,
+      destinations: [
+        { account_id: threads, options: { media_type: "text" } },
+        { account_id: facebook, options: { media_type: "text" } },
+      ],
+    });
+    expect(edited.status).toBe("awaiting_approval");
+    expect(edited.approval).toMatchObject({ status: "pending" });
+    await act(person(), "cancel", { post_id: draft.id });
+  });
+
   it("retries temporary errors with backoff, then fails with a plain reason", async () => {
     platformMode = "flaky";
     const draft = await act(person(), "create", textPost(facebook, `Flaky ${suffix}`));
