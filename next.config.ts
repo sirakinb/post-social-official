@@ -3,6 +3,9 @@ import type { NextConfig } from "next";
 const developmentSources = process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : "";
 const developmentConnections = process.env.NODE_ENV === "development" ? " ws://localhost:* ws://127.0.0.1:* http://localhost:* http://127.0.0.1:*" : "";
 
+// Browsers upload media straight to our Cloudflare R2 account (signed part links).
+const mediaStorage = "https://5e9cbd18080d4f973442560e2140a3e0.r2.cloudflarestorage.com";
+
 const securityHeaders = [
   { key: "Content-Security-Policy", value: [
     "default-src 'self'",
@@ -16,7 +19,7 @@ const securityHeaders = [
     "font-src 'self' data:",
     "img-src 'self' data: blob: https:",
     "media-src 'self' blob: https:",
-    `connect-src 'self' https://*.convex.cloud https://*.convex.site wss://*.convex.cloud wss://*.convex.site${developmentConnections}`,
+    `connect-src 'self' ${mediaStorage} https://*.convex.cloud https://*.convex.site wss://*.convex.cloud wss://*.convex.site${developmentConnections}`,
     "upgrade-insecure-requests",
   ].join("; ") },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
