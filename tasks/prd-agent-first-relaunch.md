@@ -373,6 +373,41 @@ One story per platform.
 - [ ] Setup guides: Claude custom connector, Claude Code, ChatGPT, Cursor, plain REST
 - [ ] `/llms.txt` summarises the API and tools for AIs
 
+#### US-067: Tool parity with Post Bridge
+**Description:** As an AI, I want at least the tools a leading competitor (Post Bridge) offers, plus our approvals and rules.
+
+**Acceptance Criteria:**
+- [ ] Tools: list accounts, connect link, create post (draft, publish now, schedule), get, list, update, delete draft, cancel, results per destination
+- [ ] Media: import from link, small inline upload (base64, a few MB), `request_upload_link` (a 24-hour browser page for large local files), list, preview (returns a thumbnail the AI can see), delete unused
+- [ ] Per-platform options: first comment (Instagram, Facebook, Threads), Instagram collaborators and user tags, cover frame (TikTok, Instagram Reels), YouTube tags and thumbnail, AI-content labels (TikTok `is_aigc`, YouTube synthetic media)
+- [ ] Every tool is also a REST endpoint and a CLI command
+
+#### US-068: Post analytics
+**Description:** As a person or AI, I want per-post stats so the AI can learn what works.
+
+**Acceptance Criteria:**
+- [ ] Stats are stored per destination as a common core (views, likes, comments, shares) plus whatever extra the platform reports (saves, reposts, quotes, reach, watch time)
+- [ ] Tools and endpoints: list stats (filter by platform and timeframe), daily history for one post, refresh now (with a cooldown)
+- [ ] The worker refreshes stats on a schedule: often in the first days after publishing, then less often
+- [ ] A metric the platform has not approved yet returns a plain message ("views need TikTok's approval"), never an error
+- [ ] A simple stats page in /beta, used for the platform review recordings
+- [ ] Verify in browser using dev-browser skill
+
+#### US-069: Analytics permission reviews (runs alongside Phases 5 and 6)
+**Acceptance Criteria:**
+- [ ] Dev requests the extra read permissions: `instagram_business_manage_insights`, `read_insights`, `threads_manage_insights`, TikTok `video.list`, YouTube `youtube.readonly` and `yt-analytics.readonly`
+- [ ] Prod requests only approved permissions; each one switches on in prod after approval (accounts reconnect once to grant it)
+- [ ] Demo recordings made on dev and submitted to Meta, TikTok and Google
+
+#### US-070: Command-line tool
+**Description:** As a developer or terminal agent (Claude Code, Codex, CI), I want a CLI over the same API.
+
+**Acceptance Criteria:**
+- [ ] `npx postsocial` package; `login` signs in through the browser, `--key` for servers and CI
+- [ ] One command per tool; JSON output by default, `--pretty` for people
+- [ ] `upload --file` sends large files in parts straight to storage (no small size cap)
+- [ ] Published alongside a Claude Code plugin and skills package from the same repo
+
 ### Phase 6: Web app (secondary client of the same API)
 
 #### US-047: New navigation
@@ -528,6 +563,9 @@ Rules and connections
 - FR-18: Sensitive tools (turning off approvals, changing rules, creating keys, disconnecting accounts, deleting posts) are marked destructive.
 - FR-19: An account set to "approvals only in the web app" rejects approval calls from the API and MCP with a clear message.
 
+Analytics
+- FR-25: Per-post stats (views, likes, comments, shares, plus platform extras such as saves and reposts) through the API, MCP and CLI; metrics a platform has not approved return a plain message.
+
 Publishing
 - FR-20: Scheduled posts start within 60 seconds of their time.
 - FR-21: A destination is never published twice for the same post.
@@ -554,7 +592,7 @@ Billing groundwork
 
 - Native listings in the ChatGPT plugin directory, Claude connector directory or Meta AI connectors (Phase 2 after launch). Applying for Meta's early access can happen in parallel.
 - Choosing prices, checkout, invoices or subscriptions.
-- Comment and DM automation, analytics and insights.
+- Comment and DM automation (ManyChat-style keyword triggers, inbox, replies). This is the first phase after launch; Phase 5 leaves room for incoming platform events so it needs no redesign.
 - Instagram Stories and Facebook Stories.
 - TikTok for Business APIs.
 - Mobile apps.

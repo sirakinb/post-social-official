@@ -173,9 +173,9 @@ describe("YouTube", () => {
       (u, i) => (u.pathname === "/upload/youtube/v3/videos" ? (JSON.parse(String(i.body)).snippet.title === "Launch #Shorts" ? new Response(null, { status: 200, headers: { location: "https://up.example/s1" } }) : undefined) : undefined),
       (u, i) => (u.host === "up.example" && (i.headers as Record<string, string>)["Content-Range"] === "bytes */1000" ? new Response(null, { status: 308 }) : undefined),
       (u) => (u.host === "r2.example" ? new Response(new Uint8Array(1000), { status: 206 }) : undefined),
-      (u, i) => (u.host === "up.example" && method(i) === "PUT" ? json({ id: "yt-1" }, 201) : undefined),
+      (u, i) => (u.host === "up.example" && method(i) === "PUT" ? json({ id: "yt-1", snippet: { channelTitle: "Aki Builds" } }, 201) : undefined),
     ], { media: [video] });
-    expect(await publishYouTube(h.ctx)).toEqual({ kind: "published", platformId: "yt-1", liveUrl: "https://www.youtube.com/shorts/yt-1" });
+    expect(await publishYouTube(h.ctx)).toEqual({ kind: "published", platformId: "yt-1", liveUrl: "https://www.youtube.com/shorts/yt-1", profile: { displayName: "Aki Builds" } });
   });
 
   it("does not upload again when the previous run already finished", async () => {

@@ -63,6 +63,7 @@ export default async function BetaMediaPage({ searchParams }: { searchParams: Pr
               <Link href="/beta" className="text-ink-muted hover:text-ink">Home</Link>
               <Link href="/beta/accounts" className="text-ink-muted hover:text-ink">Accounts</Link>
               <Link href="/beta/media" aria-current="page" className="font-medium text-ink">Media</Link>
+              <Link href="/beta/keys" className="text-ink-muted hover:text-ink">API keys</Link>
             </nav>
           </div>
           <form action={signOut}><Button type="submit" variant="secondary">Sign out</Button></form>

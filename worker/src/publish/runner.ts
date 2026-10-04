@@ -130,6 +130,9 @@ export async function runNextPublishJob(deps: PublishDeps): Promise<boolean> {
        SELECT workspace_id, 'worker', 'destination.published', 'destination', $1, $5, jsonb_build_object('live_url', $2::text) FROM d`,
       [b.destinationId, result.liveUrl ?? null, result.platformId ?? null, result.note ?? null, `Published to ${b.account.displayName}`],
     );
+    if (result.profile) {
+      await deps.sql(`UPDATE public.connected_accounts SET display_name = $2, updated_at = now() WHERE id = $1 AND display_name <> $2`, [b.account.id, result.profile.displayName]);
+    }
     await finish("complete", null);
     await deps.sql(`SELECT public.finalize_post($1)`, [b.postId]);
     log("published", { job: job.id, platform: b.platform });

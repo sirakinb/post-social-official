@@ -27,7 +27,7 @@ async function membership(deps: MediaDeps, caller: Caller, workspaceId: string, 
   return membershipShared(deps.sql, caller, workspaceId, write, "Reviewers can view media but not change it.");
 }
 
-type AssetRow = {
+export type AssetRow = {
   id: string;
   workspace_id: string;
   storage_key: string;
@@ -57,7 +57,7 @@ async function loadAsset(deps: MediaDeps, caller: Caller, mediaId: string, write
   return { asset, member };
 }
 
-function publicAsset(asset: AssetRow) {
+export function publicAsset(asset: AssetRow) {
   return {
     id: asset.id,
     workspace_id: asset.workspace_id,
