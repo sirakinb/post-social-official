@@ -34,9 +34,16 @@ function withShortsTag(title: string) {
   return tagged.length <= 100 ? tagged : title;
 }
 
+// The finished video names its channel, which is how the account learns its real name.
 async function finished(response: Response) {
-  const video = (await response.json()) as { id: string };
-  return { kind: "published" as const, platformId: video.id, liveUrl: `https://www.youtube.com/shorts/${video.id}` };
+  const video = (await response.json()) as { id: string; snippet?: { channelTitle?: string } };
+  const channel = video.snippet?.channelTitle?.trim();
+  return {
+    kind: "published" as const,
+    platformId: video.id,
+    liveUrl: `https://www.youtube.com/shorts/${video.id}`,
+    ...(channel ? { profile: { displayName: channel.slice(0, 200) } } : {}),
+  };
 }
 
 // Asks YouTube how much of the upload it has. Returns the next byte to send, or the

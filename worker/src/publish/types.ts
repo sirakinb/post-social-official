@@ -35,7 +35,9 @@ export type Bundle = {
 };
 
 export type StepResult =
-  | { kind: "published"; platformId?: string; liveUrl?: string; note?: string }
+  // profile: account details the platform revealed while posting (e.g. YouTube's channel
+  // name, which the upload-only permission cannot read at sign-in).
+  | { kind: "published"; platformId?: string; liveUrl?: string; note?: string; profile?: { displayName: string } }
   | { kind: "wait"; afterMs: number; message?: string };
 
 export type StepContext = {
