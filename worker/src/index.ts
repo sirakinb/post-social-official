@@ -8,6 +8,7 @@ import { runNextJob, type WorkerDeps } from "./jobs";
 import { probeStoredFile } from "./probe";
 import { safeFetch } from "./safe-fetch";
 import { refreshDueTokens } from "./tokens";
+import { runNextPublishJob } from "./publish/runner";
 
 function setting(name: string, fallback?: string) {
   const value = process.env[name] ?? fallback;
@@ -35,16 +36,22 @@ const deps: WorkerDeps = {
 };
 
 const retentionDays = Number(setting("MEDIA_RETENTION_DAYS", "30"));
-const concurrency = Number(setting("WORKER_CONCURRENCY", "2"));
+const concurrency = Number(setting("WORKER_CONCURRENCY", "3"));
 let stopping = false;
 let lastLoopAt = Date.now();
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const allowlist = (process.env.PUBLISH_ALLOWLIST ?? "").split(",").map((id) => id.trim()).filter(Boolean);
+const publishDeps = { sql, r2, setting: (name: string) => setting(name), allowlist, log };
 
 async function jobLoop(slot: number) {
   while (!stopping) {
     lastLoopAt = Date.now();
     try {
-      if (!(await runNextJob(deps))) await sleep(2000);
+      // Publishing first: scheduled posts must go out on time.
+      const published = await runNextPublishJob(publishDeps);
+      const processed = published ? false : await runNextJob(deps);
+      if (!published && !processed) await sleep(2000);
     } catch (error) {
       log("job loop error", { slot, error: (error as Error).message });
       await sleep(5000);
@@ -77,7 +84,7 @@ process.on("SIGTERM", () => {
   setTimeout(() => process.exit(0), 10_000).unref();
 });
 
-log("worker started", { concurrency, retentionDays });
+log("worker started", { concurrency, retentionDays, publishAllowlist: allowlist.length });
 for (let slot = 0; slot < concurrency; slot++) void jobLoop(slot);
 void every(60 * 60 * 1000, "retention sweep", () => expireUnusedMedia(sql, r2, retentionDays));
 void every(6 * 60 * 60 * 1000, "orphan sweep", () => removeOrphanedFiles(sql, r2));

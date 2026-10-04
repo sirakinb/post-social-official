@@ -29,8 +29,10 @@ trap 'rm -f "$env_file"' EXIT
     CREDENTIAL_ENCRYPTION_KEY TIKTOK_CLIENT_KEY TIKTOK_CLIENT_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET; do
     echo "$name=$(secret "$name")"
   done
+  # Dev only publishes to the owner's approved test accounts (platform account ids).
+  if [[ "$target" == "dev" ]]; then echo "PUBLISH_ALLOWLIST=$(secret PUBLISH_ALLOWLIST)"; fi
   echo "MEDIA_RETENTION_DAYS=30"
-  echo "WORKER_CONCURRENCY=2"
+  echo "WORKER_CONCURRENCY=3"
 } > "$env_file"
 
 scripts/insforge-env.sh "$target" compute deploy worker --name post-social-worker \
