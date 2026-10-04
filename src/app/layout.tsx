@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { GeistSans, GeistMono } from "./fonts";
 import "./globals.css";
 import { ConvexClientProvider } from "@/components/convex-client-provider";
+import { EnvironmentBadge } from "@/components/environment-badge";
 
 export const metadata: Metadata = {
   title: "Post Social — Social media posting for AI-native creators and operators",
@@ -21,6 +22,7 @@ export default function RootLayout({
         className={`${GeistSans.variable} ${GeistMono.variable} font-sans antialiased min-h-screen`}
       >
         <ConvexClientProvider>{children}</ConvexClientProvider>
+        <EnvironmentBadge />
       </body>
     </html>
   );
