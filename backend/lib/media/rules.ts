@@ -39,6 +39,11 @@ export function planParts(sizeBytes: number) {
   return { partSize, partCount };
 }
 
+// Byte length of each part: all full-size except possibly the last.
+export function partLength(sizeBytes: number, partSize: number, partNumber: number) {
+  return Math.min(partSize, sizeBytes - (partNumber - 1) * partSize);
+}
+
 // Keeps letters, numbers, dots, dashes and underscores; everything else becomes a dash.
 export function safeFileName(fileName: string) {
   const base = fileName.split(/[\\/]/).pop() ?? "";

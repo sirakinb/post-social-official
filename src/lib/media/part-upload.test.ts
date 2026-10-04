@@ -63,6 +63,24 @@ describe("uploadParts", () => {
   });
 });
 
+describe("uploadParts when a part fails for good", () => {
+  it("cancels the other parts that are still uploading", async () => {
+    const cancelled: string[] = [];
+    const put: PutPart = (url, _body, _onProgress, signal) =>
+      new Promise((resolve, reject) => {
+        if (url === "u1") return reject(new Error("part 1 broken"));
+        signal.addEventListener("abort", () => {
+          cancelled.push(url);
+          reject(new DOMException("cancelled", "AbortError"));
+        });
+      });
+    await expect(uploadParts({ file: new Blob([new Uint8Array(30)]), partSize: 10, parts: parts(3), putPart: put, retries: 0, concurrency: 3 })).rejects.toThrow(
+      "part 1 broken",
+    );
+    expect(cancelled.sort()).toEqual(["u2", "u3"]);
+  });
+});
+
 describe("formatting", () => {
   it("formats sizes and durations for people", () => {
     expect(formatBytes(512)).toBe("512 B");

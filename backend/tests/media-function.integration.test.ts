@@ -118,6 +118,24 @@ describe.skipIf(!enabled)("media function on the dev backend (US-013, US-014, US
     expect(again.status).toBe(409);
   });
 
+  it("refuses a part larger than the size that was announced and counted", async () => {
+    const start = await media(ownerToken, { action: "create_upload", workspace_id: workspaceId, file_name: "small.mp4", mime_type: "video/mp4", size_bytes: 100 });
+    const [part] = start.body.parts as Array<{ url: string }>;
+    const tooBig = await fetch(part.url, { method: "PUT", body: new Uint8Array(5 * 1024 * 1024) });
+    expect(tooBig.status).toBe(403);
+    const exact = await fetch(part.url, { method: "PUT", body: new Uint8Array(100) });
+    expect(exact.status).toBe(200);
+    await media(ownerToken, { action: "abort_upload", media_id: start.body.media_id });
+  });
+
+  it("treats only the listed actions as actions", async () => {
+    for (const action of ["constructor", "toString", "__proto__", "nope"]) {
+      const result = await media(ownerToken, { action });
+      expect(result.status, action).toBe(400);
+      expect(String(result.body.error)).toMatch(/Unknown action/);
+    }
+  });
+
   it("rejects unsupported files and files over 1 GB before anything is stored", async () => {
     const pdf = await media(ownerToken, { action: "create_upload", workspace_id: workspaceId, file_name: "a.pdf", mime_type: "application/pdf", size_bytes: 10 });
     expect(pdf.status).toBe(400);
@@ -171,6 +189,9 @@ describe.skipIf(!enabled)("media function on the dev backend (US-013, US-014, US
     const ok = await media(ownerToken, { action: "import", workspace_id: workspaceId, url: "https://example.com/videos/clip.mp4" });
     expect(ok.status, JSON.stringify(ok.body)).toBe(200);
     expect(ok.body).toMatchObject({ status: "processing", name: "clip.mp4" });
+
+    const oddName = await media(ownerToken, { action: "import", workspace_id: workspaceId, url: "https://example.com/files/a%zz.mp4" });
+    expect(oddName.status, JSON.stringify(oddName.body)).toBe(200);
 
     for (const [url, reason] of [
       ["http://example.com/a.mp4", /Only https/],

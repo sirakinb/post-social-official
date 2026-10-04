@@ -22,7 +22,12 @@ export async function uploadParts(options: {
   retries?: number;
 }): Promise<UploadedPart[]> {
   const { file, partSize, parts, putPart, onProgress, concurrency = 4, retries = 2 } = options;
-  const signal = options.signal ?? new AbortController().signal;
+  // Internal controller: cancelled by the caller, or by us when a part fails for good so the
+  // other in-flight parts stop instead of racing the server-side cancel.
+  const controller = new AbortController();
+  const signal = controller.signal;
+  if (options.signal?.aborted) controller.abort();
+  options.signal?.addEventListener("abort", () => controller.abort(), { once: true });
   const loaded = new Map<number, number>();
   const report = () => {
     let total = 0;
@@ -58,7 +63,12 @@ export async function uploadParts(options: {
   async function worker() {
     for (let part = queue.shift(); part; part = queue.shift()) results.push(await runOne(part));
   }
-  await Promise.all(Array.from({ length: Math.min(concurrency, parts.length) }, worker));
+  try {
+    await Promise.all(Array.from({ length: Math.min(concurrency, parts.length) }, worker));
+  } catch (error) {
+    controller.abort();
+    throw error;
+  }
   return results.sort((a, b) => a.part_number - b.part_number);
 }
 

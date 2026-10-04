@@ -165,6 +165,39 @@ describe.skipIf(!enabled)("media worker on the dev backend", () => {
     expect(String(result.failure_reason)).toMatch(/not a supported video or image/);
   }, 120_000);
 
+  it("stops counting expired files against the storage limit", async () => {
+    // A plan that fits one small image, applied to this test workspace only.
+    const planId = `test-tiny-${suffix}`;
+    await deps.sql(
+      `INSERT INTO public.plans (id, name, max_connected_accounts, max_posts_per_month, max_media_storage_bytes, max_api_calls_per_day)
+       VALUES ($1, 'Tiny', 1, 1, 400, 1)`,
+      [planId],
+    );
+    try {
+      // Earlier tests in this file used storage; expire everything first.
+      await deps.sql(`UPDATE public.media_assets SET status = 'expired' WHERE workspace_id = $1`, [owner.workspaceId]);
+      await deps.sql(`UPDATE public.workspace_plans SET plan_id = $2 WHERE workspace_id = $1`, [owner.workspaceId, planId]);
+      const image = makePng(8, 8);
+      expect(image.length).toBeLessThan(200);
+      const first = await upload("a.png", "image/png", image);
+      await settled(first);
+      // One byte more than what is left of the plan.
+      const overBy1 = 400 - image.length + 1;
+      const blocked = await media({ action: "create_upload", workspace_id: owner.workspaceId, file_name: "b.png", mime_type: "image/png", size_bytes: overBy1 });
+      expect(blocked.status).toBe(402);
+      expect(String(blocked.body.error)).toMatch(/Tiny plan allows 400 bytes of media storage/);
+
+      await deps.sql(`UPDATE public.media_assets SET last_used_at = now() - interval '31 days' WHERE id = $1`, [first]);
+      await expireUnusedMedia(deps.sql, r2, 30);
+      const allowed = await media({ action: "create_upload", workspace_id: owner.workspaceId, file_name: "b.png", mime_type: "image/png", size_bytes: overBy1 });
+      expect(allowed.status, JSON.stringify(allowed.body)).toBe(200);
+      await media({ action: "abort_upload", media_id: allowed.body.media_id });
+    } finally {
+      await deps.sql(`UPDATE public.workspace_plans SET plan_id = 'tester' WHERE workspace_id = $1`, [owner.workspaceId]);
+      await deps.sql(`DELETE FROM public.plans WHERE id = $1`, [planId]);
+    }
+  }, 120_000);
+
   it("expires unused media after the retention period and keeps the record", async () => {
     const id = await upload("old.png", "image/png", makePng(8, 8));
     await settled(id);

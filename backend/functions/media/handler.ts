@@ -49,10 +49,12 @@ export function createMediaHandler(deps: HandlerDeps) {
     } catch {
       return json(400, { error: "Send a JSON body with an action." }, cors);
     }
-    const action = mediaActions[String(body?.action) as keyof typeof mediaActions];
-    if (!action) {
+    const actionName = String(body?.action);
+    // Own keys only, so inherited names like "constructor" are not treated as actions.
+    if (!Object.hasOwn(mediaActions, actionName)) {
       return json(400, { error: `Unknown action. Use one of: ${Object.keys(mediaActions).join(", ")}.` }, cors);
     }
+    const action = mediaActions[actionName as keyof typeof mediaActions];
 
     try {
       const caller = { userId: user.id, displayName: user.name, entryPoint: "ui" as const };

@@ -7,6 +7,7 @@ import {
   importUrlProblem,
   mediaTypeFor,
   normalizeMimeType,
+  partLength,
   planParts,
   safeFileName,
   storageKey,
@@ -167,7 +168,7 @@ export async function createUpload(
   const parts = await Promise.all(
     Array.from({ length: partCount }, async (_, index) => ({
       part_number: index + 1,
-      url: await deps.r2.presignPart(key, uploadId, index + 1, UPLOAD_LINK_SECONDS),
+      url: await deps.r2.presignPart(key, uploadId, index + 1, UPLOAD_LINK_SECONDS, partLength(request.sizeBytes, partSize, index + 1)),
     })),
   );
   return { media_id: mediaId, part_size: partSize, parts, expires_in_seconds: UPLOAD_LINK_SECONDS };
@@ -263,7 +264,14 @@ export async function importMedia(
   const member = await membership(deps, caller, workspaceId, true);
 
   const mediaId = deps.newId();
-  const fromPath = decodeURIComponent(new URL(url).pathname.split("/").pop() ?? "") || "imported-file";
+  const lastSegment = new URL(url).pathname.split("/").pop() ?? "";
+  let fromPath = lastSegment;
+  try {
+    fromPath = decodeURIComponent(lastSegment);
+  } catch {
+    // Malformed escapes like %zz: keep the raw segment; safeFileName cleans it.
+  }
+  fromPath = fromPath || "imported-file";
   const fileName = safeFileName(typeof input.name === "string" && input.name.trim() ? input.name : fromPath);
   const rows = await deps.sql<AssetRow>(
     `WITH asset AS (

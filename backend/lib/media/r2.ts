@@ -21,10 +21,10 @@ export function createR2(config: R2Config, fetchImpl: typeof fetch = fetch) {
     return fetchImpl(signed);
   }
 
-  async function presign(url: string, method: string, expiresSeconds: number) {
+  async function presign(url: string, method: string, expiresSeconds: number, headers: Record<string, string> = {}) {
     const target = new URL(url);
     target.searchParams.set("X-Amz-Expires", String(expiresSeconds));
-    const signed = await client.sign(target.toString(), { method, aws: { signQuery: true } });
+    const signed = await client.sign(target.toString(), { method, headers, aws: { signQuery: true, allHeaders: true } });
     return signed.url;
   }
 
@@ -49,10 +49,12 @@ export function createR2(config: R2Config, fetchImpl: typeof fetch = fetch) {
       return uploadId;
     },
 
-    // A URL the browser can PUT one part to without our credentials.
-    presignPart(key: string, uploadId: string, partNumber: number, expiresSeconds: number) {
+    // A URL the browser can PUT one part to without our credentials. The exact size is
+    // signed, so R2 refuses a part of any other length (uploads cannot exceed what was
+    // declared and counted against the plan).
+    presignPart(key: string, uploadId: string, partNumber: number, expiresSeconds: number, contentLength: number) {
       const url = `${objectUrl(key)}?partNumber=${partNumber}&uploadId=${encodeURIComponent(uploadId)}`;
-      return presign(url, "PUT", expiresSeconds);
+      return presign(url, "PUT", expiresSeconds, { "content-length": String(contentLength) });
     },
 
     async uploadPart(key: string, uploadId: string, partNumber: number, body: Uint8Array<ArrayBuffer>) {

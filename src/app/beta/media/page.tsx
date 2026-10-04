@@ -73,6 +73,7 @@ export default async function BetaMediaPage({ searchParams }: { searchParams: Pr
         ) : (
           <MediaLibrary
             workspaceId={current.workspace_id}
+            workspaceSlug={current.workspaces?.slug ?? ""}
             workspaceName={current.workspaces?.name ?? "Workspace"}
             canEdit={current.role !== "reviewer"}
             showHidden={showHidden}

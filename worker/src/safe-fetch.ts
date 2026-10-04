@@ -40,50 +40,66 @@ export async function resolvePublicAddress(hostname: string, resolve: Resolver =
   return addresses[0];
 }
 
-function pinnedAgent(hostname: string, pinned: { address: string; family: number }) {
+export type Download = { response: Response; close: () => Promise<void> };
+
+// One agent per download. Its DNS lookup only answers for hostnames we have already
+// checked, with the checked address, so the connection cannot be redirected elsewhere.
+function pinnedAgent(pins: Map<string, { address: string; family: number }>) {
   return new Agent({
     connect: {
-      lookup: (_host, _options, callback) => callback(null, [{ address: pinned.address, family: pinned.family }]),
-      servername: isIP(hostname) ? undefined : hostname,
+      lookup: (hostname, _options, callback) => {
+        const pinned = pins.get(hostname);
+        if (!pinned) return callback(new Error(`Host ${hostname} was not checked`), []);
+        callback(null, [{ address: pinned.address, family: pinned.family }]);
+      },
     },
     headersTimeout: 30_000,
     bodyTimeout: 60_000,
   });
 }
 
-export async function safeFetch(rawUrl: string, options: { signal?: AbortSignal; resolve?: Resolver } = {}): Promise<Response> {
-  let url = rawUrl;
-  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    const problem = importUrlProblem(url);
-    if (problem) throw new ImportError(problem);
-    const parsed = new URL(url);
-    const pinned = await resolvePublicAddress(parsed.hostname, options.resolve);
-    const dispatcher = pinnedAgent(parsed.hostname, pinned);
+// The caller must call close() when done with the response (also on errors).
+export async function safeFetch(rawUrl: string, options: { signal?: AbortSignal; resolve?: Resolver } = {}): Promise<Download> {
+  const pins = new Map<string, { address: string; family: number }>();
+  const agent = pinnedAgent(pins);
+  const close = () => agent.close().catch(() => undefined);
+  try {
+    let url = rawUrl;
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+      const problem = importUrlProblem(url);
+      if (problem) throw new ImportError(problem);
+      const parsed = new URL(url);
+      const host = parsed.hostname.replace(/^\[|\]$/g, "");
+      pins.set(host, await resolvePublicAddress(parsed.hostname, options.resolve));
 
-    let response: Response;
-    try {
-      response = await fetch(url, { redirect: "manual", dispatcher, signal: options.signal, headers: { "User-Agent": "PostSocial-MediaImport/1.0" } });
-    } catch (error) {
-      if (options.signal?.aborted) throw new ImportError("The download took too long.", false);
-      throw new ImportError(`The link could not be downloaded (${(error as Error).message}).`, false);
-    }
+      let response: Response;
+      try {
+        response = await fetch(url, { redirect: "manual", dispatcher: agent, signal: options.signal, headers: { "User-Agent": "PostSocial-MediaImport/1.0" } });
+      } catch (error) {
+        if (options.signal?.aborted) throw new ImportError("The download took too long.", false);
+        throw new ImportError(`The link could not be downloaded (${(error as Error).message}).`, false);
+      }
 
-    if ([301, 302, 303, 307, 308].includes(response.status)) {
-      const location = response.headers.get("location");
-      await response.body?.cancel();
-      if (!location) throw new ImportError("The link redirected without saying where to.");
-      url = new URL(location, url).toString();
-      continue;
+      if ([301, 302, 303, 307, 308].includes(response.status)) {
+        const location = response.headers.get("location");
+        await response.body?.cancel();
+        if (!location) throw new ImportError("The link redirected without saying where to.");
+        url = new URL(location, url).toString();
+        continue;
+      }
+      if (response.status >= 500 || response.status === 429) {
+        await response.body?.cancel();
+        throw new ImportError(`The link's website returned an error (${response.status}).`, false);
+      }
+      if (!response.ok) {
+        await response.body?.cancel();
+        throw new ImportError(`The link could not be downloaded (the website answered ${response.status}).`);
+      }
+      return { response, close };
     }
-    if (response.status >= 500 || response.status === 429) {
-      await response.body?.cancel();
-      throw new ImportError(`The link's website returned an error (${response.status}).`, false);
-    }
-    if (!response.ok) {
-      await response.body?.cancel();
-      throw new ImportError(`The link could not be downloaded (the website answered ${response.status}).`);
-    }
-    return response;
+    throw new ImportError("The link redirected too many times.");
+  } catch (error) {
+    await close();
+    throw error;
   }
-  throw new ImportError("The link redirected too many times.");
 }

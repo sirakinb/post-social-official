@@ -34,6 +34,7 @@ const STATUS: Record<string, { label: string; variant: "default" | "accent" | "s
 
 export function MediaLibrary(props: {
   workspaceId: string;
+  workspaceSlug: string;
   workspaceName: string;
   canEdit: boolean;
   showHidden: boolean;
@@ -129,7 +130,9 @@ export function MediaLibrary(props: {
           <h1 className="mt-2 text-2xl font-semibold tracking-[-0.035em] text-ink">Media library</h1>
           <p className="mt-1 text-sm text-ink-muted">Videos and images ready to post. Files unused for 30 days are removed to save storage.</p>
         </div>
-        <Link href={props.showHidden ? "/beta/media" : "/beta/media?hidden=1"} className="text-sm text-ink-muted underline-offset-4 hover:text-ink hover:underline">
+        <Link
+          href={`/beta/media?workspace=${encodeURIComponent(props.workspaceSlug)}${props.showHidden ? "" : "&hidden=1"}`}
+          className="text-sm text-ink-muted underline-offset-4 hover:text-ink hover:underline">
           {props.showHidden ? "Back to library" : "Show hidden media"}
         </Link>
       </div>
