@@ -32,7 +32,7 @@ async function findOnPage(ctx: StepContext, edge: "feed" | "photos" | "videos", 
 
 const postUrl = (id: string) => `https://www.facebook.com/${id}`;
 
-async function single(ctx: StepContext, options: FacebookOptions, caption: string): Promise<{ id: string; videoId?: string }> {
+async function single(ctx: StepContext, options: FacebookOptions, caption: string): Promise<{ id: string; videoId?: string } | "recheck"> {
   const pageId = ctx.bundle.account.externalId;
   if (ctx.checkpoint.publish_started_at && !ctx.checkpoint.post_id) {
     const edge = options.media_type === "image" ? "photos" : options.media_type === "video" ? "videos" : "feed";
@@ -41,11 +41,13 @@ async function single(ctx: StepContext, options: FacebookOptions, caption: strin
       await ctx.save({ post_id: found.id });
       return { id: found.id, videoId: edge === "videos" ? found.id : undefined };
     }
-    // Not on the Page. A text/link/image post that failed this fast never posted, but a
-    // video can take minutes to appear, so for videos we cannot be sure.
+    // Not on the Page. A new post can take a moment to appear in the Page's lists, so keep
+    // looking for two minutes before concluding the earlier call never posted. Videos can
+    // take much longer to appear, so for them we cannot be sure at all.
     if (options.media_type === "video") {
       throw new PublishError("unconfirmed", "The video upload was interrupted and it is not on the Page yet. Check the Page before posting it again.");
     }
+    if (ctx.now() - Date.parse(String(ctx.checkpoint.publish_started_at)) < 2 * 60_000) return "recheck";
   }
   await ctx.reserve("page_publish", 180, 3600);
   await ctx.save({ publish_started_at: new Date(ctx.now()).toISOString() });
@@ -128,6 +130,7 @@ export const publishFacebook: Adapter = async (ctx) => {
   const post = ctx.checkpoint.post_id
     ? { id: String(ctx.checkpoint.post_id), videoId: ctx.checkpoint.video_id as string | undefined }
     : await single(ctx, options, caption);
+  if (post === "recheck") return { kind: "wait", afterMs: 20_000, message: "Checking whether the interrupted post reached the Page." };
   if (options.media_type === "video" && post.videoId) {
     if (!(await videoReady(ctx, post.videoId, false))) return { kind: "wait", afterMs: 15_000, message: "Facebook is processing the video." };
     return { kind: "published", platformId: post.videoId, liveUrl: `https://www.facebook.com/${ctx.bundle.account.externalId}/videos/${post.videoId}` };

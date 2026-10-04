@@ -128,6 +128,17 @@ describe("Facebook", () => {
     expect(h.calls.some((c) => c.startsWith("POST"))).toBe(false);
   });
 
+  it("keeps looking for an interrupted post for two minutes before posting again", async () => {
+    let feed: Array<{ id: string; message: string }> = [];
+    const h = harness("facebook", { kind: "facebook", media_type: "text" }, [
+      (u, i) => (method(i) === "GET" && u.pathname.endsWith("/acct-1/feed") ? json({ data: feed }) : undefined),
+    ], { media: [], checkpoint: { publish_started_at: "2026-10-05T11:59:30Z" } });
+    expect(await publishFacebook(h.ctx)).toMatchObject({ kind: "wait" });
+    feed = [{ id: "page_8", message: "Hello world" }];
+    expect(await publishFacebook(h.ctx)).toMatchObject({ kind: "published", platformId: "page_8" });
+    expect(h.calls.some((c) => c.startsWith("POST"))).toBe(false);
+  });
+
   it("publishes a Reel: start, upload by URL, finish, then waits until ready", async () => {
     let ready = false;
     const h = harness("facebook", { kind: "facebook", media_type: "reel" }, [
