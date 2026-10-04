@@ -42,7 +42,10 @@ in order to dev, then to prod, exactly the same files.
 4. **Promote.** On `main`, in sync with GitHub: `npm run db:promote`. It refuses to
    run from any other branch, refuses if any migration in git was never applied to
    dev, lists what prod is missing, and asks you to type `prod` before applying it.
-5. **Redeploy code.** Functions and the worker are deployed to each environment
+5. **Deploy the web app.** Vercel builds a preview for every pull request (pointing at
+   dev). Merging to `main` does not deploy production; production goes out only when
+   the owner OKs it, with `vercel deploy --prod`. This is set in `vercel.json`.
+6. **Redeploy code.** Functions and the worker are deployed to each environment
    separately; deploy prod after the migration lands.
 
 Rules:
