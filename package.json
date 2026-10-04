@@ -8,7 +8,12 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "db:new": "scripts/insforge-env.sh dev db migrations new",
+    "db:dev": "scripts/insforge-env.sh dev db migrations up --all",
+    "db:status:dev": "scripts/insforge-env.sh dev db migrations list",
+    "db:status:prod": "scripts/insforge-env.sh prod db migrations list",
+    "db:promote": "scripts/insforge-env.sh promote"
   },
   "dependencies": {
     "@convex-dev/better-auth": "^0.12.5",

@@ -11,6 +11,7 @@ next-env.d.ts
 .env.*
 !.env.example
 .vercel
+.insforge/
 .claude/settings.local.json
 
 # OS
@@ -19,3 +20,18 @@ next-env.d.ts
 # App review videos and caption files (large binaries, kept locally)
 submission/**/*.mp4
 submission/**/*.ass
+
+# InsForge & AI agent skills
+.insforge
+.agent
+.agents
+.augment
+.claude
+.cline
+.github/copilot*
+.kilocode
+.qoder
+.qwen
+.roo
+.trae
+.windsurf
