@@ -6,7 +6,7 @@
 import path from "node:path";
 import { createInterface } from "node:readline";
 import { parseArgs } from "node:util";
-import { createAccount, resolveTarget, type AccountRequest } from "./lib/accounts.ts";
+import { assertReleasableMain, createAccount, resolveTarget, type AccountRequest } from "./lib/accounts.ts";
 
 // One reader for all questions, so input typed or piped ahead is not lost between them.
 const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: process.stdin.isTTY });
@@ -46,8 +46,10 @@ async function main() {
     process.exit(1);
   }
 
-  const target = resolveTarget(targetName, path.resolve(import.meta.dirname, ".."));
+  const repoRoot = path.resolve(import.meta.dirname, "..");
+  const target = resolveTarget(targetName, repoRoot);
   if (target.name === "prod") {
+    assertReleasableMain(repoRoot);
     const answer = await ask(`This creates an account on PROD. Type 'prod' to continue: `);
     if (answer !== "prod") {
       console.error("Cancelled.");

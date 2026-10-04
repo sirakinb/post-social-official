@@ -1,6 +1,7 @@
 // Creates Post Social accounts on InsForge: a sign-in user plus either a new workspace
 // they own, or a reviewer seat in an existing workspace. Used by scripts/create-account.ts
 // and the integration tests. Public sign-up is off, so this is the only way in.
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -28,6 +29,14 @@ export function resolveTarget(name: string, repoRoot: string): Target {
     throw new Error(`.insforge/${file} points at "${link.project_name}", expected "${expected}". Run: npx -y @insforge/cli branch switch dev`);
   }
   return { name, baseUrl: link.oss_host, adminKey: link.api_key };
+}
+
+// Same rule as scripts/insforge-env.sh: prod changes only from a clean main that matches GitHub.
+export function assertReleasableMain(repoRoot: string, git = (args: string[]) => execFileSync("git", args, { cwd: repoRoot, encoding: "utf8" }).trim()) {
+  if (git(["rev-parse", "--abbrev-ref", "HEAD"]) !== "main") throw new Error("Prod accounts are created only from main.");
+  if (git(["status", "--porcelain"]) !== "") throw new Error("Working tree has uncommitted changes.");
+  git(["fetch", "-q", "origin", "main"]);
+  if (git(["rev-parse", "HEAD"]) !== git(["rev-parse", "origin/main"])) throw new Error("main is not in sync with origin/main.");
 }
 
 export function slugify(text: string) {
@@ -156,7 +165,14 @@ export async function createAccount(target: Target, request: AccountRequest): Pr
     return { userId, workspaceId: rows[0].workspace_id, workspaceSlug: setup.slug, role: request.role };
   } catch (error) {
     // Do not leave a sign-in without a workspace behind.
-    await call(target, "DELETE", "/api/auth/users", { userIds: [userId] });
+    const reason = error instanceof Error ? error.message : String(error);
+    const cleanup = await call(target, "DELETE", "/api/auth/users", { userIds: [userId] }).catch(() => null);
+    if (!cleanup || cleanup.status >= 300) {
+      throw new Error(
+        `${reason} The sign-in ${request.email} (${userId}) was created but could not be removed; ` +
+          "delete it in the InsForge dashboard under Authentication before trying again.",
+      );
+    }
     throw error;
   }
 }

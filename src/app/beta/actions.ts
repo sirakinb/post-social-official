@@ -71,5 +71,9 @@ export async function completePasswordReset(_previous: FormState, formData: Form
   if (reset.error) {
     return { step: "complete", email, error: resetErrorMessage(reset.error) ?? undefined };
   }
+  // End any session in this browser so the person lands on the sign-in page and sees the
+  // confirmation, instead of being bounced into the app by the proxy.
+  const auth = await insforgeAuthActions();
+  await auth.signOut();
   redirect(`${BETA_LOGIN}?reset=done`);
 }

@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { ownerSetupSql, resolveTarget, reviewerSetupSql, slugify, validateRequest } from "./accounts";
+import { assertReleasableMain, ownerSetupSql, resolveTarget, reviewerSetupSql, slugify, validateRequest } from "./accounts";
 
 const owner = {
   role: "owner" as const,
@@ -85,5 +85,28 @@ describe("resolveTarget", () => {
     const root = repoWith({ "project.json": { project_name: "post-social", oss_host: "x", api_key: "k" } });
     expect(() => resolveTarget("dev", root)).toThrow(/expected "dev"/);
     expect(() => resolveTarget("staging", root)).toThrow(/dev" or "prod/);
+  });
+});
+
+describe("assertReleasableMain", () => {
+  function fakeGit(state: { branch: string; dirty?: boolean; head?: string; remote?: string }) {
+    return (args: string[]) => {
+      const key = args.join(" ");
+      if (key === "rev-parse --abbrev-ref HEAD") return state.branch;
+      if (key === "status --porcelain") return state.dirty ? " M file.ts" : "";
+      if (key === "rev-parse HEAD") return state.head ?? "abc";
+      if (key === "rev-parse origin/main") return state.remote ?? "abc";
+      return "";
+    };
+  }
+
+  it("allows a clean main that matches GitHub", () => {
+    expect(() => assertReleasableMain("/repo", fakeGit({ branch: "main" }))).not.toThrow();
+  });
+
+  it("refuses feature branches, uncommitted changes and an out-of-date main", () => {
+    expect(() => assertReleasableMain("/repo", fakeGit({ branch: "phase-1b-auth" }))).toThrow(/only from main/);
+    expect(() => assertReleasableMain("/repo", fakeGit({ branch: "main", dirty: true }))).toThrow(/uncommitted/);
+    expect(() => assertReleasableMain("/repo", fakeGit({ branch: "main", remote: "def" }))).toThrow(/not in sync/);
   });
 });
