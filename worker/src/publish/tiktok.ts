@@ -15,13 +15,31 @@ export function chunkPlan(size: number) {
   return { chunkSize, ranges };
 }
 
+// TikTok error codes that need a plain explanation rather than TikTok's own text.
+const TIKTOK_MESSAGES: Record<string, string> = {
+  unaudited_client_can_only_post_to_private_accounts:
+    "Until TikTok approves Post Social's Direct Post review, it can only post to TikTok accounts set to Private. Make the account private in TikTok, or send this as a draft to your TikTok inbox instead.",
+  spam_risk_too_many_posts: "TikTok says this account has posted too much today. Try again tomorrow.",
+  spam_risk_user_banned_from_posting: "TikTok has blocked this account from posting right now.",
+  reached_active_user_cap: "TikTok's daily limit for this app has been reached. Try again tomorrow.",
+  privacy_level_option_mismatch: "That audience isn't available for this TikTok account. Choose another.",
+};
+
 async function api(ctx: StepContext, path: string, body: unknown, what: string) {
   const response = await ctx.http(`${API}${path}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${await ctx.token()}`, "Content-Type": "application/json; charset=UTF-8" },
     body: JSON.stringify(body),
   });
-  return platformJson(response, what);
+  try {
+    return await platformJson(response, what);
+  } catch (error) {
+    if (error instanceof PublishError && TIKTOK_MESSAGES[error.code]) {
+      const transient = error.code === "spam_risk_too_many_posts" || error.code === "reached_active_user_cap";
+      throw new PublishError(error.code, TIKTOK_MESSAGES[error.code], transient, transient ? new Date(ctx.now() + 12 * 3600_000) : undefined);
+    }
+    throw error;
+  }
 }
 
 async function checkCreator(ctx: StepContext, options: TikTokOptions) {

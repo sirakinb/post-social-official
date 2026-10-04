@@ -212,6 +212,16 @@ describe("TikTok", () => {
     await expect(publishTikTok(h.ctx)).rejects.toThrow("This TikTok account can't post with that audience. Choose one of: SELF_ONLY.");
   });
 
+  it("explains TikTok's pre-audit private-accounts rule in plain language", async () => {
+    const h = harness("tiktok", direct, [
+      (u) => (u.pathname.endsWith("/creator_info/query/") ? json({ data: { can_post: true, privacy_level_options: ["SELF_ONLY"] }, error: { code: "ok" } }) : undefined),
+      (u) => (u.pathname.endsWith("/video/init/") ? json({ error: { code: "unaudited_client_can_only_post_to_private_accounts", message: "Please review our integration guidelines" } }, 403) : undefined),
+    ], { media: [video] });
+    const error = (await publishTikTok(h.ctx).catch((e) => e)) as PublishError;
+    expect(error).toMatchObject({ code: "unaudited_client_can_only_post_to_private_accounts", retryable: false });
+    expect(error.message).toMatch(/can only post to TikTok accounts set to Private/);
+  });
+
   it("splits large videos into chunks of at most 64 MB", () => {
     const plan = chunkPlan(150 * 1024 * 1024);
     expect(plan.ranges).toHaveLength(3);
