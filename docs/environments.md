@@ -20,6 +20,11 @@ scripts/insforge-env.sh dev  db migrations list
 scripts/insforge-env.sh prod db migrations list   # asks you to type "prod"
 ```
 
+On prod, read-only commands (lists, logs, diagnostics, `secrets get`) run from any
+branch. Anything that changes prod, such as deploying a function, only runs from a
+`main` that matches GitHub. The CLI version is pinned in the script so dev and prod are
+changed by the same tool.
+
 Do not use `INSFORGE_PROJECT_ID` to pick an environment: the CLI ignores it for
 database commands and silently hits whichever environment is linked.
 
@@ -35,8 +40,8 @@ in order to dev, then to prod, exactly the same files.
 3. **Review.** Push, open a pull request, CI runs checks, Greptile reviews.
    Fix findings, then merge to `main` with the owner's OK.
 4. **Promote.** On `main`, in sync with GitHub: `npm run db:promote`. It refuses to
-   run from any other branch, shows what dev and prod have applied, and asks you to
-   type `prod` before applying the pending migrations.
+   run from any other branch, refuses if any migration in git was never applied to
+   dev, lists what prod is missing, and asks you to type `prod` before applying it.
 5. **Redeploy code.** Functions and the worker are deployed to each environment
    separately; deploy prod after the migration lands.
 
