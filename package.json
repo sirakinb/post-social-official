@@ -17,7 +17,7 @@
     "deploy:prod": "scripts/deploy-prod.sh",
     "test:db": "INSFORGE_INTEGRATION=1 vitest run backend/tests",
     "config:dev": "scripts/insforge-env.sh dev config apply",
-    "account:create": "node scripts/create-account.ts"
+    "account:create": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/create-account.ts"
   },
   "dependencies": {
     "@convex-dev/better-auth": "^0.12.5",

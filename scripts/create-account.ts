@@ -58,6 +58,13 @@ async function main() {
   }
 
   const password = await ask("Password (at least 12 characters, including a number): ", true);
+  if (!password) {
+    console.error(
+      "No password was entered. Run this command in a Terminal window: the `!` prefix in Claude Code cannot take typed input.",
+    );
+    process.exitCode = 1;
+    return;
+  }
   const again = await ask("Type it again: ", true);
   if (password !== again) {
     console.error("The passwords do not match.");

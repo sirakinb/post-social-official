@@ -91,5 +91,6 @@ npm run account:create -- dev owner --email you@example.com --name "Your Name" -
 npm run account:create -- dev reviewer --email reviewer@example.com --name "Reviewer" --workspace-slug workspace-name
 ```
 
-Use `prod` instead of `dev` for prod (asks you to type `prod`). The new web app runs at
+Run it in a Terminal window: it needs typed input, which the `!` prefix in Claude Code
+cannot give. Use `prod` instead of `dev` for prod (asks you to type `prod`). The new web app runs at
 `/beta` (sign-in at `/beta/login`) until it replaces `/app` at launch.
