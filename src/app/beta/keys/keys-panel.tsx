@@ -48,7 +48,9 @@ export function KeysPanel(props: { workspaceId: string; workspaceName: string; c
 
   const active = props.keys.filter((k) => !k.revoked_at);
   const revoked = props.keys.filter((k) => k.revoked_at);
-  const claudeCommand = `claude mcp add --transport http post-social ${props.mcpUrl} --header "Authorization: Bearer ${fresh?.key ?? "YOUR_KEY"}"`;
+  // Local and preview sites get their own name so they never clash with the live connector.
+  const serverName = props.mcpUrl.startsWith("https://www.postsocial.xyz") ? "post-social" : "post-social-dev";
+  const claudeCommand = `claude mcp add --transport http ${serverName} ${props.mcpUrl} --header "Authorization: Bearer ${fresh?.key ?? "YOUR_KEY"}"`;
 
   return (
     <div>
