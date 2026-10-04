@@ -16,10 +16,12 @@
     "db:promote": "scripts/insforge-env.sh promote",
     "deploy:prod": "scripts/deploy-prod.sh",
     "test:db": "INSFORGE_INTEGRATION=1 vitest run backend/tests",
-    "config:dev": "scripts/insforge-env.sh dev config apply"
+    "config:dev": "scripts/insforge-env.sh dev config apply",
+    "account:create": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/create-account.ts"
   },
   "dependencies": {
     "@convex-dev/better-auth": "^0.12.5",
+    "@insforge/sdk": "^1.5.2",
     "@radix-ui/react-slot": "^1.1.1",
     "better-auth": "^1.6.15",
     "class-variance-authority": "^0.7.1",
