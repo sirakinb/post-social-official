@@ -17,22 +17,27 @@
     "deploy:prod": "scripts/deploy-prod.sh",
     "test:db": "INSFORGE_INTEGRATION=1 vitest run backend/tests",
     "config:dev": "scripts/insforge-env.sh dev config apply",
-    "account:create": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/create-account.ts"
+    "account:create": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/create-account.ts",
+    "functions:deploy": "scripts/deploy-function.sh",
+    "worker:deploy": "scripts/deploy-worker.sh"
   },
   "dependencies": {
     "@convex-dev/better-auth": "^0.12.5",
     "@insforge/sdk": "^1.5.2",
     "@radix-ui/react-slot": "^1.1.1",
+    "aws4fetch": "^1.0.20",
     "better-auth": "^1.6.15",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "convex": "^1.42.3",
     "geist": "^1.7.2",
     "lucide-react": "^0.474.0",
+    "mediainfo.js": "^0.3.8",
     "next": "^16.2.11",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "tailwind-merge": "^2.6.0"
+    "tailwind-merge": "^2.6.0",
+    "undici": "^8.11.2"
   },
   "devDependencies": {
     "@testing-library/dom": "^10.4.0",
@@ -44,6 +49,7 @@
     "@types/react-dom": "^19.0.3",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
+    "esbuild": "^0.28.2",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.2.11",
     "jsdom": "^26.0.0",

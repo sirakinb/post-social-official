@@ -1,0 +1,9 @@
+{
+  "name": "post-social-worker",
+  "private": true,
+  "type": "module",
+  "description": "Runtime dependencies installed inside the worker container. Everything else is bundled.",
+  "dependencies": {
+    "mediainfo.js": "0.3.8"
+  }
+}

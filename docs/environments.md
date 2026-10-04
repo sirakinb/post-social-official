@@ -94,3 +94,28 @@ npm run account:create -- dev reviewer --email reviewer@example.com --name "Revi
 Run it in a Terminal window: it needs typed input, which the `!` prefix in Claude Code
 cannot give. Use `prod` instead of `dev` for prod (asks you to type `prod`). The new web app runs at
 `/beta` (sign-in at `/beta/login`) until it replaces `/app` at launch.
+
+## Media storage, functions and the worker
+
+| | Dev | Prod |
+|---|---|---|
+| R2 bucket | `postsocial-media-dev` (private) | not created yet |
+| Uploads allowed from | `http://localhost:3333`, `https://post-social-*-app-build-26.vercel.app` | to set up with prod |
+| Worker | `post-social-worker` on InsForge Compute, always on | not deployed yet |
+
+- Media files live in Cloudflare R2 and are never public: browsers upload with short-lived
+  signed part links, and readers get short-lived signed links.
+- The R2 key is a Cloudflare token limited to one bucket. It is stored only as InsForge
+  secrets (`R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`), plus
+  `WEB_APP_ORIGINS` for the browser origins allowed to call functions.
+- Functions are bundled and deployed with `npm run functions:deploy -- <dev|prod> <name>`
+  (for example `media`). Branches do not carry function code, so deploy to each environment.
+- The worker (`worker/`) processes media jobs and runs the retention and orphan sweeps.
+  Deploy with `npm run worker:deploy -- <dev|prod>`; it reads its settings from that
+  environment's secrets and must stay `--always-on` (it gets no web traffic to wake it).
+  InsForge Compute has no log viewer yet; failed jobs keep their error in
+  `media_jobs.last_error`.
+
+Before media goes to prod: create `postsocial-media-prod` with CORS for the prod web
+origin, a bucket-scoped token stored as prod secrets, set prod `WEB_APP_ORIGINS`, then
+deploy the `media` function and the worker to prod after `db:promote`.
