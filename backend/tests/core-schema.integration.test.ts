@@ -101,6 +101,17 @@ describe.skipIf(!enabled)("core schema on the dev backend", () => {
       caption: "Post in B",
       effective_approval_policy: "confirm_each",
     });
+    // Media in use by a post: deleting the workspace must still succeed (see afterAll).
+    const media = await insert("media_assets", {
+      workspace_id: workspaceA.id,
+      storage_key: `test/${suffix}/clip.mp4`,
+      file_name: "clip.mp4",
+      mime_type: "video/mp4",
+      media_type: "video",
+      size_bytes: 1024,
+    });
+    await insert("post_media", { post_id: postA.id, media_asset_id: media.id, workspace_id: workspaceA.id, position: 0 });
+
     await insert("audit_events", {
       workspace_id: workspaceA.id,
       actor_id: apiKeyActor.id,
@@ -117,10 +128,16 @@ describe.skipIf(!enabled)("core schema on the dev backend", () => {
     const workspaceIds = [workspaceA?.id, workspaceB?.id].filter(Boolean);
     if (workspaceIds.length) {
       // Audit rows are append-only by trigger, so they go away only with their workspace.
-      await admin("DELETE", records("workspaces", `?id=in.(${workspaceIds.join(",")})`));
+      // This also proves a full workspace deletion works with every kind of child row.
+      const deleted = await admin<Row[]>("DELETE", records("workspaces", `?id=in.(${workspaceIds.join(",")})`));
+      expect(deleted.status, JSON.stringify(deleted.body)).toBe(200);
+      expect(deleted.body).toHaveLength(workspaceIds.length);
     }
     const userIds = [userA?.id, userB?.id].filter(Boolean);
-    if (userIds.length) await admin("DELETE", "/api/auth/users", { userIds });
+    if (userIds.length) {
+      const removed = await admin("DELETE", "/api/auth/users", { userIds });
+      expect(removed.status, JSON.stringify(removed.body)).toBeLessThan(300);
+    }
   }, 60_000);
 
   describe("workspace isolation (US-005)", () => {
@@ -216,6 +233,38 @@ describe.skipIf(!enabled)("core schema on the dev backend", () => {
     });
   });
 
+  describe("workspace integrity", () => {
+    it("rejects a destination that mixes a post and an account from different workspaces", async () => {
+      const mixed = await admin("POST", records("destinations"), [
+        {
+          workspace_id: workspaceA.id,
+          post_id: postB.id,
+          connected_account_id: accountA.id,
+          platform: "instagram",
+          effective_approval_policy: "confirm_each",
+        },
+      ]);
+      expect(mixed.status).toBeGreaterThanOrEqual(400);
+    });
+
+    it("rejects a post attributed to another workspace's actor", async () => {
+      const foreignActor = await admin("POST", records("posts"), [
+        {
+          workspace_id: workspaceB.id,
+          actor_id: apiKeyActor.id,
+          entry_point: "api",
+          effective_approval_policy: "confirm_each",
+        },
+      ]);
+      expect(foreignActor.status).toBeGreaterThanOrEqual(400);
+    });
+
+    it("does not let a connected account with posts be deleted on its own", async () => {
+      const removal = await admin("DELETE", records("connected_accounts", `?id=eq.${accountA.id}`));
+      expect(removal.status).toBeGreaterThanOrEqual(400);
+    });
+  });
+
   describe("who did it (US-008)", () => {
     it("the audit log names the API key that created a post", async () => {
       const result = await asA<Array<{ summary: string; actors: { display_name: string; kind: string } }>>(
@@ -240,6 +289,23 @@ describe.skipIf(!enabled)("core schema on the dev backend", () => {
         { workspace_id: workspaceA.id, kind: "user", api_key_id: apiKeyActor.api_key_id, display_name: "bad" },
       ]);
       expect(mismatched.status).toBeGreaterThanOrEqual(400);
+    });
+
+    it("an API key actor must point at a key when created", async () => {
+      const missing = await admin("POST", records("actors"), [
+        { workspace_id: workspaceA.id, kind: "api_key", display_name: "No key" },
+      ]);
+      expect(missing.status).toBeGreaterThanOrEqual(400);
+      expect(JSON.stringify(missing.body)).toContain("must point at its API key");
+    });
+
+    it("an actor cannot be re-pointed or change kind", async () => {
+      const rekind = await admin("PATCH", records("actors", `?id=eq.${apiKeyActor.id}`), { kind: "system" });
+      expect(rekind.status).toBeGreaterThanOrEqual(400);
+      const rename = await admin<Row[]>("PATCH", records("actors", `?id=eq.${apiKeyActor.id}`), {
+        display_name: "Zapier key",
+      });
+      expect(rename.status).toBe(200);
     });
   });
 
