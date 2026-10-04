@@ -7,6 +7,19 @@
 | Dashboard | https://insforge.dev/dashboard/project/33078020-21bd-4dcc-b3b5-c8033c84a097 | branch of the same project |
 | Vercel | Production | Preview |
 
+Vercel environment variables (set in the Vercel project, not in git):
+
+| Variable | Preview | Production |
+|---|---|---|
+| `NEXT_PUBLIC_APP_ENV` | `development` | `production` |
+| `NEXT_PUBLIC_INSFORGE_URL` | dev API base | prod API base |
+| `NEXT_PUBLIC_INSFORGE_ANON_KEY` | dev anon key | prod anon key |
+| `NEXT_PUBLIC_CONVEX_URL`, `NEXT_PUBLIC_CONVEX_SITE_URL` | same Convex deployment | same Convex deployment |
+
+Until the InsForge migration lands, the running app still talks to the single Convex
+deployment in both environments; only the InsForge variables differ. Previews show an
+amber badge with the environment and the InsForge host; production shows none.
+
 This folder is linked to **dev** by default. Keys live in `.insforge/project.json` and
 `.env.local`, both gitignored. Never commit them.
 
@@ -43,8 +56,9 @@ in order to dev, then to prod, exactly the same files.
    run from any other branch, refuses if any migration in git was never applied to
    dev, lists what prod is missing, and asks you to type `prod` before applying it.
 5. **Deploy the web app.** Vercel builds a preview for every pull request (pointing at
-   dev). Merging to `main` does not deploy production; production goes out only when
-   the owner OKs it, with `vercel deploy --prod`. This is set in `vercel.json`.
+   dev). Merging to `main` does not deploy production (set in `vercel.json`).
+   Production goes out only with the owner's OK, via `npm run deploy:prod`, which
+   refuses to run unless you are on a clean `main` that matches GitHub.
 6. **Redeploy code.** Functions and the worker are deployed to each environment
    separately; deploy prod after the migration lands.
 
