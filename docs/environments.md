@@ -80,3 +80,16 @@ We do not use `branch merge` to promote. A merge leaves the branch dormant, and 
 only way to reuse it is `branch reset`, which rewinds dev to the day it was created
 and drops every migration since. Replaying git migrations keeps dev long-lived.
 If dev ever drifts, reset it and run `npm run db:dev` to replay all migrations.
+
+## Accounts
+
+Public sign-up is off. Accounts are created with a script; the password is typed in when
+it runs and never stored:
+
+```bash
+npm run account:create -- dev owner --email you@example.com --name "Your Name" --workspace "Workspace Name"
+npm run account:create -- dev reviewer --email reviewer@example.com --name "Reviewer" --workspace-slug workspace-name
+```
+
+Use `prod` instead of `dev` for prod (asks you to type `prod`). The new web app runs at
+`/beta` (sign-in at `/beta/login`) until it replaces `/app` at launch.
