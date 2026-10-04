@@ -38,6 +38,16 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },
+  // The REST API and MCP server run as an InsForge function; this site gives them their
+  // public addresses (/api/v1/..., /mcp).
+  async rewrites() {
+    const api = process.env.API_BASE_URL;
+    if (!api) return [];
+    return [
+      { source: "/api/v1/:path*", destination: `${api}/v1/:path*` },
+      { source: "/mcp", destination: `${api}/mcp` },
+    ];
+  },
 };
 
 export default nextConfig;

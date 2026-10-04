@@ -1,47 +1,52 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Brand } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { BETA_LOGIN } from "@/lib/insforge/auth-rules";
 import { currentUser, insforgeServerClient } from "@/lib/insforge/server";
 import { signOut } from "../actions";
-import { AccountsPanel, type ConnectedAccount } from "./accounts-panel";
+import type { KeySummary } from "./actions";
+import { KeysPanel } from "./keys-panel";
 
-export const metadata = { title: "Accounts · Post Social beta" };
+export const metadata = { title: "API keys · Post Social beta" };
 
 type Membership = { role: string; workspace_id: string; workspaces: { name: string; slug: string } | null };
 
-export default async function BetaAccountsPage({ searchParams }: { searchParams: Promise<{ workspace?: string; connected?: string; message?: string; error?: string; connect?: string }> }) {
+export default async function BetaKeysPage({ searchParams }: { searchParams: Promise<{ workspace?: string }> }) {
   const user = await currentUser();
-  if (!user) redirect(`${BETA_LOGIN}?next=/beta/accounts`);
-  const { workspace: slug, message, error, connect } = await searchParams;
+  if (!user) redirect(`${BETA_LOGIN}?next=/beta/keys`);
+  const { workspace: slug } = await searchParams;
 
   const client = await insforgeServerClient();
   const { data: memberData } = await client.database.from("workspace_members").select("role, workspace_id, workspaces(name, slug)").eq("user_id", user.id);
   const memberships = (memberData ?? []) as unknown as Membership[];
   const current = memberships.find((m) => m.workspaces?.slug === slug) ?? memberships[0];
 
-  let accounts: ConnectedAccount[] = [];
+  let keys: KeySummary[] = [];
   let loadError = false;
   if (current) {
-    const { data, error: queryError } = await client.database
-      .from("connected_accounts")
-      .select("id, platform, handle, display_name, avatar_url, health, health_reason, capabilities, updated_at")
+    // Members can read key names and prefixes; the key hashes are never readable.
+    const { data, error } = await client.database
+      .from("api_keys")
+      .select("id, name, key_prefix, mode, last_used_at, revoked_at, created_at")
       .eq("workspace_id", current.workspace_id)
-      .order("platform")
-      .order("display_name");
-    loadError = Boolean(queryError);
-    accounts = ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      .order("created_at", { ascending: false });
+    loadError = Boolean(error);
+    keys = ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
       id: String(row.id),
-      platform: String(row.platform),
-      handle: String(row.handle),
-      displayName: String(row.display_name),
-      avatarUrl: (row.avatar_url as string | null) ?? undefined,
-      health: String(row.health),
-      healthReason: (row.health_reason as string | null) ?? null,
-      postTypes: ((row.capabilities as { post_types?: string[] } | null)?.post_types ?? []) as string[],
+      name: String(row.name),
+      prefix: String(row.key_prefix),
+      mode: row.mode === "test" ? "test" : "live",
+      last_used_at: (row.last_used_at as string | null) ?? null,
+      revoked_at: (row.revoked_at as string | null) ?? null,
+      created_at: String(row.created_at),
     }));
   }
+
+  // The API and MCP server are reached through this site's own domain.
+  const host = (await headers()).get("host") ?? "www.postsocial.xyz";
+  const origin = `${host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https"}://${host}`;
 
   return (
     <div className="technical-grid flex min-h-screen flex-col">
@@ -51,9 +56,9 @@ export default async function BetaAccountsPage({ searchParams }: { searchParams:
             <Brand />
             <nav className="flex gap-4 text-sm">
               <Link href="/beta" className="text-ink-muted hover:text-ink">Home</Link>
-              <Link href="/beta/accounts" aria-current="page" className="font-medium text-ink">Accounts</Link>
+              <Link href="/beta/accounts" className="text-ink-muted hover:text-ink">Accounts</Link>
               <Link href="/beta/media" className="text-ink-muted hover:text-ink">Media</Link>
-              <Link href="/beta/keys" className="text-ink-muted hover:text-ink">API keys</Link>
+              <Link href="/beta/keys" aria-current="page" className="font-medium text-ink">API keys</Link>
             </nav>
           </div>
           <form action={signOut}><Button type="submit" variant="secondary">Sign out</Button></form>
@@ -63,16 +68,14 @@ export default async function BetaAccountsPage({ searchParams }: { searchParams:
         {!current ? (
           <p className="text-sm text-ink-muted">You are not a member of any workspace yet.</p>
         ) : (
-          <AccountsPanel
+          <KeysPanel
             workspaceId={current.workspace_id}
-            workspaceSlug={current.workspaces?.slug ?? ""}
             workspaceName={current.workspaces?.name ?? "Workspace"}
-            canEdit={current.role !== "reviewer"}
-            accounts={accounts}
+            canManage={current.role === "owner" || current.role === "admin"}
+            keys={keys}
             loadError={loadError}
-            notice={message ?? null}
-            error={error ?? null}
-            requested={connect ?? null}
+            mcpUrl={`${origin}/mcp`}
+            apiUrl={`${origin}/api`}
           />
         )}
       </main>

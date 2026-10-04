@@ -1,7 +1,7 @@
 // Posts: drafts, checks, submitting, approvals, scheduling and cancelling. The same
 // actions back the web app, the REST API and the MCP tools (Phase 5). Every change checks
 // membership and writes an audit entry naming the actor.
-import { ApiError, membership, requireUuid, type Caller, type Sql } from "../access";
+import { ApiError, isKeyCaller, membership, requireUuid, type Caller, type Sql } from "../access";
 import { DISPLAY_NAMES, type Platform } from "../connections/platforms";
 import { captionFor, destinationProblems, normalizeOptions, type DestinationOptions, type MediaFacts } from "./validate";
 
@@ -21,6 +21,20 @@ export function needsApproval(entryPoint: Caller["entryPoint"], policy: Policy, 
   if (entryPoint === "ui") return false;
   if (platform === "tiktok") return true;
   return policy !== "autonomous";
+}
+
+// Test keys can do everything except send or schedule a post.
+function assertMayPublish(caller: Caller) {
+  if (isKeyCaller(caller) && caller.mode === "test") {
+    throw new ApiError(403, "Test keys cannot publish or schedule. The post stays a draft; use a live key to send it.");
+  }
+}
+
+// Approving is the person's decision. (Phase 5C rules may let an AI approve for some accounts.)
+function assertPerson(caller: Caller, action: string) {
+  if (caller.entryPoint !== "ui") {
+    throw new ApiError(403, `Only a person can ${action} posts. They can do it in Post Social under Approvals.`);
+  }
 }
 
 type AccountRow = { id: string; platform: Platform; display_name: string; health: string; capabilities: Record<string, unknown>; policy: Policy };
@@ -321,6 +335,7 @@ export async function updatePost(deps: PostsDeps, caller: Caller, input: Record<
 
 export async function submitPost(deps: PostsDeps, caller: Caller, input: Record<string, unknown>) {
   const postId = requireUuid(input.post_id, "Post");
+  assertMayPublish(caller);
   if (input.scheduled_at !== undefined) await updatePost(deps, caller, { post_id: postId, scheduled_at: input.scheduled_at });
   const { post, member, destinations } = await loadPost(deps, caller, postId, true);
   if (post.status !== "draft") throw new ApiError(409, `Only drafts can be submitted (this post is ${post.status.replace("_", " ")}).`);
@@ -362,6 +377,7 @@ export async function submitPost(deps: PostsDeps, caller: Caller, input: Record<
 
 export async function approvePost(deps: PostsDeps, caller: Caller, input: Record<string, unknown>) {
   const postId = requireUuid(input.post_id, "Post");
+  assertPerson(caller, "approve");
   if (input.caption !== undefined || input.destinations !== undefined || input.media_ids !== undefined || input.scheduled_at !== undefined) {
     // Edit-then-approve: apply the edits first (the post stays awaiting approval).
     await updatePost(deps, caller, { ...input, post_id: postId });
@@ -389,6 +405,7 @@ export async function approvePost(deps: PostsDeps, caller: Caller, input: Record
 
 export async function rejectPost(deps: PostsDeps, caller: Caller, input: Record<string, unknown>) {
   const postId = requireUuid(input.post_id, "Post");
+  assertPerson(caller, "reject");
   const { post, member } = await loadPost(deps, caller, postId, true);
   if (post.status !== "awaiting_approval") throw new ApiError(409, "This post is not waiting for approval.");
   const note = typeof input.note === "string" ? input.note.slice(0, 1000) : null;
@@ -427,6 +444,7 @@ export async function cancelPost(deps: PostsDeps, caller: Caller, input: Record<
 
 export async function reschedulePost(deps: PostsDeps, caller: Caller, input: Record<string, unknown>) {
   const postId = requireUuid(input.post_id, "Post");
+  assertMayPublish(caller);
   const { post, member } = await loadPost(deps, caller, postId, true);
   if (post.status !== "scheduled") throw new ApiError(409, "Only scheduled posts can be rescheduled. Edit the post to change a draft's time.");
   const at = parseSchedule(input.scheduled_at);
@@ -439,6 +457,19 @@ export async function reschedulePost(deps: PostsDeps, caller: Caller, input: Rec
   if (!moved.length) throw new ApiError(409, "This post started sending, so it can't be rescheduled.");
   await audit(deps, post.workspace_id, member.actor_id, caller, postId, "post.rescheduled", `Rescheduled to ${at}`, { scheduled_at: post.scheduled_at }, { scheduled_at: at });
   return view(deps, postId);
+}
+
+// Deletes a draft or a cancelled post. Anything that was sent or is on its way is kept
+// for the record; cancel a waiting post instead.
+export async function deletePost(deps: PostsDeps, caller: Caller, input: Record<string, unknown>) {
+  const postId = requireUuid(input.post_id, "Post");
+  const { post, member } = await loadPost(deps, caller, postId, true);
+  if (post.status !== "draft" && post.status !== "cancelled") {
+    throw new ApiError(409, EDITABLE.includes(post.status) ? "Only drafts and cancelled posts can be deleted. Cancel this post first." : `This post is ${post.status.replace("_", " ")}, so it is kept for the record.`);
+  }
+  await audit(deps, post.workspace_id, member.actor_id, caller, postId, "post.deleted", "Deleted the post", { caption: post.caption, status: post.status });
+  await deps.sql(`DELETE FROM public.posts WHERE id = $1 AND status IN ('draft', 'cancelled')`, [postId]);
+  return { post_id: postId, deleted: true };
 }
 
 export async function getPost(deps: PostsDeps, caller: Caller, input: Record<string, unknown>) {
@@ -457,6 +488,7 @@ export const postActions = {
   cancel: cancelPost,
   reschedule: reschedulePost,
   get: getPost,
+  delete: deletePost,
 } as const;
 
 export { captionFor };

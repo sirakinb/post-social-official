@@ -43,11 +43,19 @@ export function AccountsPanel(props: {
   loadError: boolean;
   notice: string | null;
   error: string | null;
+  requested: string | null; // a platform an AI asked the person to connect (connect link)
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
+  const requested = PLATFORMS.find((p) => p.id === props.requested);
   const [message, setMessage] = useState<{ kind: "error" | "notice"; text: string } | null>(
-    props.error ? { kind: "error", text: props.error } : props.notice ? { kind: "notice", text: props.notice } : null,
+    props.error
+      ? { kind: "error", text: props.error }
+      : props.notice
+        ? { kind: "notice", text: props.notice }
+        : requested && props.canEdit
+          ? { kind: "notice", text: `Your AI asked you to connect ${requested.name}. Press Connect on ${requested.name} below to sign in on ${requested.name}'s own page.` }
+          : null,
   );
   const [confirming, setConfirming] = useState<string | null>(null);
 
@@ -97,7 +105,10 @@ export function AccountsPanel(props: {
           <h2 className="text-sm font-semibold text-ink">Connect an account</h2>
           <ul className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {PLATFORMS.map((platform) => (
-              <li key={platform.id} className="grooved-surface flex items-center justify-between gap-3 rounded-xl border border-border bg-surface p-4">
+              <li
+                key={platform.id}
+                className={`grooved-surface flex items-center justify-between gap-3 rounded-xl border bg-surface p-4 ${platform.id === requested?.id ? "border-accent ring-1 ring-accent" : "border-border"}`}
+              >
                 <div className="flex items-center gap-3">
                   <PlatformCardIcon platform={platform.id} size="sm" />
                   <div>

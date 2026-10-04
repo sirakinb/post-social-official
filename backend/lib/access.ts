@@ -9,7 +9,20 @@ export class ApiError extends Error {
 
 export type Sql = <T = Record<string, unknown>>(query: string, params: unknown[]) => Promise<T[]>;
 
-export type Caller = { userId: string; displayName: string; entryPoint: "ui" | "api" | "mcp" };
+// A signed-in person (web app), or an API key acting for one workspace (REST API or MCP).
+export type UserCaller = { kind?: "user"; userId: string; displayName: string; entryPoint: "ui" | "api" | "mcp" };
+export type KeyCaller = {
+  kind: "key";
+  keyId: string;
+  workspaceId: string;
+  actorId: string;
+  mode: "test" | "live";
+  displayName: string;
+  entryPoint: "api" | "mcp";
+};
+export type Caller = UserCaller | KeyCaller;
+
+export const isKeyCaller = (caller: Caller): caller is KeyCaller => caller.kind === "key";
 
 export type Membership = { role: string; actor_id: string };
 
@@ -22,6 +35,11 @@ export function requireUuid(value: unknown, label: string): string {
 
 // Finds the caller's role and their actor in the workspace, creating the actor on first use.
 export async function membership(sql: Sql, caller: Caller, workspaceId: string, write: boolean, writeRefusal = "Reviewers can view but not change anything."): Promise<Membership> {
+  // A key belongs to exactly one workspace and acts as its own actor.
+  if (isKeyCaller(caller)) {
+    if (caller.workspaceId !== workspaceId) throw new ApiError(404, "That workspace was not found.");
+    return { role: "key", actor_id: caller.actorId };
+  }
   const rows = await sql<Membership>(
     `WITH member AS (
        SELECT m.workspace_id, m.user_id, m.role
