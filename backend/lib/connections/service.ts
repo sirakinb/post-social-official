@@ -96,18 +96,22 @@ export async function completeConnection(deps: ConnectionDeps, platform: Platfor
     return fail(error instanceof PlatformError ? error.message : `${name} sign-in failed. Try again.`);
   }
 
-  const key = await importKey(deps.setting("CREDENTIAL_ENCRYPTION_KEY"));
-  const connected: string[] = [];
+  const externalIdOf = (identity: (typeof identities)[number]) => identity.externalAccountId || `workspace:${session.workspace_id}`;
+  // One social account belongs to one workspace. Check every account first, so a
+  // Facebook sign-in that returns several Pages connects all of them or none.
   for (const identity of identities) {
-    const externalId = identity.externalAccountId || `workspace:${session.workspace_id}`;
-    // One social account belongs to one workspace.
     const [elsewhere] = await deps.sql<{ id: string }>(
       `SELECT id FROM public.connected_accounts
        WHERE platform = $1 AND external_account_id = $2 AND workspace_id <> $3 AND health <> 'disconnected'`,
-      [platform, externalId, session.workspace_id],
+      [platform, externalIdOf(identity), session.workspace_id],
     );
     if (elsewhere) return fail(`${identity.displayName} is already connected to another workspace. Disconnect it there first.`);
+  }
 
+  const key = await importKey(deps.setting("CREDENTIAL_ENCRYPTION_KEY"));
+  const connected: string[] = [];
+  for (const identity of identities) {
+    const externalId = externalIdOf(identity);
     const sealed = await seal(identity.tokens, key);
     // Reconnecting updates the same row instead of creating a duplicate.
     await deps.sql(
