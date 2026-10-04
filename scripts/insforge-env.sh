@@ -4,7 +4,7 @@
 #   scripts/insforge-env.sh dev  <insforge args...>   e.g. dev db migrations up --all
 #   scripts/insforge-env.sh prod <insforge args...>   read-only commands anywhere; anything
 #                                                     else only from a synced main
-#   scripts/insforge-env.sh promote                   apply git migrations to prod
+#   scripts/insforge-env.sh promote                   apply git migrations and insforge.toml to prod
 #
 # The folder is linked to the dev branch by default. Prod is reached only through
 # this script, which switches to the parent project and always switches back.
@@ -52,7 +52,7 @@ confirm_prod() {
 is_read_only() {
   case "$*" in
     "current"*|"metadata"*|"whoami"*|"branch list"*|"logs "*|"diagnose"*) return 0 ;;
-    "db migrations list"*|"secrets list"*|"secrets get "*) return 0 ;;
+    "db migrations list"*|"secrets list"*|"secrets get "*|"config plan"*) return 0 ;;
     "functions list"*|"functions code "*|"schedules list"*|"schedules get "*|"schedules logs "*) return 0 ;;
     "storage buckets"*|"storage list-objects "*|"backups list"*|"backups latest"*) return 0 ;;
     *) return 1 ;;
@@ -110,14 +110,24 @@ case "$target" in
     switch_to_prod
     prod_applied="$(applied_versions | sort)"
     pending="$(comm -23 <(echo "$local_list") <(echo "$prod_applied"))"
-    if [[ -z "$pending" ]]; then
-      echo "Prod is up to date."
-      exit 0
+    if [[ -n "$pending" ]]; then
+      echo "Pending migrations on prod (all verified on dev):"
+      echo "$pending"
+      confirm_prod "Apply these migrations to PROD ($PROD_NAME)?"
+      "${CLI[@]}" db migrations up --all
+    else
+      echo "Prod migrations are up to date."
     fi
-    echo "Pending on prod (all verified on dev):"
-    echo "$pending"
-    confirm_prod "Apply these migrations to PROD ($PROD_NAME)?"
-    "${CLI[@]}" db migrations up --all
+    # Project settings (insforge.toml): sign-up, password policy, redirects.
+    config_changes="$("${CLI[@]}" config plan --json 2>/dev/null \
+      | python3 -c "import json,sys; print(len(json.load(sys.stdin)['changes']))")"
+    if [[ "$config_changes" != "0" ]]; then
+      "${CLI[@]}" config plan
+      confirm_prod "Apply these settings to PROD ($PROD_NAME)?"
+      "${CLI[@]}" config apply --auto-approve
+    else
+      echo "Prod settings are up to date."
+    fi
     echo "Done. Redeploy prod functions and the worker if they depend on this change."
     ;;
   *)
