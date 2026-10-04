@@ -18,13 +18,11 @@ required.
    `npm test` and `npm run build`. All must pass before anything is pushed. For
    database changes, also apply them to dev and run `npm run test:db`.
 3. Batch work into one pull request per substantial chunk (roughly a phase or a
-   large part of one); keep unfinished work as a draft. Greptile reviews it once
-   when it is ready.
-4. Fix or explicitly answer every Greptile finding and re-run the checks. Ask
-   Greptile to re-review only when fixes change behavior, security or data
-   handling, not for wording, docs or test-only changes.
-5. Merge to `main` only after checks pass and Greptile has no open findings,
-   and with the owner's OK.
+   large part of one); keep unfinished work as a draft.
+4. Before asking to merge, review the full diff yourself for correctness and
+   security (access rules, limits, secrets, input from users and links), fix what
+   you find, and re-run the checks.
+5. Merge to `main` only after checks pass, and with the owner's OK.
 
 ## Dev and prod (InsForge)
 
