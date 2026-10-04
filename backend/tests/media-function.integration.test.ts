@@ -112,7 +112,10 @@ describe.skipIf(!enabled)("media function on the dev backend (US-013, US-014, US
       "GET",
       `/api/database/records/media_jobs?media_asset_id=eq.${uploadedId}&select=kind,state`,
     );
-    expect(jobs.body).toEqual([{ kind: "probe", state: "queued" }]);
+    // The dev worker may already have picked the job up.
+    expect(jobs.body).toHaveLength(1);
+    expect(jobs.body[0].kind).toBe("probe");
+    expect(["queued", "running", "complete", "retry_wait"]).toContain(jobs.body[0].state);
 
     const again = await media(ownerToken, { action: "complete_upload", media_id: uploadedId, parts: etags });
     expect(again.status).toBe(409);
