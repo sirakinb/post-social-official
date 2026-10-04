@@ -81,6 +81,10 @@ case "$target" in
     "${CLI[@]}" "$@"
     ;;
   prod)
+    if [[ "$*" == "db migrations up"* ]]; then
+      echo "Apply migrations to prod with: npm run db:promote (it checks dev first)." >&2
+      exit 1
+    fi
     if is_read_only "$@"; then
       confirm_prod "Read-only command on PROD ($PROD_NAME)."
     else
@@ -93,15 +97,19 @@ case "$target" in
   promote)
     require_releasable_main
     ensure_dev
-    dev_applied="$(applied_versions)"
-    missing_on_dev="$(comm -23 <(local_versions | sort) <(sort <<<"$dev_applied"))"
+    # Captured in variables so a failed lookup stops the script (set -e) instead of
+    # silently comparing against an empty list.
+    local_list="$(local_versions | sort)"
+    dev_applied="$(applied_versions | sort)"
+    missing_on_dev="$(comm -23 <(echo "$local_list") <(echo "$dev_applied"))"
     if [[ -n "$missing_on_dev" ]]; then
       echo "These migrations were never applied to dev. Run npm run db:dev and test first:" >&2
       echo "$missing_on_dev" >&2
       exit 1
     fi
     switch_to_prod
-    pending="$(comm -23 <(local_versions | sort) <(applied_versions | sort))"
+    prod_applied="$(applied_versions | sort)"
+    pending="$(comm -23 <(echo "$local_list") <(echo "$prod_applied"))"
     if [[ -z "$pending" ]]; then
       echo "Prod is up to date."
       exit 0
