@@ -24,6 +24,8 @@ export default defineConfig([
     "dist/**",
     "node_modules/**",
     "convex/_generated/**",
+    ".build/**",
+    "worker/dist/**",
     "next-env.d.ts",
   ]),
 ]);

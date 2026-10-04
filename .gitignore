@@ -35,3 +35,7 @@ submission/**/*.ass
 .roo
 .trae
 .windsurf
+
+# bundled InsForge functions
+.build/
+worker/dist/

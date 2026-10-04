@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Brand } from "@/components/brand";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ export default async function BetaHomePage() {
         <p className="utility-label text-accent">Post Social / Beta</p>
         <h1 className="mt-3 text-2xl font-semibold tracking-[-0.035em] text-ink">You are signed in</h1>
         <p className="mt-2 text-sm text-ink-muted">Signed in as <span className="text-ink">{user.email}</span>. The new web app is being built here; the current app stays at /app until launch.</p>
+        <p className="mt-4"><Link href="/beta/media" className="text-sm font-medium text-accent underline-offset-4 hover:underline">Open the media library →</Link></p>
 
         <section className="mt-10">
           <h2 className="text-sm font-semibold text-ink">Your workspaces</h2>
