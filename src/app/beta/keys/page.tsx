@@ -74,6 +74,7 @@ export default async function BetaKeysPage({ searchParams }: { searchParams: Pro
               <Link href="/beta" className="text-ink-muted hover:text-ink">Home</Link>
               <Link href="/beta/accounts" className="text-ink-muted hover:text-ink">Accounts</Link>
               <Link href="/beta/media" className="text-ink-muted hover:text-ink">Media</Link>
+              <Link href="/beta/usage" className="text-ink-muted hover:text-ink">Usage</Link>
               <Link href="/beta/keys" aria-current="page" className="font-medium text-ink">API keys</Link>
             </nav>
           </div>

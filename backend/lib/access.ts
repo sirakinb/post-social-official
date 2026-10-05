@@ -23,6 +23,8 @@ export type AgentCaller = {
   role?: string;
   displayName: string;
   entryPoint: "api" | "mcp";
+  // Set when the workspace has used its plan's API calls for today; the call is refused.
+  overLimit?: string;
 };
 export type Caller = UserCaller | AgentCaller;
 
@@ -69,4 +71,19 @@ export async function membership(sql: Sql, caller: Caller, workspaceId: string, 
   if (!found) throw new ApiError(404, "That workspace was not found.");
   if (write && found.role === "reviewer") throw new ApiError(403, writeRefusal);
   return found;
+}
+
+// SQL columns (for a row `a` with workspace_id) that say whether today's API calls are
+// already at the plan's limit, with the plain message to show. Used when a key or app
+// signs in to a request; refused calls are not counted.
+export const API_LIMIT_SQL = `
+  (SELECT coalesce(sum(u.quantity), 0) FROM public.usage_events u
+   WHERE u.workspace_id = a.workspace_id AND u.event_type = 'api_call' AND u.occurred_at >= date_trunc('day', now()))
+    >= p.max_api_calls_per_day AS over_limit,
+  p.name AS plan_name, p.max_api_calls_per_day`;
+export const PLAN_JOIN_SQL = `JOIN public.plans p ON p.id = coalesce((SELECT wp.plan_id FROM public.workspace_plans wp WHERE wp.workspace_id = a.workspace_id), 'tester')`;
+
+export function apiLimitMessage(row: { over_limit?: boolean; plan_name?: string; max_api_calls_per_day?: number }) {
+  if (!row.over_limit) return undefined;
+  return `Your ${row.plan_name} plan allows ${Number(row.max_api_calls_per_day).toLocaleString("en-US")} API calls a day, and today's are used up. Calls work again after midnight UTC.`;
 }

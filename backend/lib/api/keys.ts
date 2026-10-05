@@ -1,7 +1,7 @@
 // API keys: named keys a person creates for their AIs and tools. A key belongs to one
 // workspace and acts as its own actor ("via Claude Code"). Only the SHA-256 of a key is
 // stored; the full key is shown once. Test keys can do everything except publish.
-import { ApiError, isAgentCaller, membership, requireUuid, type Caller, type AgentCaller, type Sql } from "../access";
+import { API_LIMIT_SQL, ApiError, apiLimitMessage, isAgentCaller, membership, PLAN_JOIN_SQL, requireUuid, type Caller, type AgentCaller, type Sql } from "../access";
 import { randomToken, sha256Hex } from "../connections/crypto";
 
 const MAX_KEYS = 50;
@@ -102,21 +102,23 @@ export const keyActions = { create: createKey, list: listKeys, revoke: revokeKey
 // Records the use (last used time and an api_call usage event) in the same statement.
 export async function callerForKey(sql: Sql, token: string | null, entryPoint: "api" | "mcp"): Promise<AgentCaller | null> {
   if (!token || !KEY_SHAPE.test(token)) return null;
-  const rows = await sql<{ id: string; workspace_id: string; mode: "live" | "test"; name: string; actor_id: string }>(
+  const rows = await sql<{ id: string; workspace_id: string; mode: "live" | "test"; name: string; actor_id: string; over_limit: boolean; plan_name: string; max_api_calls_per_day: number }>(
     `WITH k AS (
        UPDATE public.api_keys SET last_used_at = now()
        WHERE key_hash = $1 AND revoked_at IS NULL
        RETURNING id, workspace_id, mode, name
      ), a AS (
        SELECT k.*, actors.id AS actor_id FROM k JOIN public.actors ON actors.api_key_id = k.id
+     ), checked AS (
+       SELECT a.*, ${API_LIMIT_SQL} FROM a ${PLAN_JOIN_SQL}
      ), usage AS (
        INSERT INTO public.usage_events (workspace_id, actor_id, event_type, quantity)
-       SELECT workspace_id, actor_id, 'api_call', 1 FROM a
+       SELECT workspace_id, actor_id, 'api_call', 1 FROM checked WHERE NOT over_limit
      )
-     SELECT * FROM a`,
+     SELECT * FROM checked`,
     [await sha256Hex(token)],
   );
   const row = rows[0];
   if (!row) return null;
-  return { kind: "key", credentialId: row.id, workspaceId: row.workspace_id, actorId: row.actor_id, mode: row.mode, displayName: row.name, entryPoint };
+  return { kind: "key", credentialId: row.id, workspaceId: row.workspace_id, actorId: row.actor_id, mode: row.mode, displayName: row.name, entryPoint, overLimit: apiLimitMessage(row) };
 }

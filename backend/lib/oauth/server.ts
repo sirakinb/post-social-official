@@ -4,7 +4,7 @@
 // (RFC 7591), PKCE S256, resource indicators (RFC 8707), rotating refresh tokens and
 // revocation (RFC 7009). Apps are public clients; PKCE is what binds a code to its app.
 // Only SHA-256 hashes of codes and tokens are stored.
-import { ApiError, isAgentCaller, membership, requireUuid, type AgentCaller, type Caller, type Sql } from "../access";
+import { API_LIMIT_SQL, ApiError, apiLimitMessage, isAgentCaller, membership, PLAN_JOIN_SQL, requireUuid, type AgentCaller, type Caller, type Sql } from "../access";
 import { randomToken, sha256Hex } from "../connections/crypto";
 
 export const SCOPE = "posts";
@@ -351,8 +351,8 @@ export async function revokeToken(sql: Sql, form: Record<string, string | undefi
 // the person who approved it is no longer in the workspace. Records the use.
 export async function callerForAccessToken(sql: Sql, token: string | null, entryPoint: "api" | "mcp"): Promise<AgentCaller | null> {
   if (!token || !TOKEN_SHAPE.test(token)) return null;
-  const rows = await sql<{ grant_id: string; workspace_id: string; actor_id: string; client_name: string; role: string }>(
-    `WITH t AS (
+  const rows = await sql<{ grant_id: string; workspace_id: string; actor_id: string; client_name: string; role: string; over_limit: boolean; plan_name: string; max_api_calls_per_day: number }>(
+    `WITH t0 AS (
        SELECT g.id AS grant_id, g.workspace_id, a.id AS actor_id, c.client_name, m.role
        FROM public.oauth_access_tokens t
        JOIN public.oauth_grants g ON g.id = t.oauth_grant_id AND g.revoked_at IS NULL
@@ -360,18 +360,23 @@ export async function callerForAccessToken(sql: Sql, token: string | null, entry
        JOIN public.actors a ON a.oauth_grant_id = g.id
        JOIN public.workspace_members m ON m.workspace_id = g.workspace_id AND m.user_id = g.user_id
        WHERE t.token_hash = $1 AND t.expires_at > now()
+     ), t AS (
+       SELECT a.*, ${API_LIMIT_SQL} FROM t0 a ${PLAN_JOIN_SQL}
      ), used AS (
        UPDATE public.oauth_grants SET last_used_at = now() WHERE id IN (SELECT grant_id FROM t)
      ), usage AS (
        INSERT INTO public.usage_events (workspace_id, actor_id, event_type, quantity)
-       SELECT workspace_id, actor_id, 'api_call', 1 FROM t
+       SELECT workspace_id, actor_id, 'api_call', 1 FROM t WHERE NOT over_limit
      )
      SELECT * FROM t`,
     [await sha256Hex(token)],
   );
   const row = rows[0];
   if (!row) return null;
-  return { kind: "grant", credentialId: row.grant_id, workspaceId: row.workspace_id, actorId: row.actor_id, mode: "live", role: row.role, displayName: row.client_name, entryPoint };
+  return {
+    kind: "grant", credentialId: row.grant_id, workspaceId: row.workspace_id, actorId: row.actor_id, mode: "live", role: row.role, displayName: row.client_name, entryPoint,
+    overLimit: apiLimitMessage(row),
+  };
 }
 
 // ----- the web app's list of signed-in apps -----

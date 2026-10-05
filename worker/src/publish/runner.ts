@@ -122,9 +122,11 @@ export async function runNextPublishJob(deps: PublishDeps): Promise<boolean> {
     await deps.sql(
       `WITH d AS (
          UPDATE public.destinations SET status = 'published', live_url = $2, platform_request_id = $3, error_code = NULL, error_message = $4
-         WHERE id = $1 RETURNING workspace_id
+         WHERE id = $1 RETURNING workspace_id, actor_id, connected_account_id, platform
        ), usage AS (
-         INSERT INTO public.usage_events (workspace_id, event_type, quantity) SELECT workspace_id, 'post_published', 1 FROM d
+         -- Counted per account and per who made the post (a person, a key or an app).
+         INSERT INTO public.usage_events (workspace_id, actor_id, connected_account_id, platform, event_type, quantity)
+         SELECT workspace_id, actor_id, connected_account_id, platform, 'post_published', 1 FROM d
        )
        INSERT INTO public.audit_events (workspace_id, entry_point, event_type, entity_type, entity_id, summary, after_values)
        SELECT workspace_id, 'worker', 'destination.published', 'destination', $1, $5, jsonb_build_object('live_url', $2::text) FROM d`,

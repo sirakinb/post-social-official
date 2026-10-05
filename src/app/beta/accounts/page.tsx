@@ -53,6 +53,7 @@ export default async function BetaAccountsPage({ searchParams }: { searchParams:
               <Link href="/beta" className="text-ink-muted hover:text-ink">Home</Link>
               <Link href="/beta/accounts" aria-current="page" className="font-medium text-ink">Accounts</Link>
               <Link href="/beta/media" className="text-ink-muted hover:text-ink">Media</Link>
+              <Link href="/beta/usage" className="text-ink-muted hover:text-ink">Usage</Link>
               <Link href="/beta/keys" className="text-ink-muted hover:text-ink">API keys</Link>
             </nav>
           </div>
