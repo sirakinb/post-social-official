@@ -1,6 +1,7 @@
 // REST API v1, generated from the operations list. Errors always look like
 // { error: { code, message } }. Writes accept an Idempotency-Key header: repeating a request
 // with the same key within 24 hours returns the first result instead of acting twice.
+import { reportError } from "../telemetry";
 import { ApiError, type AgentCaller } from "../access";
 import { sha256Hex } from "../connections/crypto";
 import { availableOperations, operations, type ApiDeps, type Operation } from "./operations";
@@ -30,7 +31,7 @@ export function describeError(error: unknown): { status: number; message: string
   const message = error instanceof Error ? error.message : String(error);
   const rule = message.match(/Invalid post transition: \w+ -> \w+|Only approved posts can be queued[^"]*/)?.[0];
   if (rule) return { status: 409, message: rule };
-  console.error("api error", error);
+  reportError(error, { area: "api" });
   return { status: 500, message: "Something went wrong on our side. Try again in a moment." };
 }
 

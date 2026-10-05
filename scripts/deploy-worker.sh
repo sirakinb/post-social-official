@@ -34,6 +34,9 @@ trap 'rm -f "$env_file"' EXIT
   # Post stats only for platforms switched on in this environment (optional; none on prod
   # until each platform's review approves the read permissions).
   echo "ANALYTICS_PLATFORMS=$(secret ANALYTICS_PLATFORMS 2>/dev/null || true)"
+  # Monitoring (PostHog): the project's public key; optional.
+  echo "POSTHOG_KEY=$(secret POSTHOG_KEY 2>/dev/null || true)"
+  echo "APP_ENV=$target"
   echo "MEDIA_RETENTION_DAYS=30"
   echo "WORKER_CONCURRENCY=3"
 } > "$env_file"

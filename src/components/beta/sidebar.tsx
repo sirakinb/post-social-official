@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { forgetViewer } from "@/components/analytics/identify";
 import { ActorMark } from "./marks";
 
 type Item = { href: string; label: string; icon: React.ReactNode; match: (path: string) => boolean };
@@ -87,7 +88,7 @@ export function Sidebar(props: {
           <span className="truncate text-[13px] text-ps-text">{props.viewer.name}</span>
           <span className="text-[11px] capitalize text-ps-subtle">{props.viewer.role}</span>
         </span>
-        <form action={props.signOut}>
+        <form action={props.signOut} onSubmit={forgetViewer}>
           <button type="submit" className="rounded-md px-2 py-1 text-[11px] text-ps-subtle hover:bg-white/[0.04] hover:text-ps-text">Sign out</button>
         </form>
       </div>

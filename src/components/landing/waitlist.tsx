@@ -3,22 +3,28 @@
 import { useActionState, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { joinWaitlist, type WaitlistResult } from "@/app/waitlist-action";
+import { track } from "@/components/analytics/identify";
 
 // "Join the waitlist" buttons and the glass panel they open. `lantern` is the glowing main
 // button, `glass` a quieter one, `compact` the small one in the header.
 export function Waitlist({ label = "Join the waitlist", variant = "lantern" }: { label?: string; variant?: "lantern" | "glass" | "compact" }) {
   const [open, setOpen] = useState(false);
+  // The funnel: which button opened the form, then whether the person joined (no email).
+  const openForm = () => {
+    track("waitlist_opened", { button: variant, label });
+    setOpen(true);
+  };
   const button =
     variant === "compact" ? (
-      <button type="button" onClick={() => setOpen(true)} className="lp-lantern inline-flex rounded-full px-4 py-1.5 text-[12px]">
+      <button type="button" onClick={openForm} className="lp-lantern inline-flex rounded-full px-4 py-1.5 text-[12px]">
         {label}
       </button>
     ) : variant === "glass" ? (
-      <button type="button" onClick={() => setOpen(true)} className="lp-glass inline-flex h-11 items-center rounded-full px-5 text-sm text-[#FAF6F0] transition hover:bg-white/10">
+      <button type="button" onClick={openForm} className="lp-glass inline-flex h-11 items-center rounded-full px-5 text-sm text-[#FAF6F0] transition hover:bg-white/10">
         {label}
       </button>
     ) : (
-      <button type="button" onClick={() => setOpen(true)} className="lp-lantern inline-flex h-11 items-center rounded-full px-5 text-sm">
+      <button type="button" onClick={openForm} className="lp-lantern inline-flex h-11 items-center rounded-full px-5 text-sm">
         {label}
       </button>
     );
@@ -54,6 +60,9 @@ function WaitlistDialog({ onClose }: { onClose: () => void }) {
   }, []);
 
   const done = state?.ok === true;
+  useEffect(() => {
+    if (done) track("waitlist_joined");
+  }, [done]);
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-[rgba(8,5,16,0.62)] p-4 backdrop-blur-sm">
       <button type="button" tabIndex={-1} aria-label="Close" onClick={onClose} className="absolute inset-0 cursor-default" />

@@ -1,6 +1,7 @@
 // Claims due publish jobs and runs one step of the right platform adapter. Every write is
 // fenced on the claim (attempt and poll counts), so a worker whose lease expired cannot
 // overwrite a newer run.
+import type { Telemetry } from "../../../backend/lib/telemetry";
 import type { Sql } from "../../../backend/lib/access";
 import { type Platform, type Settings } from "../../../backend/lib/connections/platforms";
 import { accountToken } from "../credentials";
@@ -33,6 +34,8 @@ export type PublishDeps = {
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
   log?: (message: string, details?: Record<string, unknown>) => void;
+  // Error reports and post outcomes for monitoring (PostHog); optional.
+  telemetry?: Telemetry;
 };
 
 type Job = { id: string; workspace_id: string; post_id: string; destination_id: string; attempt_count: number; poll_count: number; max_attempts: number; checkpoint: Checkpoint; started_at: string };
@@ -138,6 +141,7 @@ export async function runNextPublishJob(deps: PublishDeps): Promise<boolean> {
     await finish("complete", null);
     await deps.sql(`SELECT public.finalize_post($1)`, [b.postId]);
     log("published", { job: job.id, platform: b.platform });
+    await deps.telemetry?.capture("post_published", { platform: b.platform, workspace_id: job.workspace_id, attempt: job.attempt_count });
     return true;
   } catch (cause) {
     const error = cause instanceof PublishError ? cause : new PublishError("unexpected", cause instanceof Error ? cause.message : String(cause), true);
@@ -161,6 +165,9 @@ export async function runNextPublishJob(deps: PublishDeps): Promise<boolean> {
     }
 
     await finish("failed", error.message.slice(0, 500));
+    // A post that finally failed: counted so a spike can alert; crashes also get a stack trace.
+    await deps.telemetry?.capture("publish_failed", { platform: bundle?.platform ?? null, workspace_id: job.workspace_id, code: error.code, attempt: job.attempt_count });
+    if (error.code === "unexpected") await deps.telemetry?.captureException(cause, { job: job.id, platform: bundle?.platform ?? null, area: "publish" });
     await deps.sql(
       `WITH d AS (
          UPDATE public.destinations SET status = 'failed', error_code = $2, error_message = $3 WHERE id = $1 AND status <> 'published' RETURNING workspace_id

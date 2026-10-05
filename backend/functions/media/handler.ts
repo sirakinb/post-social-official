@@ -1,5 +1,6 @@
 // HTTP layer for the `media` InsForge function: POST { action, ...input } with the person's
 // access token as a Bearer token. Runtime-neutral so it can be tested in Node.
+import { reportError } from "../../lib/telemetry";
 import { MediaError, mediaActions, type MediaDeps } from "../../lib/media/service";
 import type { SignedInUser } from "../../lib/insforge-admin";
 
@@ -62,7 +63,7 @@ export function createMediaHandler(deps: HandlerDeps) {
       return json(200, result, cors);
     } catch (error) {
       if (error instanceof MediaError) return json(error.status, { error: error.message }, cors);
-      console.error("media function error", error);
+      reportError(error, { area: "media function", action: typeof body?.action === "string" ? body.action : null });
       return json(500, { error: "Something went wrong on our side. Try again in a moment." }, cors);
     }
   };

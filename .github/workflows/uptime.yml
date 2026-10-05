@@ -1,0 +1,30 @@
+# Uptime: every 5 minutes, check that the website, the API and the publishing worker answer
+# on prod. A failed run is the alert: GitHub emails the repository owner about failed
+# scheduled runs. Addresses live in repository variables (Settings → Variables).
+name: uptime
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Website
+        run: curl -fsS --retry 2 --retry-delay 20 --max-time 20 -o /dev/null "$SITE_URL/"
+        env:
+          SITE_URL: ${{ vars.UPTIME_SITE_URL }}
+      - name: API (through the website to the api function)
+        run: curl -fsS --retry 2 --retry-delay 20 --max-time 20 -o /dev/null "$SITE_URL/api/v1/openapi.json"
+        env:
+          SITE_URL: ${{ vars.UPTIME_SITE_URL }}
+      - name: Publishing worker (unhealthy if its job loop has stalled for 15 minutes)
+        run: curl -fsS --retry 2 --retry-delay 20 --max-time 20 "$WORKER_URL/" | grep -q '"ok":true'
+        env:
+          WORKER_URL: ${{ vars.UPTIME_WORKER_URL }}

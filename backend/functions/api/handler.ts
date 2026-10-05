@@ -35,6 +35,7 @@ import type { Settings } from "../../lib/connections/platforms";
 import { listAnalytics, postAnalytics, refreshAnalytics } from "../../lib/analytics";
 import { originAllowed } from "../media/handler";
 import { joinWaitlist } from "../../lib/waitlist";
+import { reportError } from "../../lib/telemetry";
 
 export type ApiHandlerDeps = ApiDeps & {
   callerForKey: typeof callerForKey;
@@ -129,6 +130,7 @@ async function waitlistRoute(deps: ApiHandlerDeps, request: Request) {
     return json(200, await joinWaitlist(deps.sql, input as Record<string, unknown>));
   } catch (error) {
     if (error instanceof ApiError) return json(error.status, errorBody(error.status, error.message));
+    reportError(error, { area: "waitlist" });
     return json(500, errorBody(500, "Joining the waitlist failed. Try again."));
   }
 }
