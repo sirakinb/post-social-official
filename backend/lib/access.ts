@@ -43,7 +43,8 @@ export async function membership(sql: Sql, caller: Caller, workspaceId: string, 
   if (isAgentCaller(caller)) {
     if (caller.workspaceId !== workspaceId) throw new ApiError(404, "That workspace was not found.");
     if (write && caller.role === "reviewer") throw new ApiError(403, `${writeRefusal} This app was approved by a reviewer, so it can only read.`);
-    return { role: caller.role ?? "key", actor_id: caller.actorId };
+    // Never the person's own role: an app or key must not pass an owner/admin check.
+    return { role: caller.kind, actor_id: caller.actorId };
   }
   const rows = await sql<Membership>(
     `WITH member AS (
