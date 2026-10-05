@@ -1,5 +1,8 @@
 "use server";
 
+import { headers } from "next/headers";
+import { forwardingHeaders } from "@/lib/security/client-ip";
+
 // Joins the waitlist through the `api` function (the only thing that can write to it).
 export type WaitlistResult = { ok: true } | { ok: false; error: string };
 
@@ -12,7 +15,8 @@ export async function joinWaitlist(_prev: WaitlistResult | null, form: FormData)
   if (!base) return { ok: false, error: "The waitlist isn't open yet. Try again soon." };
   const response = await fetch(`${base}/waitlist`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    // The visitor's address, so the waitlist's per-visitor limit applies to them, not to us.
+    headers: { "Content-Type": "application/json", ...forwardingHeaders(await headers()) },
     body: JSON.stringify({ email, source: "landing" }),
     cache: "no-store",
   }).catch(() => null);

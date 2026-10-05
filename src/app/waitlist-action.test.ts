@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { joinWaitlist } from "./waitlist-action";
 
+vi.mock("next/headers", () => ({ headers: async () => new Headers({ "x-real-ip": "203.0.113.9" }) }));
+
 const form = (fields: Record<string, string>) => {
   const data = new FormData();
   for (const [k, v] of Object.entries(fields)) data.set(k, v);
@@ -11,6 +13,7 @@ describe("joinWaitlist (server action)", () => {
   const fetchMock = vi.fn();
   beforeEach(() => {
     vi.stubEnv("API_BASE_URL", "https://fn.example/api");
+    vi.stubEnv("INTERNAL_PROXY_SECRET", "the-secret");
     vi.stubGlobal("fetch", fetchMock);
   });
   afterEach(() => {
@@ -25,6 +28,8 @@ describe("joinWaitlist (server action)", () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("https://fn.example/api/waitlist");
     expect(JSON.parse(init.body)).toEqual({ email: "ada@example.com", source: "landing" });
+    // The visitor's address goes along (with the proof), so the limit is theirs, not ours.
+    expect(init.headers).toMatchObject({ "X-PS-Client-IP": "203.0.113.9", "X-PS-Proxy-Secret": "the-secret" });
   });
 
   it("passes on the server's explanation", async () => {

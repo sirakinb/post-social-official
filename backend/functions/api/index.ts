@@ -35,4 +35,5 @@ export default withReporting("api", (name) => Deno.env.get(name), createApiHandl
   callerForAccessToken,
   userForToken: (token) => userForToken(baseUrl, token),
   allowedOrigins: (Deno.env.get("WEB_APP_ORIGINS") ?? "").split(",").map((o) => o.trim()).filter(Boolean),
+  proxySecret: Deno.env.get("INTERNAL_PROXY_SECRET") ?? null,
 }));

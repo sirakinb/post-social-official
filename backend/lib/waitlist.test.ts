@@ -3,10 +3,11 @@ import type { Sql } from "./access";
 import { joinWaitlist, normalizeEmail, WAITLIST_BURST } from "./waitlist";
 import { createApiHandler } from "../functions/api/handler";
 
-function fakeSql(recent = 0) {
+function fakeSql(recent = 0, wait = 0) {
   const calls: { query: string; params: unknown[] }[] = [];
   const sql = (async (query: string, params: unknown[]) => {
     calls.push({ query, params });
+    if (query.includes("take_rate_limit")) return [{ wait }];
     return query.includes("count(*)") ? [{ n: recent }] : [];
   }) as Sql;
   return { sql, calls };
@@ -62,6 +63,17 @@ describe("the /waitlist route", () => {
     expect((await post(JSON.stringify({ email: "x" }))).status).toBe(400);
     expect((await post(JSON.stringify({ email: "a@x.com", pad: "x".repeat(3000) }))).status).toBe(413);
   });
+  it("limits each visitor, by the address the gateway saw", async () => {
+    const { sql, calls } = fakeSql(0, 1800);
+    const response = await handler(sql)(new Request("https://fn/waitlist", { method: "POST", headers: { "x-forwarded-for": "6.6.6.6, 98.115.239.218" }, body: JSON.stringify({ email: "a@x.com" }) }));
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("1800");
+    expect(calls.some((c) => c.query.includes("INSERT"))).toBe(false);
+    const key = String(calls.find((c) => c.query.includes("take_rate_limit"))?.params[0]);
+    expect(key.startsWith("waitlist_ip:")).toBe(true);
+    expect(key).not.toContain("98.115");
+  });
+
   it("only takes POST", async () => {
     const response = await handler(fakeSql().sql)(new Request("https://fn/waitlist"));
     expect(response.status).toBe(405);

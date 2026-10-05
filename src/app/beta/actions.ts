@@ -10,6 +10,7 @@ import {
   safeNextPath,
   signInErrorMessage,
 } from "@/lib/insforge/auth-rules";
+import { checkAuthLimit } from "@/lib/security/limits";
 
 export type FormState = { error?: string; notice?: string; step?: "request" | "complete"; email?: string };
 
@@ -22,6 +23,8 @@ export async function signIn(_previous: FormState, formData: FormData): Promise<
   const email = field(formData, "email");
   const password = String(formData.get("password") ?? "");
   if (!email || !password) return { error: "Enter your email and password." };
+  const limited = await checkAuthLimit("signin", email);
+  if (limited) return { error: limited };
 
   const auth = await insforgeAuthActions();
   const { data, error } = await auth.signInWithPassword({ email, password });
@@ -40,6 +43,8 @@ export async function signOut() {
 export async function requestPasswordReset(_previous: FormState, formData: FormData): Promise<FormState> {
   const email = field(formData, "email");
   if (!email) return { step: "request", error: "Enter the email you sign in with." };
+  const limited = await checkAuthLimit("reset_request", email);
+  if (limited) return { step: "request", email, error: limited };
 
   const client = createServerClient();
   const { error } = await client.auth.sendResetPasswordEmail({ email });
@@ -61,6 +66,8 @@ export async function completePasswordReset(_previous: FormState, formData: Form
   const problem = passwordProblem(newPassword);
   if (!email || !code) return { step: "complete", email, error: "Enter the code from the email." };
   if (problem) return { step: "complete", email, error: problem };
+  const limited = await checkAuthLimit("reset_complete", email);
+  if (limited) return { step: "complete", email, error: limited };
 
   const client = createServerClient();
   const exchange = await client.auth.exchangeResetPasswordToken({ email, code });
