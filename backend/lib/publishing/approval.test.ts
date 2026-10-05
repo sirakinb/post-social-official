@@ -15,8 +15,8 @@ describe("who needs to approve", () => {
     expect(needsApproval("mcp", "autonomous", "facebook")).toBe(false);
   });
 
-  it("always holds an AI's TikTok posts, even on autonomous accounts", () => {
-    expect(needsApproval("mcp", "autonomous", "tiktok")).toBe(true);
-    expect(needsApproval("api", "autonomous", "tiktok")).toBe(true);
+  it("does not hold an AI's TikTok posts on autonomous accounts (TikTok's own inbox is the confirmation)", () => {
+    expect(needsApproval("mcp", "autonomous", "tiktok")).toBe(false);
+    expect(needsApproval("api", "confirm_each", "tiktok")).toBe(true);
   });
 });

@@ -35,7 +35,7 @@ export async function listAccounts(sql: Sql, caller: Caller, input: { workspace_
     accounts: rows.map(({ policy, ...row }) => ({
       ...row,
       platform_name: DISPLAY_NAMES[row.platform],
-      approval: policy === "autonomous" ? "AI posts publish without asking" : "AI posts wait for your approval",
+      ...(policy === "autonomous" ? {} : { approval: "AI posts wait for approval in Post Social (this account is set to ask first)" }),
     })),
   };
 }

@@ -79,7 +79,9 @@ describe.skipIf(!enabled)("publishing engine on the dev backend (US-027 to US-03
     owner = await createAccount(target, {
       role: "owner", email: `pub-${suffix}@postsocial.test`, displayName: "Owner", password: `Pub-${suffix}-pass-1`, workspaceName: `Publishing Test ${suffix}`,
     });
-    await sql(`UPDATE public.workspaces SET publishing_paused = true WHERE id = $1`, [owner.workspaceId]);
+    // AI posts go out as directed by default; this workspace opts in to asking first so
+    // the approval flow stays covered.
+    await sql(`UPDATE public.workspaces SET publishing_paused = true, default_approval_policy = 'confirm_each' WHERE id = $1`, [owner.workspaceId]);
     const sealed = await seal({ accessToken: "fake" }, await importKey(key));
     const make = async (platform: string, external: string) => {
       const [row] = await sql<{ id: string }>(
@@ -148,7 +150,7 @@ describe.skipIf(!enabled)("publishing engine on the dev backend (US-027 to US-03
     expect(audit.map((a) => `${a.entry_point}:${a.event_type}`)).toEqual(["mcp:post.created", "mcp:post.submitted", "ui:post.approved"]);
   });
 
-  it("autonomous accounts publish an AI's post without approval, except on TikTok", async () => {
+  it("autonomous accounts publish an AI's post without approval; AI TikTok posts go to the inbox", async () => {
     await sql(`UPDATE public.connected_accounts SET approval_policy_override = 'autonomous' WHERE id IN ($1, $2)`, [threads, tiktok]);
     const auto = await act(ai(), "submit", { post_id: (await act(ai(), "create", textPost(threads, `Autonomous ${suffix}`))).id });
     expect(auto.status).toBe("processing");
@@ -156,8 +158,12 @@ describe.skipIf(!enabled)("publishing engine on the dev backend (US-027 to US-03
     const tt = await act(ai(), "create", {
       workspace_id: owner.workspaceId, caption: "TikTok from AI", destinations: [{ account_id: tiktok, options: { delivery_mode: "inbox" } }], media_ids: [],
     });
-    // (No video attached, so the check fails; the approval rule is what matters here.)
+    // (No video attached, so the check fails; what matters is that inbox is accepted.)
     await expect(act(ai(), "submit", { post_id: tt.id })).rejects.toThrow(/TikTok draft needs exactly 1 video/);
+    const direct = await act(ai(), "create", {
+      workspace_id: owner.workspaceId, caption: "TikTok direct from AI", destinations: [{ account_id: tiktok, options: { delivery_mode: "direct", privacy_level: "SELF_ONLY" } }], media_ids: [],
+    });
+    await expect(act(ai(), "submit", { post_id: direct.id })).rejects.toThrow(/delivery_mode "inbox"/);
     await drain();
   });
 

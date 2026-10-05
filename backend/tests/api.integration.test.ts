@@ -91,13 +91,25 @@ describe.skipIf(!enabled)("API keys, REST API and MCP on the dev backend (US-040
     const me = await call(liveKey, "GET", "/v1/me");
     expect(me.body).toMatchObject({ workspace: { id: owner.workspaceId }, key: { name: "Claude Code", mode: "live" } });
     const accounts = await call(liveKey, "GET", "/v1/accounts");
-    expect(accounts.body.accounts).toEqual([expect.objectContaining({ id: facebook, platform: "facebook", approval: "AI posts wait for your approval" })]);
+    expect(accounts.body.accounts).toEqual([expect.objectContaining({ id: facebook, platform: "facebook" })]);
+    expect(accounts.body.accounts[0]).not.toHaveProperty("approval");
     const [used] = await sql<{ n: string }>(`SELECT count(*)::text AS n FROM public.usage_events WHERE workspace_id = $1 AND event_type = 'api_call'`, [owner.workspaceId]);
     expect(Number(used.n)).toBeGreaterThanOrEqual(2);
   });
 
-  it("an AI's post waits for the person's approval, and the AI cannot approve it", async () => {
+  it("an AI's post goes out as directed", async () => {
+    const created = await call(liveKey, "POST", "/v1/posts", textPost(`Now from the API ${suffix}`));
+    expect(created.status).toBe(201);
+    expect(created.body).toMatchObject({ status: "processing", next_step: expect.stringMatching(/^Publishing now/) });
+    const at = new Date(Date.now() + 2 * 3600_000).toISOString();
+    const later = await call(liveKey, "POST", "/v1/posts", textPost(`Later from the API ${suffix}`, { scheduled_at: at }));
+    expect(later.body).toMatchObject({ status: "scheduled", next_step: `Scheduled for ${at}.` });
+  });
+
+  it("an account set to ask first holds an AI's post, and the AI cannot approve it", async () => {
+    await sql(`UPDATE public.connected_accounts SET approval_policy_override = 'confirm_each' WHERE id = $1`, [facebook]);
     const created = await call(liveKey, "POST", "/v1/posts", textPost(`From the API ${suffix}`));
+    await sql(`UPDATE public.connected_accounts SET approval_policy_override = NULL WHERE id = $1`, [facebook]);
     expect(created.status).toBe(201);
     expect(created.body).toMatchObject({ status: "awaiting_approval", next_step: expect.stringMatching(/approval/) });
     const keyCaller = (await callerForKey(sql, liveKey, "api"))!;
