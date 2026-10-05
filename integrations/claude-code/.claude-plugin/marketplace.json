@@ -1,0 +1,17 @@
+{
+  "name": "post-social",
+  "owner": {
+    "name": "Post Social",
+    "url": "https://www.postsocial.xyz"
+  },
+  "metadata": {
+    "description": "Post Social for Claude Code: publish, schedule and track social posts from Claude."
+  },
+  "plugins": [
+    {
+      "name": "post-social",
+      "source": "./",
+      "description": "Post, schedule and track social posts from Claude with Post Social."
+    }
+  ]
+}

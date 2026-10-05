@@ -1,0 +1,8 @@
+{
+  "name": "post-social",
+  "version": "0.1.0",
+  "description": "Post, schedule and track social posts on Instagram, Facebook Pages, Threads, YouTube Shorts and TikTok from Claude. Connects the Post Social MCP server and teaches Claude the workflow.",
+  "author": { "name": "Post Social", "url": "https://www.postsocial.xyz" },
+  "homepage": "https://www.postsocial.xyz/docs",
+  "keywords": ["social media", "scheduling", "instagram", "tiktok", "youtube", "threads", "facebook"]
+}

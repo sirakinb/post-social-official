@@ -1,0 +1,18 @@
+{
+  "name": "postsocial",
+  "version": "0.1.0",
+  "description": "Post Social from your terminal and AI agents: post, schedule and track social posts across Instagram, Facebook, Threads, YouTube and TikTok. JSON in, JSON out.",
+  "type": "module",
+  "bin": {
+    "postsocial": "dist/postsocial.mjs"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "homepage": "https://www.postsocial.xyz",
+  "keywords": ["social media", "scheduling", "instagram", "tiktok", "youtube", "threads", "facebook", "mcp", "ai agents", "cli"]
+}

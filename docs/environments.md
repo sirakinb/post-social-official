@@ -154,3 +154,17 @@ the local site. Discovery, registration, token and revocation addresses are rewr
 days and rotate on every use. The worker's hourly sign-in sweep removes expired codes and
 tokens and app registrations that were never approved within 30 days. People disconnect
 apps under API keys, Connected apps.
+
+## CLI, Claude Code plugin and docs
+
+- `cli/` is the `postsocial` npm package (one bundled file, no dependencies). Build with
+  `cli/build.sh`; try it against dev with `node cli/dist/postsocial.mjs --base-url
+  http://localhost:3333 <command>`. Its commands come from the server's OpenAPI document.
+  **Not published yet:** publishing needs the owner's npm account (`npm login`, then
+  `cd cli && npm publish` after a build). Decide the license first.
+- `integrations/claude-code/` is the Claude Code plugin (MCP server + `post-social` skill)
+  and a marketplace file. `claude plugin validate integrations/claude-code` checks it.
+  **Not distributed yet:** a marketplace must live in a public GitHub repo (this one is
+  private), e.g. `postsocial/claude-code`.
+- `/docs` (setup for Claude, ChatGPT, Claude Code, Cursor, the CLI and REST) and
+  `/llms.txt` are generated from the operations list, like the API itself.
