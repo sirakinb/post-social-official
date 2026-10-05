@@ -56,11 +56,16 @@ in order to dev, then to prod, exactly the same files.
    `npm run test:db` runs the database tests against dev: they create throwaway users
    and workspaces, check access rules, and delete everything afterwards. They refuse to
    run unless the folder is linked to dev.
-3. **Review.** Push, open a pull request, CI runs checks, Greptile reviews.
+3. **Review.** Push, open a pull request, CI runs checks.
    Fix findings, then merge to `main` with the owner's OK.
 4. **Promote.** On `main`, in sync with GitHub: `npm run db:promote`. It refuses to
    run from any other branch, refuses if any migration in git was never applied to
    dev, lists what prod is missing, and asks you to type `prod` before applying it.
+   Before applying anything it takes a named backup of prod
+   (`before-promote-<date>-<commit>`) and waits for it; if the backup fails, nothing is
+   applied. InsForge keeps only the latest nightly backup, so this restore point is what
+   protects us from a bad migration. `npm run db:backup:prod` takes one by hand (also
+   only from a synced `main`).
    It then shows any differences between `insforge.toml` and prod's settings and asks
    again before applying them.
 5. **Deploy the web app.** Vercel builds a preview for every pull request (pointing at

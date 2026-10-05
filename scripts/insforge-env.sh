@@ -4,7 +4,8 @@
 #   scripts/insforge-env.sh dev  <insforge args...>   e.g. dev db migrations up --all
 #   scripts/insforge-env.sh prod <insforge args...>   read-only commands anywhere; anything
 #                                                     else only from a synced main
-#   scripts/insforge-env.sh promote                   apply git migrations and insforge.toml to prod
+#   scripts/insforge-env.sh promote                   back up prod, then apply git migrations and
+#                                                     insforge.toml to prod
 #
 # The folder is linked to the dev branch by default. Prod is reached only through
 # this script, which switches to the parent project and always switches back.
@@ -114,6 +115,12 @@ case "$target" in
       echo "Pending migrations on prod (all verified on dev):"
       echo "$pending"
       confirm_prod "Apply these migrations to PROD ($PROD_NAME)?"
+      # A restore point right before the change: InsForge keeps only the latest nightly
+      # backup, so a bad migration must not be able to outlive the only good copy. If the
+      # backup fails, set -e stops here and nothing is applied.
+      backup_name="before-promote-$(date -u +%Y%m%d-%H%M)-$(git rev-parse --short HEAD)"
+      echo "Backing up prod as $backup_name ..."
+      "${CLI[@]}" backups create --name "$backup_name" --wait
       "${CLI[@]}" db migrations up --all
     else
       echo "Prod migrations are up to date."
