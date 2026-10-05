@@ -11,7 +11,9 @@ export const posterKey = (storageKey: string) => storageKey.replace(/\/[^/]*$/, 
 
 export const ffmpegFrame: ExtractFrame = (url, atSeconds) =>
   new Promise((resolve, reject) => {
-    const args = ["-hide_banner", "-loglevel", "error", "-ss", String(atSeconds), "-i", url, "-frames:v", "1", "-vf", "scale='min(720,iw)':-2", "-q:v", "4", "-f", "image2", "pipe:1"];
+    // The file came from a person or an AI: read it only over https, and only as a real
+    // video container (never a playlist that could point ffmpeg at other files).
+    const args = ["-hide_banner", "-loglevel", "error", "-protocol_whitelist", "https,tls,tcp", "-format_whitelist", "mov,mp4,m4a,3gp,3g2,mj2,matroska,webm", "-ss", String(atSeconds), "-i", url, "-frames:v", "1", "-vf", "scale='min(720,iw)':-2", "-q:v", "4", "-f", "image2", "pipe:1"];
     const child = spawn("ffmpeg", args, { stdio: ["ignore", "pipe", "pipe"] });
     const chunks: Buffer[] = [];
     let error = "";

@@ -238,7 +238,7 @@ function PostCard({ post, canEdit, onClose }: { post: CalendarPost; canEdit: boo
           <div key={i} className="flex items-center gap-2 text-xs">
             <PlatformMark platform={d.platform} size={18} />
             <span className="min-w-0 flex-1 truncate">{d.account}</span>
-            {d.liveUrl ? <a href={d.liveUrl} target="_blank" rel="noreferrer" className="text-ps-plum-soft hover:text-ps-text">View live ↗</a> : <span className="text-ps-subtle">{d.status.replace("_", " ")}</span>}
+            {d.liveUrl?.startsWith("https://") ? <a href={d.liveUrl} target="_blank" rel="noreferrer" className="text-ps-plum-soft hover:text-ps-text">View live ↗</a> : <span className="text-ps-subtle">{d.status.replace("_", " ")}</span>}
           </div>
         ))}
         {post.by && (
