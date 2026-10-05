@@ -28,6 +28,7 @@ import {
   type AuthorizeParams,
 } from "../../lib/oauth/server";
 import { usageReport } from "../../lib/usage";
+import { mediaLinks } from "../../lib/media/links";
 import { listAnalytics, postAnalytics, refreshAnalytics } from "../../lib/analytics";
 import { originAllowed } from "../media/handler";
 
@@ -205,7 +206,8 @@ async function personRoute(deps: ApiHandlerDeps, request: Request) {
           refresh_analytics: (sql: Sql, caller: Caller, input: Record<string, unknown>) => refreshAnalytics(sql, caller, deps.analyticsPlatforms, input as { workspace_id: string }),
         }
       : {};
-    const actions = { ...allActions, ...statsActions } as Record<string, (sql: Sql, caller: Caller, input: Record<string, unknown>) => Promise<unknown>>;
+    const mediaActions = { media_links: (sql: Sql, caller: Caller, input: Record<string, unknown>) => mediaLinks(sql, deps.r2, caller, input) };
+    const actions = { ...allActions, ...statsActions, ...mediaActions } as Record<string, (sql: Sql, caller: Caller, input: Record<string, unknown>) => Promise<unknown>>;
     if (!Object.hasOwn(actions, name)) throw new ApiError(400, `Unknown action. Use one of: ${Object.keys(actions).join(", ")}.`);
     const caller: Caller = { userId: user.id, displayName: user.name, entryPoint: "ui" };
     return json(200, await actions[name](deps.sql, caller, body), cors);

@@ -2,12 +2,8 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getAccessTokenCookieName } from "@insforge/sdk/ssr";
-import { Brand } from "@/components/brand";
-import { Button } from "@/components/ui/button";
 import { BETA_LOGIN } from "@/lib/insforge/auth-rules";
 import { currentUser, insforgeServerClient } from "@/lib/insforge/server";
-import { signOut } from "../actions";
-import { analyticsEnabled } from "../stats-switch";
 
 export const metadata = { title: "Usage · Post Social beta" };
 
@@ -94,23 +90,7 @@ export default async function BetaUsagePage({ searchParams }: { searchParams: Pr
   const peakCalls = report ? Math.max(1, ...report.daily.map((d) => d.api_calls)) : 1;
 
   return (
-    <div className="technical-grid flex min-h-screen flex-col">
-      <header className="border-b border-border bg-[#080610]/90">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 md:px-8">
-          <div className="flex items-center gap-6">
-            <Brand />
-            <nav className="flex gap-4 text-sm">
-              <Link href="/beta" className="text-ink-muted hover:text-ink">Home</Link>
-              <Link href="/beta/accounts" className="text-ink-muted hover:text-ink">Accounts</Link>
-              <Link href="/beta/media" className="text-ink-muted hover:text-ink">Media</Link>
-              {analyticsEnabled() && <Link href="/beta/stats" className="text-ink-muted hover:text-ink">Stats</Link>}
-              <Link href="/beta/usage" aria-current="page" className="font-medium text-ink">Usage</Link>
-              <Link href="/beta/keys" className="text-ink-muted hover:text-ink">API keys</Link>
-            </nav>
-          </div>
-          <form action={signOut}><Button type="submit" variant="secondary">Sign out</Button></form>
-        </div>
-      </header>
+    <div className="flex flex-col">
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10 md:px-8">
         {!current ? (
           <p className="text-sm text-ink-muted">You are not a member of any workspace yet.</p>
