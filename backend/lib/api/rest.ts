@@ -1,7 +1,7 @@
 // REST API v1, generated from the operations list. Errors always look like
 // { error: { code, message } }. Writes accept an Idempotency-Key header: repeating a request
 // with the same key within 24 hours returns the first result instead of acting twice.
-import { ApiError, type KeyCaller } from "../access";
+import { ApiError, type AgentCaller } from "../access";
 import { sha256Hex } from "../connections/crypto";
 import { operations, type ApiDeps, type Operation } from "./operations";
 
@@ -86,26 +86,26 @@ export async function bodyInput(request: Request): Promise<Record<string, unknow
 type Stored = { request_hash: string; status_code: number | null; response: unknown; fresh: boolean };
 
 // Runs a write once per Idempotency-Key. Returns the status and body to send.
-async function once(deps: ApiDeps, caller: KeyCaller, idempotencyKey: string, requestHash: string, run: () => Promise<{ status: number; body: unknown }>) {
+async function once(deps: ApiDeps, caller: AgentCaller, idempotencyKey: string, requestHash: string, run: () => Promise<{ status: number; body: unknown }>) {
   if (idempotencyKey.length > 255) throw new ApiError(400, "Idempotency-Key can be at most 255 characters.");
   // Forget keys older than a day, and runs that died without finishing (so they can retry).
   await deps.sql(
-    `DELETE FROM public.api_idempotency WHERE api_key_id = $1
+    `DELETE FROM public.api_idempotency WHERE actor_id = $1
        AND (created_at < now() - interval '24 hours' OR (status_code IS NULL AND created_at < now() - interval '2 minutes'))`,
-    [caller.keyId],
+    [caller.actorId],
   );
   const [row] = await deps.sql<Stored>(
     `WITH ins AS (
-       INSERT INTO public.api_idempotency (api_key_id, workspace_id, idempotency_key, request_hash)
+       INSERT INTO public.api_idempotency (actor_id, workspace_id, idempotency_key, request_hash)
        VALUES ($1, $2, $3, $4)
-       ON CONFLICT (api_key_id, idempotency_key) DO NOTHING
+       ON CONFLICT (actor_id, idempotency_key) DO NOTHING
        RETURNING request_hash, status_code, response, true AS fresh
      )
      SELECT * FROM ins
      UNION ALL
      SELECT request_hash, status_code, response, false FROM public.api_idempotency
-     WHERE api_key_id = $1 AND idempotency_key = $3 AND NOT EXISTS (SELECT 1 FROM ins)`,
-    [caller.keyId, caller.workspaceId, idempotencyKey, requestHash],
+     WHERE actor_id = $1 AND idempotency_key = $3 AND NOT EXISTS (SELECT 1 FROM ins)`,
+    [caller.actorId, caller.workspaceId, idempotencyKey, requestHash],
   );
   if (!row.fresh) {
     if (row.request_hash !== requestHash) throw new ApiError(422, "This Idempotency-Key was already used for a different request.");
@@ -115,10 +115,10 @@ async function once(deps: ApiDeps, caller: KeyCaller, idempotencyKey: string, re
   const result = await run();
   if (result.status >= 500) {
     // Failures on our side may be retried with the same key.
-    await deps.sql(`DELETE FROM public.api_idempotency WHERE api_key_id = $1 AND idempotency_key = $2`, [caller.keyId, idempotencyKey]);
+    await deps.sql(`DELETE FROM public.api_idempotency WHERE actor_id = $1 AND idempotency_key = $2`, [caller.actorId, idempotencyKey]);
   } else {
-    await deps.sql(`UPDATE public.api_idempotency SET status_code = $3, response = $4::jsonb WHERE api_key_id = $1 AND idempotency_key = $2`, [
-      caller.keyId,
+    await deps.sql(`UPDATE public.api_idempotency SET status_code = $3, response = $4::jsonb WHERE actor_id = $1 AND idempotency_key = $2`, [
+      caller.actorId,
       idempotencyKey,
       result.status,
       JSON.stringify(result.body),
@@ -127,7 +127,7 @@ async function once(deps: ApiDeps, caller: KeyCaller, idempotencyKey: string, re
   return { ...result, replayed: false };
 }
 
-export async function handleRest(deps: ApiDeps, caller: KeyCaller, request: Request, pathname: string): Promise<{ status: number; body: unknown; headers?: Record<string, string> }> {
+export async function handleRest(deps: ApiDeps, caller: AgentCaller, request: Request, pathname: string): Promise<{ status: number; body: unknown; headers?: Record<string, string> }> {
   const route = matchRoute(request.method, pathname);
   if (!route) return { status: 404, body: errorBody(404, "No such endpoint. See /v1/openapi.json.") };
   if ("allowed" in route) return { status: 405, body: errorBody(405, `Use ${route.allowed.join(" or ")}.`), headers: { Allow: route.allowed.join(", ") } };

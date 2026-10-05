@@ -46,6 +46,15 @@ const nextConfig: NextConfig = {
     return [
       { source: "/api/v1/:path*", destination: `${api}/v1/:path*` },
       { source: "/mcp", destination: `${api}/mcp` },
+      // OAuth for AI apps (ChatGPT, the Claude app): discovery, registration and tokens.
+      // The sign-in page itself is /oauth/authorize, a page on this site.
+      { source: "/.well-known/oauth-protected-resource", destination: `${api}/.well-known/oauth-protected-resource` },
+      { source: "/.well-known/oauth-protected-resource/:path*", destination: `${api}/.well-known/oauth-protected-resource/:path*` },
+      { source: "/.well-known/oauth-authorization-server", destination: `${api}/.well-known/oauth-authorization-server` },
+      { source: "/.well-known/oauth-authorization-server/:path*", destination: `${api}/.well-known/oauth-authorization-server` },
+      { source: "/oauth/register", destination: `${api}/oauth/register` },
+      { source: "/oauth/token", destination: `${api}/oauth/token` },
+      { source: "/oauth/revoke", destination: `${api}/oauth/revoke` },
     ];
   },
 };

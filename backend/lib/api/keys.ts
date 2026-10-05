@@ -1,7 +1,7 @@
 // API keys: named keys a person creates for their AIs and tools. A key belongs to one
 // workspace and acts as its own actor ("via Claude Code"). Only the SHA-256 of a key is
 // stored; the full key is shown once. Test keys can do everything except publish.
-import { ApiError, isKeyCaller, membership, requireUuid, type Caller, type KeyCaller, type Sql } from "../access";
+import { ApiError, isAgentCaller, membership, requireUuid, type Caller, type AgentCaller, type Sql } from "../access";
 import { randomToken, sha256Hex } from "../connections/crypto";
 
 const MAX_KEYS = 50;
@@ -26,7 +26,7 @@ const publicKey = (row: KeyRow) => ({
 
 // Key management is for people in the web app: an AI cannot mint or revoke keys.
 function person(caller: Caller) {
-  if (isKeyCaller(caller) || caller.entryPoint !== "ui") throw new ApiError(403, "API keys are managed by a person in the Post Social web app.");
+  if (isAgentCaller(caller) || caller.entryPoint !== "ui") throw new ApiError(403, "API keys are managed by a person in the Post Social web app.");
   return caller;
 }
 
@@ -100,7 +100,7 @@ export const keyActions = { create: createKey, list: listKeys, revoke: revokeKey
 
 // Turns a bearer key into a caller, or null for a missing, malformed or revoked key.
 // Records the use (last used time and an api_call usage event) in the same statement.
-export async function callerForKey(sql: Sql, token: string | null, entryPoint: "api" | "mcp"): Promise<KeyCaller | null> {
+export async function callerForKey(sql: Sql, token: string | null, entryPoint: "api" | "mcp"): Promise<AgentCaller | null> {
   if (!token || !KEY_SHAPE.test(token)) return null;
   const rows = await sql<{ id: string; workspace_id: string; mode: "live" | "test"; name: string; actor_id: string }>(
     `WITH k AS (
@@ -118,5 +118,5 @@ export async function callerForKey(sql: Sql, token: string | null, entryPoint: "
   );
   const row = rows[0];
   if (!row) return null;
-  return { kind: "key", keyId: row.id, workspaceId: row.workspace_id, actorId: row.actor_id, mode: row.mode, displayName: row.name, entryPoint };
+  return { kind: "key", credentialId: row.id, workspaceId: row.workspace_id, actorId: row.actor_id, mode: row.mode, displayName: row.name, entryPoint };
 }

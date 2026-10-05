@@ -1,7 +1,7 @@
 // Every Post Social capability for AIs and developers, defined once. The REST API, the MCP
 // tools, the OpenAPI document (and later the CLI) are all generated from this list, so they
 // cannot drift apart. Each operation runs the same service code as the web app.
-import { ApiError, requireUuid, type KeyCaller, type Sql } from "../access";
+import { ApiError, requireUuid, type AgentCaller, type Sql } from "../access";
 import { DISPLAY_NAMES, PLATFORMS } from "../connections/platforms";
 import { mediaActions, type MediaDeps } from "../media/service";
 import type { R2 } from "../media/r2";
@@ -21,7 +21,7 @@ export type Operation = {
   readOnly?: boolean;
   destructive?: boolean;
   creates?: boolean; // REST answers 201 Created
-  run: (deps: ApiDeps, caller: KeyCaller, input: Record<string, unknown>) => Promise<unknown>;
+  run: (deps: ApiDeps, caller: AgentCaller, input: Record<string, unknown>) => Promise<unknown>;
 };
 
 const id = (what: string): JsonSchema => ({ type: "string", format: "uuid", description: `The ${what} id.` });

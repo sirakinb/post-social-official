@@ -6,6 +6,7 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createSql } from "../lib/insforge-admin";
 import { callerForKey, keyActions } from "../lib/api/keys";
+import { callerForAccessToken } from "../lib/oauth/server";
 import { postActions } from "../lib/publishing/service";
 import type { Caller } from "../lib/access";
 import { createApiHandler } from "../functions/api/handler";
@@ -34,6 +35,7 @@ describe.skipIf(!enabled)("API keys, REST API and MCP on the dev backend (US-040
       webAppUrl: "http://localhost:3333",
       publicApiUrl: "http://localhost:3333/api",
       callerForKey,
+      callerForAccessToken,
       userForToken: async () => null,
       allowedOrigins: [],
     });

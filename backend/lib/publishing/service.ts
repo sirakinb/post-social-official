@@ -1,7 +1,7 @@
 // Posts: drafts, checks, submitting, approvals, scheduling and cancelling. The same
 // actions back the web app, the REST API and the MCP tools (Phase 5). Every change checks
 // membership and writes an audit entry naming the actor.
-import { ApiError, isKeyCaller, membership, requireUuid, type Caller, type Sql } from "../access";
+import { ApiError, isAgentCaller, membership, requireUuid, type Caller, type Sql } from "../access";
 import { DISPLAY_NAMES, type Platform } from "../connections/platforms";
 import { captionFor, destinationProblems, normalizeOptions, type DestinationOptions, type MediaFacts } from "./validate";
 
@@ -25,7 +25,7 @@ export function needsApproval(entryPoint: Caller["entryPoint"], policy: Policy, 
 
 // Test keys can do everything except send or schedule a post.
 function assertMayPublish(caller: Caller) {
-  if (isKeyCaller(caller) && caller.mode === "test") {
+  if (isAgentCaller(caller) && caller.mode === "test") {
     throw new ApiError(403, "Test keys cannot publish or schedule. The post stays a draft; use a live key to send it.");
   }
 }

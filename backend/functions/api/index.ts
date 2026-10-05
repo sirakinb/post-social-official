@@ -1,6 +1,7 @@
 // Deno entry point for the `api` InsForge function. Settings come from secrets.
 import { createSql, userForToken } from "../../lib/insforge-admin";
 import { callerForKey } from "../../lib/api/keys";
+import { callerForAccessToken } from "../../lib/oauth/server";
 import { createR2 } from "../../lib/media/r2";
 import { createApiHandler } from "./handler";
 
@@ -27,6 +28,7 @@ export default createApiHandler({
   webAppUrl,
   publicApiUrl: `${webAppUrl}/api`,
   callerForKey,
+  callerForAccessToken,
   userForToken: (token) => userForToken(baseUrl, token),
   allowedOrigins: (Deno.env.get("WEB_APP_ORIGINS") ?? "").split(",").map((o) => o.trim()).filter(Boolean),
 });
