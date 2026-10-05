@@ -4,13 +4,13 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { joinWaitlist, type WaitlistResult } from "@/app/waitlist-action";
 
-// "Join the waitlist" buttons and the glass panel they open. `lumen` is the glowing main
+// "Join the waitlist" buttons and the glass panel they open. `lantern` is the glowing main
 // button, `glass` a quieter one, `compact` the small one in the header.
-export function Waitlist({ label = "Join the waitlist", variant = "lumen" }: { label?: string; variant?: "lumen" | "glass" | "compact" }) {
+export function Waitlist({ label = "Join the waitlist", variant = "lantern" }: { label?: string; variant?: "lantern" | "glass" | "compact" }) {
   const [open, setOpen] = useState(false);
   const button =
     variant === "compact" ? (
-      <button type="button" onClick={() => setOpen(true)} className="lp-lumen inline-flex rounded-full px-4 py-1.5 text-[12px] text-[#FFF8F0]">
+      <button type="button" onClick={() => setOpen(true)} className="lp-lantern inline-flex rounded-full px-4 py-1.5 text-[12px]">
         {label}
       </button>
     ) : variant === "glass" ? (
@@ -18,12 +18,7 @@ export function Waitlist({ label = "Join the waitlist", variant = "lumen" }: { l
         {label}
       </button>
     ) : (
-      <button type="button" onClick={() => setOpen(true)} className="lp-lumen inline-flex h-11 items-center gap-2.5 rounded-full pl-2.5 pr-5 text-sm text-[#FFF8F0]">
-        <span aria-hidden="true" className="grid size-6 place-items-center rounded-full bg-white/90">
-          <svg viewBox="0 0 16 16" className="size-3.5 text-[#2a1247]" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M8 13V3M3.5 7.5 8 3l4.5 4.5" />
-          </svg>
-        </span>
+      <button type="button" onClick={() => setOpen(true)} className="lp-lantern inline-flex h-11 items-center rounded-full px-5 text-sm">
         {label}
       </button>
     );
@@ -94,7 +89,7 @@ function WaitlistDialog({ onClose }: { onClose: () => void }) {
               />
               {/* Hidden from people; bots that fill it are quietly ignored. */}
               <input type="text" name="company" tabIndex={-1} autoComplete="off" aria-hidden="true" className="hidden" />
-              <button type="submit" disabled={pending} className="lp-lumen h-11 rounded-full px-5 text-sm text-[#FFF8F0] disabled:opacity-70">
+              <button type="submit" disabled={pending} className="lp-lantern h-11 rounded-full px-5 text-sm disabled:opacity-70">
                 {pending ? "Joining…" : "Join"}
               </button>
             </div>

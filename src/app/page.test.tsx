@@ -17,7 +17,7 @@ vi.mock("./waitlist-action", () => ({ joinWaitlist: vi.fn(async () => ({ ok: tru
 describe("LandingPage", () => {
   it("keeps the headline, with the two words set in the display face", () => {
     render(<LandingPage />);
-    const h1 = screen.getByRole("heading", { level: 1, name: /Social media posting for AI-native creators and operators/i });
+    const h1 = screen.getByRole("heading", { level: 1, name: /Social media management for AI-native creators and operators/i });
     expect(within(h1).getByText("AI-native")).toHaveClass("lp-display");
     expect(within(h1).getByText("operators")).toHaveClass("lp-display");
   });

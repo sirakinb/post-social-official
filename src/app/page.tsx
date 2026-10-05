@@ -33,7 +33,7 @@ const NAV = [
 const FAQ = [
   { q: "Which platforms are supported?", a: "TikTok, Instagram, Facebook Pages, Threads and YouTube, each through the platform's official API and sign-in. LinkedIn, Bluesky and X are next." },
   { q: "What can I publish?", a: "Videos and photo posts on TikTok; photos, Reels and carousels on Instagram; text, links, photos, Reels and videos on Facebook Pages; text, photos, videos and carousels on Threads; and Shorts on YouTube. What a given account can post depends on its type and the platform's rules, and Post Social checks each file before it goes out." },
-  { q: "Can an AI publish for me?", a: "Yes. Connect Claude, ChatGPT, or any app that speaks MCP, or call the API from your own automations. Your AI drafts, schedules and publishes exactly as you direct it. TikTok posts from an AI land in your TikTok inbox for you to finish." },
+  { q: "Can an AI publish for me?", a: "Yes. Connect Claude, ChatGPT, or any AI agent, or call the API from your own automations. Your AI drafts, schedules and publishes exactly as you direct it. TikTok posts from an AI land in your TikTok inbox for you to finish." },
   { q: "Can I schedule posts?", a: "Yes. Publish now or pick a date and time, then see everything on the calendar and move it if plans change." },
   { q: "Do you need my social passwords?", a: "No. Each account connects through the platform's own sign-in page, and you can disconnect it at any time." },
   { q: "Is Post Social only for developers?", a: "No. If you can ask an AI for something in plain language, you can use Post Social. The web app does everything too, no code required." },
@@ -138,7 +138,7 @@ export default function LandingPage() {
           </ul>
 
           <h1 className="lp-rise mt-7 max-w-4xl text-[2.35rem] leading-[1.06] tracking-[-0.04em] sm:text-6xl">
-            Social media posting for <span className="lp-display lp-ink whitespace-nowrap">AI-native</span> creators and <span className="lp-display lp-ink">operators</span>.
+            Social media management for <span className="lp-display lp-ink whitespace-nowrap">AI-native</span> creators and <span className="lp-display lp-ink">operators</span>.
           </h1>
           <p className="lp-rise lp-rise-delay-1 mt-5 max-w-2xl text-base leading-relaxed text-[#FAF6F0]/75 sm:text-lg">
             Tell Claude, ChatGPT, or your own agent what to post. Post Social publishes it to every channel, on time, and shows you what happened.
@@ -152,7 +152,7 @@ export default function LandingPage() {
           <p className="mt-6 inline-flex items-center gap-2 text-[13px] text-[#FAF6F0]/55">
             <AiMark app="claude" size={14} />
             <AiMark app="openai" size={14} />
-            Works with Claude, ChatGPT, and any app that speaks MCP
+            Works with Claude, ChatGPT or any AI agent
           </p>
 
           <Screen src="/landing/app-home.webp" alt="The Post Social home screen: what's going out next, what just went live, and what needs you" priority className="mt-16 w-full max-w-5xl sm:mt-20" />
@@ -365,7 +365,7 @@ export default function LandingPage() {
               <img src="/post-social-icon.svg" alt="" className="size-6 rounded-[7px]" />
               <span className="lp-wordmark text-[12px]">Post Social</span>
             </div>
-            <p className="mt-3 max-w-xs text-sm text-[#FAF6F0]/45">Social media posting for AI-native creators and operators.</p>
+            <p className="mt-3 max-w-xs text-sm text-[#FAF6F0]/45">Social media management for AI-native creators and operators.</p>
           </div>
           <nav aria-label="Legal" className="flex flex-wrap gap-6 text-sm text-[#FAF6F0]/55">
             <Link href="/docs" className="hover:text-[#FAF6F0]">Docs</Link>

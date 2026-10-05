@@ -4,7 +4,7 @@ import "./globals.css";
 import { ConvexClientProvider } from "@/components/convex-client-provider";
 import { EnvironmentBadge } from "@/components/environment-badge";
 
-const title = "Post Social — Social media posting for AI-native creators and operators";
+const title = "Post Social — Social media management for AI-native creators and operators";
 const description = "Tell Claude, ChatGPT, or your own agent what to post. Post Social publishes it to TikTok, Instagram, Facebook, Threads and YouTube.";
 
 export const metadata: Metadata = {
