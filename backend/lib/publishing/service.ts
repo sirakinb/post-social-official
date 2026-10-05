@@ -256,10 +256,6 @@ export async function updatePost(deps: PostsDeps, caller: Caller, input: Record<
   const queued = post.status === "approved" || post.status === "scheduled";
   // An edit can put a queued post straight back in the queue, which test keys may not do.
   if (queued) assertMayPublish(caller);
-  if (queued) {
-    const [{ unqueue_post: pulled }] = await deps.sql<{ unqueue_post: boolean }>(`SELECT public.unqueue_post($1)`, [postId]);
-    if (!pulled) throw new ApiError(409, "This post started sending, so it can't be changed.");
-  }
 
   const caption = input.caption === undefined ? post.caption : parseCaption(input.caption);
   const scheduledAt = input.scheduled_at === undefined ? post.scheduled_at : parseSchedule(input.scheduled_at);
@@ -272,6 +268,21 @@ export async function updatePost(deps: PostsDeps, caller: Caller, input: Record<
     const parsed = parseDestinations(input.destinations, accounts);
     if (parsed.problems.length) throw new ApiError(400, parsed.problems.join(" "));
     newDestinations = parsed.destinations;
+  }
+
+  // A queued post goes straight back into the queue after the edit, so an AI's edit must
+  // keep TikTok on the inbox, the same rule as submitting. Checked on the final list,
+  // before anything changes, so a refused edit leaves the post as it was.
+  if (queued) {
+    const finalTargets = newDestinations
+      ? await (async () => {
+          const accounts = await loadAccounts(deps, post.workspace_id, newDestinations!.map((d) => d.account_id));
+          return newDestinations!.map((d) => ({ platform: accounts.get(d.account_id)!.platform, options: d.options }));
+        })()
+      : destinations;
+    if (tiktokDirectByAi(caller, finalTargets)) throw new ApiError(400, TIKTOK_INBOX_ONLY);
+    const [{ unqueue_post: pulled }] = await deps.sql<{ unqueue_post: boolean }>(`SELECT public.unqueue_post($1)`, [postId]);
+    if (!pulled) throw new ApiError(409, "This post started sending, so it can't be changed.");
   }
 
   // An edit to something already approved goes back for approval unless every account

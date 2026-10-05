@@ -229,6 +229,22 @@ describe.skipIf(!enabled)("publishing engine on the dev backend (US-027 to US-03
     await act(person(), "cancel", { post_id: draft.id });
   });
 
+  it("an AI can't edit a queued post into a direct TikTok post", async () => {
+    await sql(`UPDATE public.connected_accounts SET approval_policy_override = 'autonomous' WHERE id IN ($1, $2)`, [threads, tiktok]);
+    const at = new Date(Date.now() + 3600_000).toISOString();
+    const draft = await act(ai(), "create", { ...textPost(threads, `Queued then TikTok ${suffix}`), scheduled_at: at });
+    expect((await act(ai(), "submit", { post_id: draft.id })).status).toBe("scheduled");
+
+    await expect(
+      act(ai(), "update", { post_id: draft.id, destinations: [{ account_id: tiktok, options: { delivery_mode: "direct", privacy_level: "SELF_ONLY" } }] }),
+    ).rejects.toThrow(/delivery_mode "inbox"/);
+    // Refused before anything changed: still scheduled, still to Threads only.
+    const after = await act(person(), "get", { post_id: draft.id });
+    expect(after.status).toBe("scheduled");
+    expect(after.destinations.map((d: { platform: string }) => d.platform)).toEqual(["threads"]);
+    await act(person(), "cancel", { post_id: draft.id });
+  });
+
   it("retries temporary errors with backoff, then fails with a plain reason", async () => {
     platformMode = "flaky";
     const draft = await act(person(), "create", textPost(facebook, `Flaky ${suffix}`));
