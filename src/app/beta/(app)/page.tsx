@@ -126,7 +126,7 @@ export default async function HomePage() {
 function Setup({ setup }: { setup: { connected: number; aiConnections: number; hasPosts: boolean } }) {
   const steps = [
     { done: setup.connected > 0, title: "Connect a social account", detail: "Sign in to Instagram, Facebook, Threads, YouTube or TikTok. Post Social never sees your passwords.", href: "/beta/accounts", cta: "Connect an account" },
-    { done: setup.aiConnections > 0, title: "Connect your AI", detail: "Add Post Social to Claude, ChatGPT, Claude Code or Cursor. You approve it once.", href: "/beta/keys", cta: "Connect an AI" },
+    { done: setup.aiConnections > 0, title: "Connect your AI", detail: "Add Post Social to Claude, ChatGPT, Claude Code or Cursor. You approve it once.", href: "/beta/accounts#connect-ai", cta: "Connect an AI" },
     { done: setup.hasPosts, title: "Ask your AI to post", detail: "Try: \"Post this photo to Instagram tomorrow at 9.\"", href: "/docs", cta: "See examples" },
   ];
   const current = steps.findIndex((s) => !s.done);

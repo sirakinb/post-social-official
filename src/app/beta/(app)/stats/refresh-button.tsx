@@ -19,7 +19,7 @@ export function RefreshButton({ workspaceId }: { workspaceId: string }) {
   return (
     <div className="flex items-center gap-2">
       <Button size="sm" variant="secondary" disabled={busy} onClick={refresh}>{busy ? "Refreshing…" : "Refresh now"}</Button>
-      {message && <span role="status" className="max-w-[16rem] text-xs text-ink-subtle">{message}</span>}
+      {message && <span role="status" className="max-w-[16rem] text-xs text-ps-subtle">{message}</span>}
     </div>
   );
 }
