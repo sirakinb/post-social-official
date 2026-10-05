@@ -63,3 +63,19 @@ export function interpretProbe(result: MediaInfoResult, expected: MediaType | nu
   const picture = image ?? video; // some WebP files report a Video track
   return { ok: true, mimeType, mediaType, width: int(picture?.Width), height: int(picture?.Height), durationSeconds: null };
 }
+
+// Cheap first look at a file's opening bytes, before the full (memory-hungry) analysis:
+// every supported format starts with a known signature. MP4 and MOV start with a box whose
+// type sits at bytes 4-8.
+const MP4_BOXES = new Set(["ftyp", "moov", "mdat", "free", "skip", "wide", "pnot"]);
+
+export function signatureProblem(head: Uint8Array): string | null {
+  const ascii = (from: number, to: number) => String.fromCharCode(...head.slice(from, to));
+  const starts = (...bytes: number[]) => bytes.every((b, i) => head[i] === b);
+  if (head.length >= 8 && MP4_BOXES.has(ascii(4, 8))) return null;
+  if (starts(0x1a, 0x45, 0xdf, 0xa3)) return null; // WebM (Matroska)
+  if (starts(0xff, 0xd8, 0xff)) return null; // JPEG
+  if (starts(0x89, 0x50, 0x4e, 0x47)) return null; // PNG
+  if (head.length >= 12 && ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP") return null;
+  return "This file is not a supported video or image. Use MP4, MOV or WebM video, or JPEG, PNG or WebP images.";
+}

@@ -43,5 +43,5 @@ trap 'rm -f "$env_file"' EXIT
 } > "$env_file"
 
 scripts/insforge-env.sh "$target" compute deploy worker --name post-social-worker \
-  --port 8080 --cpu shared-1x --memory 512 --region iad --env-file "$env_file" \
+  --port 8080 --cpu shared-1x --memory 1024 --region iad --env-file "$env_file" \
   --always-on  # it polls for jobs and gets no web traffic to wake it
