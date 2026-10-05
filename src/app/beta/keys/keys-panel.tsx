@@ -168,6 +168,7 @@ export function KeysPanel(props: { workspaceId: string; workspaceName: string; c
 
       <section className="mt-10 text-sm">
         <h2 className="font-semibold text-ink">Connect an AI</h2>
+        <p className="mt-1 text-xs text-ink-subtle">Step-by-step for Claude, ChatGPT, Claude Code, Cursor, the CLI and the REST API: <a className="text-accent hover:underline" href="/docs">postsocial.xyz/docs</a>.</p>
         <dl className="mt-3 grid gap-2 text-xs">
           <div><dt className="font-medium text-ink">MCP server</dt><dd className="font-mono text-ink-muted">{props.mcpUrl}</dd></div>
           <div><dt className="font-medium text-ink">REST API</dt><dd className="font-mono text-ink-muted">{props.apiUrl}/v1 · reference at {props.apiUrl}/v1/openapi.json</dd></div>

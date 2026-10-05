@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "post-social": {
+      "type": "http",
+      "url": "https://www.postsocial.xyz/mcp"
+    }
+  }
+}
