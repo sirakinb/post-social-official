@@ -104,9 +104,9 @@ cannot give. Use `prod` instead of `dev` for prod (asks you to type `prod`). The
 
 | | Dev | Prod |
 |---|---|---|
-| R2 bucket | `postsocial-media-dev` (private) | not created yet |
-| Uploads allowed from | `http://localhost:3333`, `https://post-social-*-app-build-26.vercel.app` | to set up with prod |
-| Worker | `post-social-worker` on InsForge Compute, always on | not deployed yet |
+| R2 bucket | `postsocial-media-dev` (private) | `postsocial-media-prod` (private) |
+| Uploads allowed from | `http://localhost:3333`, `https://post-social-*-app-build-26.vercel.app` | `https://www.postsocial.xyz`, `https://postsocial.xyz` |
+| Worker | `post-social-worker` on InsForge Compute, always on, 1 GB | same, 1 GB |
 
 - Media files live in Cloudflare R2 and are never public: browsers upload with short-lived
   signed part links, and readers get short-lived signed links.
