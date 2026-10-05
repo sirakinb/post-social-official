@@ -1,6 +1,6 @@
-// Short-lived view links for media thumbnails in the web app. Storage is private, so the
-// page asks for links to the items it shows; only items in the caller's workspace, and
-// only images for now (videos get a frame from the video once poster frames exist).
+// Short-lived view links for media in the web app (thumbnails, previews). Storage is
+// private, so the page asks for links to the items it shows; only ready items in the
+// caller's workspace.
 import { membership, requireUuid, type Caller, type Sql } from "../access";
 import type { R2 } from "./r2";
 
@@ -18,7 +18,7 @@ export async function mediaLinks(sql: Sql, r2: R2, caller: Caller, input: { work
   );
   const links: Record<string, string> = {};
   for (const row of rows) {
-    if (row.status === "ready" && row.media_type === "image") links[row.id] = await r2.presignGet(row.storage_key, SECONDS);
+    if (row.status === "ready") links[row.id] = await r2.presignGet(row.storage_key, SECONDS);
   }
   return { links, expires_in_seconds: SECONDS };
 }

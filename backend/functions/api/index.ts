@@ -28,6 +28,7 @@ export default createApiHandler({
   newId: () => crypto.randomUUID(),
   webAppUrl,
   analyticsPlatforms: analyticsPlatforms(setting),
+  setting,
   publicApiUrl: `${webAppUrl}/api`,
   callerForKey,
   callerForAccessToken,

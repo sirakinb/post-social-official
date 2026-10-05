@@ -29,6 +29,8 @@ import {
 } from "../../lib/oauth/server";
 import { usageReport } from "../../lib/usage";
 import { mediaLinks } from "../../lib/media/links";
+import { tiktokCreatorInfo } from "../../lib/connections/tiktok-creator";
+import type { Settings } from "../../lib/connections/platforms";
 import { listAnalytics, postAnalytics, refreshAnalytics } from "../../lib/analytics";
 import { originAllowed } from "../media/handler";
 
@@ -38,6 +40,7 @@ export type ApiHandlerDeps = ApiDeps & {
   userForToken: (token: string | null) => Promise<SignedInUser | null>;
   allowedOrigins: string[];
   publicApiUrl: string; // where developers reach the API, e.g. https://www.postsocial.xyz/api
+  setting?: Settings; // secrets, for reading a connected account's live settings (TikTok)
 };
 
 function json(status: number, body: unknown, headers: Record<string, string> = {}) {
@@ -206,7 +209,13 @@ async function personRoute(deps: ApiHandlerDeps, request: Request) {
           refresh_analytics: (sql: Sql, caller: Caller, input: Record<string, unknown>) => refreshAnalytics(sql, caller, deps.analyticsPlatforms, input as { workspace_id: string }),
         }
       : {};
-    const mediaActions = { media_links: (sql: Sql, caller: Caller, input: Record<string, unknown>) => mediaLinks(sql, deps.r2, caller, input) };
+    const mediaActions = {
+      media_links: (sql: Sql, caller: Caller, input: Record<string, unknown>) => mediaLinks(sql, deps.r2, caller, input),
+      tiktok_creator_info: (sql: Sql, caller: Caller, input: Record<string, unknown>) => {
+        if (!deps.setting) throw new ApiError(503, "TikTok settings can't be read here.");
+        return tiktokCreatorInfo({ sql, setting: deps.setting }, caller, input);
+      },
+    };
     const actions = { ...allActions, ...statsActions, ...mediaActions } as Record<string, (sql: Sql, caller: Caller, input: Record<string, unknown>) => Promise<unknown>>;
     if (!Object.hasOwn(actions, name)) throw new ApiError(400, `Unknown action. Use one of: ${Object.keys(actions).join(", ")}.`);
     const caller: Caller = { userId: user.id, displayName: user.name, entryPoint: "ui" };
