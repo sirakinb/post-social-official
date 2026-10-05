@@ -1,6 +1,6 @@
 // Connecting social accounts: start a platform sign-in, finish it on the callback, and
 // disconnect. Tokens are encrypted before they are stored; every change is audited.
-import { ApiError, isKeyCaller, membership, requireUuid, type Caller, type Sql } from "../access";
+import { ApiError, isAgentCaller, membership, requireUuid, type Caller, type Sql } from "../access";
 import { importKey, open, randomToken, seal, sha256Hex } from "./crypto";
 import { DISPLAY_NAMES, PLATFORMS, PlatformError, authorizeUrl, exchangeCode, revokeTokens, type Platform, type Settings } from "./platforms";
 
@@ -46,7 +46,7 @@ export async function startConnection(deps: ConnectionDeps, caller: Caller, inpu
   const returnTo = typeof input.return_to === "string" ? input.return_to : "";
   if (returnTo && !originAllowedFor(returnTo, deps.allowedReturnOrigins)) throw new ApiError(400, "That return address is not allowed.");
   // Signing in to a platform is the person's step; AIs hand them a connect link instead.
-  if (isKeyCaller(caller)) throw new ApiError(403, "Accounts are connected by a person in the Post Social web app. Use a connect link.");
+  if (isAgentCaller(caller)) throw new ApiError(403, "Accounts are connected by a person in the Post Social web app. Use a connect link.");
   await membership(deps.sql, caller, workspaceId, true, "Reviewers cannot connect accounts.");
 
   const state = randomToken();

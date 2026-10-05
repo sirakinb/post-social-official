@@ -5,11 +5,11 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { createKey, revokeKey, type KeySummary } from "./actions";
+import { createKey, revokeGrant, revokeKey, type GrantSummary, type KeySummary } from "./actions";
 
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : "Never");
 
-export function KeysPanel(props: { workspaceId: string; workspaceName: string; canManage: boolean; keys: KeySummary[]; loadError: boolean; mcpUrl: string; apiUrl: string }) {
+export function KeysPanel(props: { workspaceId: string; workspaceName: string; canManage: boolean; keys: KeySummary[]; grants: GrantSummary[]; loadError: boolean; mcpUrl: string; apiUrl: string }) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [mode, setMode] = useState<"live" | "test">("live");
@@ -36,6 +36,16 @@ export function KeysPanel(props: { workspaceId: string; workspaceName: string; c
     setBusy(key.id);
     setError(null);
     const result = await revokeKey(key.id);
+    setBusy(null);
+    setConfirming(null);
+    if (!result.ok) return setError(result.error);
+    router.refresh();
+  }
+
+  async function disconnectApp(grant: GrantSummary) {
+    setBusy(grant.id);
+    setError(null);
+    const result = await revokeGrant(grant.id);
     setBusy(null);
     setConfirming(null);
     if (!result.ok) return setError(result.error);
@@ -128,12 +138,41 @@ export function KeysPanel(props: { workspaceId: string; workspaceName: string; c
         {revoked.length > 0 && <p className="mt-3 text-xs text-ink-subtle">{revoked.length} revoked key{revoked.length === 1 ? "" : "s"}: {revoked.map((k) => k.name).join(", ")}.</p>}
       </section>
 
+      <section className="mt-10">
+        <h2 className="text-sm font-semibold text-ink">Connected apps</h2>
+        <p className="mt-1 text-xs text-ink-subtle">Apps you signed in to with your Post Social account, like ChatGPT or the Claude app.</p>
+        {props.grants.length === 0 ? (
+          <p className="mt-3 rounded-xl border border-border bg-surface p-6 text-center text-sm text-ink-muted">No apps connected yet.</p>
+        ) : (
+          <ul className="mt-3 divide-y divide-border rounded-xl border border-border bg-surface">
+            {props.grants.map((grant) => (
+              <li key={grant.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-ink">{grant.label}</p>
+                  <p className="text-xs text-ink-subtle">Connected {when(grant.created_at)} · Last used {when(grant.last_used_at)}</p>
+                </div>
+                {(grant.mine || props.canManage) &&
+                  (confirming === grant.id ? (
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="danger" disabled={busy !== null} onClick={() => disconnectApp(grant)}>{busy === grant.id ? "Disconnecting…" : "Confirm disconnect"}</Button>
+                      <Button size="sm" variant="ghost" onClick={() => setConfirming(null)}>Keep</Button>
+                    </div>
+                  ) : (
+                    <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => setConfirming(grant.id)}>Disconnect</Button>
+                  ))}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
       <section className="mt-10 text-sm">
         <h2 className="font-semibold text-ink">Connect an AI</h2>
         <dl className="mt-3 grid gap-2 text-xs">
           <div><dt className="font-medium text-ink">MCP server</dt><dd className="font-mono text-ink-muted">{props.mcpUrl}</dd></div>
           <div><dt className="font-medium text-ink">REST API</dt><dd className="font-mono text-ink-muted">{props.apiUrl}/v1 · reference at {props.apiUrl}/v1/openapi.json</dd></div>
-          <div><dt className="font-medium text-ink">Sign-in</dt><dd className="text-ink-muted">Send the key as a header: Authorization: Bearer ps_live_…</dd></div>
+          <div><dt className="font-medium text-ink">ChatGPT, the Claude app and other apps</dt><dd className="text-ink-muted">Add {props.mcpUrl} as a connector. The app asks you to sign in to Post Social; no key needed.</dd></div>
+          <div><dt className="font-medium text-ink">Tools and scripts</dt><dd className="text-ink-muted">Send a key as a header: Authorization: Bearer ps_live_…</dd></div>
         </dl>
       </section>
     </div>

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { BETA_LOGIN } from "@/lib/insforge/auth-rules";
 import { currentUser, insforgeServerClient } from "@/lib/insforge/server";
 import { signOut } from "../actions";
-import type { KeySummary } from "./actions";
+import type { GrantSummary, KeySummary } from "./actions";
 import { KeysPanel } from "./keys-panel";
 
 export const metadata = { title: "API keys · Post Social beta" };
@@ -24,6 +24,7 @@ export default async function BetaKeysPage({ searchParams }: { searchParams: Pro
   const current = memberships.find((m) => m.workspaces?.slug === slug) ?? memberships[0];
 
   let keys: KeySummary[] = [];
+  let grants: GrantSummary[] = [];
   let loadError = false;
   if (current) {
     // Members can read key names and prefixes; the key hashes are never readable.
@@ -41,6 +42,21 @@ export default async function BetaKeysPage({ searchParams }: { searchParams: Pro
       last_used_at: (row.last_used_at as string | null) ?? null,
       revoked_at: (row.revoked_at as string | null) ?? null,
       created_at: String(row.created_at),
+    }));
+    // Apps people signed in to (ChatGPT, the Claude app...). Revoked ones are not shown.
+    const { data: grantData, error: grantError } = await client.database
+      .from("oauth_grants")
+      .select("id, label, user_id, last_used_at, created_at, revoked_at")
+      .eq("workspace_id", current.workspace_id)
+      .is("revoked_at", null)
+      .order("created_at", { ascending: false });
+    loadError = loadError || Boolean(grantError);
+    grants = ((grantData ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      id: String(row.id),
+      label: String(row.label),
+      last_used_at: (row.last_used_at as string | null) ?? null,
+      created_at: String(row.created_at),
+      mine: row.user_id === user.id,
     }));
   }
 
@@ -73,6 +89,7 @@ export default async function BetaKeysPage({ searchParams }: { searchParams: Pro
             workspaceName={current.workspaces?.name ?? "Workspace"}
             canManage={current.role === "owner" || current.role === "admin"}
             keys={keys}
+            grants={grants}
             loadError={loadError}
             mcpUrl={`${origin}/mcp`}
             apiUrl={`${origin}/api`}

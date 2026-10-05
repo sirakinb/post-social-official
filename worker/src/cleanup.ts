@@ -62,3 +62,19 @@ async function deletePrefix(r2: R2, prefix: string) {
   } while (token);
   return count;
 }
+
+// Sign-in leftovers for AI apps: used or expired one-time codes, expired access tokens,
+// finished repeat-safe request records, and app registrations nobody ever approved.
+export async function removeExpiredSignIns(sql: Sql) {
+  const removed = await sql(
+    `WITH codes AS (DELETE FROM public.oauth_codes WHERE expires_at < now() - interval '1 hour'),
+     tokens AS (DELETE FROM public.oauth_access_tokens WHERE expires_at < now() - interval '1 hour'),
+     replays AS (DELETE FROM public.api_idempotency WHERE created_at < now() - interval '25 hours')
+     DELETE FROM public.oauth_clients c
+     WHERE c.created_at < now() - interval '30 days'
+       AND NOT EXISTS (SELECT 1 FROM public.oauth_grants g WHERE g.oauth_client_id = c.id)
+     RETURNING c.id`,
+    [],
+  );
+  return removed.length;
+}

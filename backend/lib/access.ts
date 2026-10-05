@@ -11,18 +11,22 @@ export type Sql = <T = Record<string, unknown>>(query: string, params: unknown[]
 
 // A signed-in person (web app), or an API key acting for one workspace (REST API or MCP).
 export type UserCaller = { kind?: "user"; userId: string; displayName: string; entryPoint: "ui" | "api" | "mcp" };
-export type KeyCaller = {
-  kind: "key";
-  keyId: string;
+// An AI acting for one workspace: an API key, or an app the person signed in to with
+// OAuth (a grant). Signed-in apps carry the role of the person who approved them, so an
+// app approved by a reviewer can only read.
+export type AgentCaller = {
+  kind: "key" | "grant";
+  credentialId: string; // the api_keys or oauth_grants row
   workspaceId: string;
   actorId: string;
   mode: "test" | "live";
+  role?: string;
   displayName: string;
   entryPoint: "api" | "mcp";
 };
-export type Caller = UserCaller | KeyCaller;
+export type Caller = UserCaller | AgentCaller;
 
-export const isKeyCaller = (caller: Caller): caller is KeyCaller => caller.kind === "key";
+export const isAgentCaller = (caller: Caller): caller is AgentCaller => caller.kind === "key" || caller.kind === "grant";
 
 export type Membership = { role: string; actor_id: string };
 
@@ -35,10 +39,12 @@ export function requireUuid(value: unknown, label: string): string {
 
 // Finds the caller's role and their actor in the workspace, creating the actor on first use.
 export async function membership(sql: Sql, caller: Caller, workspaceId: string, write: boolean, writeRefusal = "Reviewers can view but not change anything."): Promise<Membership> {
-  // A key belongs to exactly one workspace and acts as its own actor.
-  if (isKeyCaller(caller)) {
+  // A key or signed-in app belongs to exactly one workspace and acts as its own actor.
+  if (isAgentCaller(caller)) {
     if (caller.workspaceId !== workspaceId) throw new ApiError(404, "That workspace was not found.");
-    return { role: "key", actor_id: caller.actorId };
+    if (write && caller.role === "reviewer") throw new ApiError(403, `${writeRefusal} This app was approved by a reviewer, so it can only read.`);
+    // Never the person's own role: an app or key must not pass an owner/admin check.
+    return { role: caller.kind, actor_id: caller.actorId };
   }
   const rows = await sql<Membership>(
     `WITH member AS (

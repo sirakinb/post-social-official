@@ -31,3 +31,9 @@ export async function createKey(workspaceId: string, name: string, mode: "live" 
 export async function revokeKey(keyId: string) {
   return callKeys<KeySummary>({ action: "revoke", key_id: keyId });
 }
+
+export type GrantSummary = { id: string; label: string; last_used_at: string | null; created_at: string; mine: boolean };
+
+export async function revokeGrant(grantId: string) {
+  return callKeys<{ revoked: boolean }>({ action: "revoke_grant", grant_id: grantId });
+}

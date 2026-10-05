@@ -1,7 +1,7 @@
 // Remote MCP server (streamable HTTP, stateless). Each POST carries one JSON-RPC message and
 // gets a JSON reply; there are no sessions or server-sent streams. Tools are generated from
 // the operations list, so they match the REST API exactly.
-import type { KeyCaller } from "../access";
+import type { AgentCaller } from "../access";
 import { operations, type ApiDeps, type Operation } from "./operations";
 import { describeError } from "./rest";
 
@@ -37,7 +37,7 @@ export function toolDefinition(operation: Operation) {
 }
 
 // Returns the reply body, or null for a notification (answered with 202 and no body).
-export async function handleMcp(deps: ApiDeps, caller: KeyCaller, raw: unknown): Promise<unknown | null> {
+export async function handleMcp(deps: ApiDeps, caller: AgentCaller, raw: unknown): Promise<unknown | null> {
   if (Array.isArray(raw)) return rpcError(null, -32600, "Batched requests are not supported. Send one message per request.");
   const message = (raw && typeof raw === "object" ? raw : {}) as Message;
   if (message.jsonrpc !== "2.0" || typeof message.method !== "string") return rpcError(message.id, -32600, "Not a JSON-RPC 2.0 request.");

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { KeyCaller, Sql } from "../access";
+import type { AgentCaller, Sql } from "../access";
 import { createApiHandler, type ApiHandlerDeps } from "../../functions/api/handler";
 import { callerForKey, newKey } from "./keys";
 import { handleMcp, PROTOCOL_VERSIONS } from "./mcp";
@@ -7,9 +7,9 @@ import { openApiDocument } from "./openapi";
 import { operations, type ApiDeps } from "./operations";
 import { matchRoute, queryInput } from "./rest";
 
-const caller = (mode: "live" | "test" = "live"): KeyCaller => ({
+const caller = (mode: "live" | "test" = "live"): AgentCaller => ({
   kind: "key",
-  keyId: "00000000-0000-4000-8000-000000000001",
+  credentialId: "00000000-0000-4000-8000-000000000001",
   workspaceId: "00000000-0000-4000-8000-000000000002",
   actorId: "00000000-0000-4000-8000-000000000003",
   mode,
@@ -132,6 +132,7 @@ describe("api function", () => {
     createApiHandler({
       ...deps(),
       callerForKey: async () => null,
+      callerForAccessToken: async () => null,
       userForToken: async () => null,
       allowedOrigins: ["https://www.postsocial.xyz"],
       publicApiUrl: "https://www.postsocial.xyz/api",
