@@ -15,6 +15,7 @@ const CODES: Record<number, string> = {
   409: "conflict",
   413: "too_large",
   422: "idempotency_mismatch",
+  429: "rate_limited",
   500: "internal_error",
 };
 

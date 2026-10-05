@@ -27,6 +27,7 @@ import {
   revokeToken,
   type AuthorizeParams,
 } from "../../lib/oauth/server";
+import { usageReport } from "../../lib/usage";
 import { originAllowed } from "../media/handler";
 
 export type ApiHandlerDeps = ApiDeps & {
@@ -46,7 +47,7 @@ const bearer = (request: Request) => request.headers.get("authorization")?.match
 // OAuth discovery and token endpoints are called from AI apps, some running in a browser.
 const OPEN_CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type, Authorization, MCP-Protocol-Version" };
 
-const allActions = { ...keyActions, ...grantActions };
+const allActions = { ...keyActions, ...grantActions, usage: usageReport };
 
 async function agentFor(deps: ApiHandlerDeps, request: Request, entryPoint: "api" | "mcp"): Promise<AgentCaller | null> {
   const token = bearer(request);
@@ -82,6 +83,7 @@ export function createApiHandler(deps: ApiHandlerDeps) {
       if (request.method !== "POST") return json(405, errorBody(405, "This MCP server answers POST requests only (no event stream)."), { Allow: "POST" });
       const caller = await agentFor(deps, request, "mcp");
       if (!caller) return unauthorized("Sign in to Post Social, or send an API key: Authorization: Bearer ps_live_...");
+      if (caller.overLimit) return json(429, errorBody(429, caller.overLimit), { ...OPEN_CORS, "Retry-After": secondsToMidnightUtc() });
       let message: unknown;
       try {
         message = await bodyInputAllowingArrays(request);
@@ -95,12 +97,19 @@ export function createApiHandler(deps: ApiHandlerDeps) {
     if (path === "/v1" || path.startsWith("/v1/")) {
       const caller = await agentFor(deps, request, "api");
       if (!caller) return unauthorized("Send a valid API key: Authorization: Bearer ps_live_... Create one in Post Social under API keys.");
+      if (caller.overLimit) return json(429, errorBody(429, caller.overLimit), { "Retry-After": secondsToMidnightUtc() });
       const result = await handleRest(deps, caller, request, path);
       return json(result.status, result.body, result.headers);
     }
 
     return json(404, errorBody(404, "Not found. The API lives under /v1 and the MCP server at /mcp."));
   };
+}
+
+function secondsToMidnightUtc(now = Date.now()) {
+  const next = new Date(now);
+  next.setUTCHours(24, 0, 0, 0);
+  return String(Math.ceil((next.getTime() - now) / 1000));
 }
 
 async function bodyInputAllowingArrays(request: Request) {

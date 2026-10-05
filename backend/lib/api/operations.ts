@@ -7,6 +7,7 @@ import { mediaActions, type MediaDeps } from "../media/service";
 import type { R2 } from "../media/r2";
 import { postActions } from "../publishing/service";
 import { listAccounts, listMedia, listPosts, listResults } from "./reads";
+import { PERIODS, usageReport } from "../usage";
 
 export type ApiDeps = { sql: Sql; r2: R2; newId: () => string; webAppUrl: string };
 
@@ -300,6 +301,17 @@ export const operations: Operation[] = [
     input: { properties: { post_id: id("post") }, required: ["post_id"] },
     destructive: true,
     run: (deps, caller, input) => postActions.delete({ sql: deps.sql }, caller, input),
+  },
+  {
+    name: "get_usage",
+    title: "Usage and plan limits",
+    description:
+      "Shows usage for a period: posts published (by account and by who made them), posts created by AI, failed publishes, API calls per connection, a day-by-day series, and how close the workspace is to each plan limit.",
+    method: "GET",
+    path: "/v1/usage",
+    input: { properties: { period: { type: "string", enum: [...PERIODS], default: "this_month", description: "Which period, in UTC." } } },
+    readOnly: true,
+    run: (deps, caller, input) => usageReport(deps.sql, caller, { ...input, workspace_id: caller.workspaceId }),
   },
   {
     name: "list_post_results",

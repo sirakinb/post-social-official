@@ -39,6 +39,7 @@ export default async function BetaHomePage() {
         <p className="mt-4 flex gap-6">
           <Link href="/beta/accounts" className="text-sm font-medium text-accent underline-offset-4 hover:underline">Connected accounts →</Link>
           <Link href="/beta/media" className="text-sm font-medium text-accent underline-offset-4 hover:underline">Media library →</Link>
+          <Link href="/beta/usage" className="text-sm font-medium text-accent underline-offset-4 hover:underline">Usage →</Link>
           <Link href="/beta/keys" className="text-sm font-medium text-accent underline-offset-4 hover:underline">API keys →</Link>
         </p>
 

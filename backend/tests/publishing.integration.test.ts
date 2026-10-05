@@ -125,6 +125,12 @@ describe.skipIf(!enabled)("publishing engine on the dev backend (US-027 to US-03
     expect(done.destinations[0]).toMatchObject({ status: "published", live_url: expect.stringMatching(/^https:\/\/example\.social\/sp-\d+$/) });
     const [usage] = await sql<{ n: string }>(`SELECT sum(quantity)::text AS n FROM public.usage_events WHERE workspace_id = $1 AND event_type = 'post_published'`, [owner.workspaceId]);
     expect(Number(usage.n)).toBe(1);
+    // Counted against the account and the person who made the post.
+    const [tagged] = await sql<{ connected_account_id: string; platform: string; actor_id: string | null }>(
+      `SELECT connected_account_id, platform, actor_id FROM public.usage_events WHERE workspace_id = $1 AND event_type = 'post_published'`,
+      [owner.workspaceId],
+    );
+    expect(tagged).toMatchObject({ connected_account_id: facebook, platform: "facebook", actor_id: expect.any(String) });
   });
 
   it("an AI's post waits for approval; approving publishes it", async () => {
