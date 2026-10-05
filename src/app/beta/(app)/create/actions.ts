@@ -9,7 +9,7 @@ export type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 
 // The composer uses the same `posts` function as AIs (validate, create, update, submit),
 // with the person's own session, so it gets exactly the same checks and audit trail.
-const ACTIONS = new Set(["validate", "create", "update", "submit", "get"]);
+const ACTIONS = new Set(["validate", "create", "update", "submit", "get", "reschedule", "cancel"]);
 
 export async function callPosts<T = Record<string, unknown>>(action: string, input: Record<string, unknown>): Promise<Result<T>> {
   if (!ACTIONS.has(action)) return { ok: false, error: "That action is not available." };
