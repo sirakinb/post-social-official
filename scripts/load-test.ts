@@ -17,6 +17,12 @@ if (!apiBase) {
   process.exit(1);
 }
 const target = resolveTarget("dev", path.resolve(import.meta.dirname, ".."));
+// Dev only: the API address must belong to the dev project (e.g. <dev id>.function2.insforge.app).
+const devProject = new URL(target.baseUrl).hostname.split(".")[0];
+if (!new URL(apiBase).hostname.startsWith(`${devProject}.`)) {
+  console.error(`${apiBase} is not the dev API (expected https://${devProject}.function2.insforge.app/api).`);
+  process.exit(1);
+}
 const sql = createSql(target.baseUrl, target.adminKey);
 const suffix = randomBytes(3).toString("hex");
 const AGENTS = 10;
