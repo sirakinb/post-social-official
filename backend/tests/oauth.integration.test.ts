@@ -159,6 +159,17 @@ describe.skipIf(!enabled)("OAuth sign-in for AI apps on the dev backend (US-042)
     expect((await refresh(second.body.refresh_token)).body.error).toBe("invalid_grant");
   });
 
+  it("signing in again retires the old refresh token without ending the connection", async () => {
+    const one = pkce();
+    const first = await exchange(await approve(owner, one.challenge), one.verifier);
+    const two = pkce();
+    const second = await exchange(await approve(owner, two.challenge), two.verifier);
+    await sql(`UPDATE public.oauth_grants SET refresh_rotated_at = now() - interval '5 minutes' WHERE workspace_id = $1 AND revoked_at IS NULL`, [owner.workspaceId]);
+    const old = await send("POST", "/oauth/token", { grant_type: "refresh_token", refresh_token: first.body.refresh_token, client_id: clientId }, {}, true);
+    expect(old.body.error).toBe("invalid_grant");
+    expect((await mcp(second.body.access_token, "ping")).status).toBe(200);
+  });
+
   it("an app approved by a reviewer can only read, and stops working when they leave", async () => {
     const { verifier, challenge } = pkce();
     const tokens = await exchange(await approve({ ...reviewerUser, workspaceId: owner.workspaceId }, challenge), verifier);
@@ -175,7 +186,7 @@ describe.skipIf(!enabled)("OAuth sign-in for AI apps on the dev backend (US-042)
     const tokens = await exchange(await approve(owner, challenge), verifier);
     signedIn = { id: owner.userId, email: "x@postsocial.test", name: "Owner" };
     const listed = await send("POST", "/keys", { action: "list_grants", workspace_id: owner.workspaceId }, { Authorization: "Bearer session" });
-    const grant = listed.body.grants.find((g: { revoked_at: string | null }) => !g.revoked_at);
+    const grant = listed.body.grants.find((g: { revoked_at: string | null; user_id: string }) => !g.revoked_at && g.user_id === owner.userId);
     await send("POST", "/keys", { action: "revoke_grant", grant_id: grant.id }, { Authorization: "Bearer session" });
     expect((await mcp(tokens.body.access_token, "ping")).status).toBe(401);
     const revoke = await send("POST", "/oauth/revoke", { token: tokens.body.refresh_token }, {}, true);

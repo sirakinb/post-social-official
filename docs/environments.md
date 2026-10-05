@@ -141,3 +141,16 @@ People create keys at `/beta/keys`. Test keys (`ps_test_...`) can do everything 
 publish or schedule. Keys act only within their own workspace and appear by name in the
 audit log. Not yet built: per-key rate limits (Phase 7) and revoking a person's keys when
 they leave a workspace (Phase 5C).
+
+## Sign-in for AI apps (OAuth)
+
+ChatGPT, the Claude app, Claude Code, Cursor and other MCP apps can connect by signing in
+instead of using a key: add `https://www.postsocial.xyz/mcp` as a connector (use `www`; the
+bare domain redirects). The app discovers sign-in from the MCP server's 401 reply, registers
+itself, and sends the person to `/oauth/authorize` (the consent page at `/beta/authorize`).
+The issuer is the site in `WEB_APP_HOME` (dev: `http://localhost:3333`), so on dev test with
+the local site. Discovery, registration, token and revocation addresses are rewrites to the
+`api` function, like `/mcp`. Codes last 10 minutes, access tokens 1 hour, refresh tokens 60
+days and rotate on every use. The worker's hourly sign-in sweep removes expired codes and
+tokens and app registrations that were never approved within 30 days. People disconnect
+apps under API keys, Connected apps.
