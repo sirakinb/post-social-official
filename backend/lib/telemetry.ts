@@ -24,6 +24,11 @@ const SECRET_PATTERNS: Array<[RegExp, string]> = [
   [/Bearer\s+[A-Za-z0-9._~+/=-]+/g, "Bearer [redacted]"],
   [/\b(ps_(?:live|test|at|rt)_[A-Za-z0-9_-]+)/g, "[redacted-key]"],
   [/\b(phx_[A-Za-z0-9]+|sk_(?:live|test)_[A-Za-z0-9]+|EAA[A-Za-z0-9]{20,})/g, "[redacted-key]"],
+  // Database errors can quote the row that failed: captions, emails, names.
+  [/Failing row contains \([^)]*\)?/gi, "Failing row contains ([redacted])"],
+  [/(DETAIL|HINT):[^\n"]*/g, "$1: [redacted]"],
+  [/Key \(([^)]*)\)=\([^)]*\)/g, "Key ($1)=([redacted])"],
+  [/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "[email]"],
 ];
 
 export function scrub(text: string): string {

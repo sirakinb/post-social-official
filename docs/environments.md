@@ -173,3 +173,15 @@ apps under API keys, Connected apps.
   private), e.g. `postsocial/claude-code`.
 - `/docs` (setup for Claude, ChatGPT, Claude Code, Cursor, the CLI and REST) and
   `/llms.txt` are generated from the operations list, like the API itself.
+
+
+## Known limits (security review, 2026-10-05)
+
+- **InsForge sign-in has no throttling of its own.** Our website limits sign-in and
+  password-reset attempts (per visitor, per email and address), but the InsForge auth API
+  is public and anyone can call it directly; 26 rapid wrong-password attempts on dev all
+  answered normally. Until InsForge adds limits, rely on the password policy (12+
+  characters with a number) and closed sign-up. Must be solved before public sign-up.
+- **Dev allows a wildcard origin** for Vercel previews (`WEB_APP_ORIGINS` on dev). A
+  stranger could register a matching Vercel name; it only affects dev, which holds test
+  data. Prod lists exact addresses only; never add a pattern there.

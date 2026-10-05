@@ -10,6 +10,14 @@ describe("scrub", () => {
   });
 });
 
+describe("scrub: database details", () => {
+  it("removes row contents, detail lines and emails", () => {
+    const text = scrub('Database error (400): {"message":"new row violates check constraint","details":"Failing row contains (abc, Ada, ada@example.com, My secret caption)."} DETAIL: Key (email)=(ada@example.com) already exists.');
+    expect(text).not.toMatch(/Ada|ada@example\.com|secret caption/);
+    expect(text).toContain("Failing row contains ([redacted])");
+  });
+});
+
 describe("parseStack", () => {
   it("reads Node and Deno frames, innermost last, marking our own code", () => {
     const stack = ["Error: boom", "    at publish (/app/worker.mjs:10:5)", "    at async run (file:///app/node_modules/x/index.js:2:3)", "    at /app/worker.mjs:20:1"].join("\n");
