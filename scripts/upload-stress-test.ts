@@ -2,18 +2,18 @@
 // AI keys, and the refusals (too big, not really a video). It goes through the public API
 // the way the CLI does: start, PUT each part to storage, finish, then wait for the check.
 //
-// The test videos are a real short MP4 padded with an MP4 "free" box up to the wanted
+// The test videos are a tiny MP4 built in code, padded with an MP4 "free" box up to the wanted
 // size, so the checker reads them as valid without needing ffmpeg. Everything is deleted
 // at the end: the rows right away, the stored files by the worker's orphan sweep.
 //
 //   npx esbuild scripts/upload-stress-test.ts --bundle --platform=node --format=esm --outfile=.build/upload-stress-test.mjs \
 //     && node .build/upload-stress-test.mjs <api base url> [big MB = 500] [small MB = 100] [how many at once = 5]
 import { randomBytes } from "node:crypto";
-import { readFileSync } from "node:fs";
 import path from "node:path";
 import { createSql } from "../backend/lib/insforge-admin";
 import { keyActions } from "../backend/lib/api/keys";
 import { createAccount, resolveTarget, type AccountResult } from "./lib/accounts";
+import { tinyMp4 } from "../worker/src/testing/tiny-mp4";
 
 const [apiBase, bigArg = "500", smallArg = "100", countArg = "5"] = process.argv.slice(2);
 if (!apiBase) {
@@ -34,7 +34,7 @@ if (!new URL(apiBase).hostname.startsWith(`${devProject}.`)) {
 }
 const sql = createSql(target.baseUrl, target.adminKey);
 const suffix = randomBytes(3).toString("hex");
-const sample = readFileSync(path.join(repoRoot, "submission/meta/threads-submission-captioned-small.mp4"));
+const sample = Buffer.from(tinyMp4());
 
 // A virtual file: the sample MP4, then one "free" box filling the rest with zeros.
 type Source = { size: number; bytes: (start: number, end: number) => Buffer };

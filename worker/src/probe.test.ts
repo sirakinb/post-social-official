@@ -1,12 +1,12 @@
 // @vitest-environment node
 import { randomBytes } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import mediaInfoFactory from "mediainfo.js";
 import { describe, expect, it } from "vitest";
 import { interpretProbe, type MediaInfoResult } from "../../backend/lib/media/probe-result";
 import { rangeReader } from "./probe";
+import { tinyMp4 } from "./testing/tiny-mp4";
 
 // A fake storage server over a buffer: answers Range requests with 206, counts requests,
 // and can be told to hang (never answer until aborted) or fail for the first few calls.
@@ -89,9 +89,8 @@ describe("probing through rangeReader with mediainfo", () => {
   };
 
   it("reads a real video", async () => {
-    const video = readFileSync(path.resolve(import.meta.dirname, "../../submission/meta/threads-submission-captioned-small.mp4"));
-    const { outcome } = await probe(new Uint8Array(video));
-    expect(outcome).toMatchObject({ ok: true, mediaType: "video" });
+    const { outcome } = await probe(tinyMp4({ width: 1080, height: 1920, seconds: 7 }));
+    expect(outcome).toEqual({ ok: true, mimeType: "video/mp4", mediaType: "video", width: 1080, height: 1920, durationSeconds: 7 });
   });
 
   it("rejects random bytes quickly and with few requests", async () => {
