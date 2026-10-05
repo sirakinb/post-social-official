@@ -31,7 +31,7 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
         <p className="mt-1 text-ps-muted">Everything you and your AIs did, newest first.</p>
       </div>
       <Card>
-        <ActivityFeed rows={activity} actors={(actors ?? []) as Array<{ id: string; kind: ActorKind; display_name: string }>} filterHref={href} activeActor={who} />
+        <ActivityFeed rows={activity} actors={(actors ?? []) as Array<{ id: string; kind: ActorKind; display_name: string }>} filterPath="/beta/activity" activeActor={who} />
       </Card>
       <div className="flex justify-between text-xs">
         {before ? <Link href={href(who)} className="text-ps-plum-soft hover:text-ps-text">Back to newest</Link> : <span />}

@@ -1,22 +1,37 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { joinWaitlist, type WaitlistResult } from "@/app/waitlist-action";
 
-// The glowing "Join the waitlist" button and the glass panel it opens.
-export function Waitlist() {
+// "Join the waitlist" buttons and the glass panel they open. `lumen` is the glowing main
+// button, `glass` a quieter one, `compact` the small one in the header.
+export function Waitlist({ label = "Join the waitlist", variant = "lumen" }: { label?: string; variant?: "lumen" | "glass" | "compact" }) {
   const [open, setOpen] = useState(false);
-  return (
-    <>
-      <button type="button" onClick={() => setOpen(true)} className="lp-lumen inline-flex items-center gap-2.5 rounded-full py-2.5 pl-2.5 pr-5 text-sm text-[#FFF8F0]">
+  const button =
+    variant === "compact" ? (
+      <button type="button" onClick={() => setOpen(true)} className="lp-lumen inline-flex rounded-full px-4 py-1.5 text-[12px] text-[#FFF8F0]">
+        {label}
+      </button>
+    ) : variant === "glass" ? (
+      <button type="button" onClick={() => setOpen(true)} className="lp-glass inline-flex h-11 items-center rounded-full px-5 text-sm text-[#FAF6F0] transition hover:bg-white/10">
+        {label}
+      </button>
+    ) : (
+      <button type="button" onClick={() => setOpen(true)} className="lp-lumen inline-flex h-11 items-center gap-2.5 rounded-full pl-2.5 pr-5 text-sm text-[#FFF8F0]">
         <span aria-hidden="true" className="grid size-6 place-items-center rounded-full bg-white/90">
           <svg viewBox="0 0 16 16" className="size-3.5 text-[#2a1247]" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M8 13V3M3.5 7.5 8 3l4.5 4.5" />
           </svg>
         </span>
-        Join the waitlist
+        {label}
       </button>
-      {open ? <WaitlistDialog onClose={() => setOpen(false)} /> : null}
+    );
+  return (
+    <>
+      {button}
+      {/* Rendered at the page root: a blurred (glass) ancestor would trap a fixed panel. */}
+      {open ? createPortal(<WaitlistDialog onClose={() => setOpen(false)} />, document.querySelector(".lp") ?? document.body) : null}
     </>
   );
 }

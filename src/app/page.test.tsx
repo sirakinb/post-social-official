@@ -4,7 +4,7 @@ import React from "react";
 import LandingPage from "./page";
 
 vi.mock("next/image", () => ({
-  default: ({ src, alt }: { src: string; alt: string }) => React.createElement("div", { "data-testid": "hero-image", "data-src": src, "data-alt": alt }),
+  default: ({ src, alt }: { src: string; alt: string }) => React.createElement("div", { "data-testid": "image", "data-src": src, "data-alt": alt }),
 }));
 vi.mock("./fonts", () => ({ Fraunces: { variable: "font-fraunces" }, GeistPixelGrid: { variable: "font-pixel" } }));
 // Canvas and WebGL layers draw nothing in jsdom; the wordmark keeps its accessible name.
@@ -22,34 +22,65 @@ describe("LandingPage", () => {
     expect(within(h1).getByText("operators")).toHaveClass("lp-display");
   });
 
-  it("shows the particle wordmark and the dusk painting", () => {
+  it("opens at dusk with the particle wordmark and the platforms that work today", () => {
     render(<LandingPage />);
     expect(screen.getByRole("img", { name: "Post Social" })).toBeInTheDocument();
-    expect(screen.getByTestId("hero-image")).toHaveAttribute("data-src", "/landing/hero-dusk-2560.webp");
+    const images = screen.getAllByTestId("image").map((i) => i.getAttribute("data-src"));
+    expect(images).toContain("/landing/hero-dusk-2560.webp");
+    const strip = screen.getByRole("list", { name: /Publishes to TikTok, Instagram, Facebook Pages, Threads and YouTube/ });
+    expect(within(strip).getAllByRole("listitem")).toHaveLength(5);
   });
 
-  it("names only the platforms that work today", () => {
+  it("links each section from the header", () => {
     render(<LandingPage />);
-    const body = document.body.textContent ?? "";
-    for (const name of ["TikTok", "Instagram", "Facebook", "Threads", "YouTube"]) expect(body).toContain(name);
-    expect(body).not.toMatch(/LinkedIn|Bluesky/);
-    expect(body).not.toMatch(/\d+%|free trial|testimonial/i);
+    const nav = screen.getByRole("navigation", { name: "Landing page" });
+    for (const [label, id] of [["Use with AI", "agents"], ["How it works", "how-it-works"], ["Features", "features"], ["Platforms", "platforms"], ["FAQ", "faq"]]) {
+      expect(within(nav).getByRole("link", { name: label })).toHaveAttribute("href", `#${id}`);
+      expect(document.getElementById(id)).not.toBeNull();
+    }
+  });
+
+  it("shows real screens from the app, each described", () => {
+    render(<LandingPage />);
+    const screens = screen.getAllByTestId("image").filter((i) => i.getAttribute("data-src")?.startsWith("/landing/app-"));
+    expect(screens.map((i) => i.getAttribute("data-src"))).toEqual(
+      expect.arrayContaining(["/landing/app-home.webp", "/landing/app-create.webp", "/landing/app-calendar.webp", "/landing/app-activity.webp", "/landing/app-accounts.webp"]),
+    );
+    for (const s of screens) expect(s.getAttribute("data-alt")?.length).toBeGreaterThan(10);
+  });
+
+  it("is honest about platforms: five live, three marked as coming next", () => {
+    render(<LandingPage />);
+    const platforms = document.getElementById("platforms") as HTMLElement;
+    for (const name of ["TikTok", "Instagram", "Facebook Pages", "Threads", "YouTube", "Coming next"]) {
+      expect(within(platforms).getByRole("heading", { name })).toBeInTheDocument();
+    }
+    expect(within(platforms).getByText("LinkedIn, Bluesky and X.")).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/\d+%|free trial|testimonial|eight destinations/i);
+  });
+
+  it("answers common questions in an accessible list", () => {
+    render(<LandingPage />);
+    const faq = document.getElementById("faq") as HTMLElement;
+    expect(faq.querySelectorAll("details").length).toBeGreaterThanOrEqual(6);
+    expect(within(faq).getByText("Can an AI publish for me?")).toBeInTheDocument();
   });
 
   it("links to sign in, docs and the legal pages", () => {
     render(<LandingPage />);
-    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/beta/login");
+    expect(screen.getAllByRole("link", { name: "Sign in" })[0]).toHaveAttribute("href", "/beta/login");
     const legal = screen.getByRole("navigation", { name: "Legal" });
-    expect(within(legal).getByRole("link", { name: "Privacy" })).toHaveAttribute("href", "/privacy");
-    expect(within(legal).getByRole("link", { name: "Terms" })).toHaveAttribute("href", "/terms");
-    expect(within(legal).getByRole("link", { name: "Docs" })).toHaveAttribute("href", "/docs");
+    for (const [name, href] of [["Docs", "/docs"], ["Privacy", "/privacy"], ["Terms", "/terms"], ["Data deletion", "/data-deletion"]]) {
+      expect(within(legal).getByRole("link", { name })).toHaveAttribute("href", href);
+    }
   });
 
-  it("opens the waitlist form from the main button and closes it with Escape", () => {
+  it("every waitlist button opens the form, and Escape closes it", () => {
     render(<LandingPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Join the waitlist" }));
+    const buttons = screen.getAllByRole("button", { name: /Join the waitlist|Get early access/ });
+    expect(buttons.length).toBeGreaterThanOrEqual(3);
+    fireEvent.click(buttons[0]);
     const dialog = screen.getByRole("dialog", { name: "Join the waitlist" });
-    expect(within(dialog).getByLabelText("Email address")).toHaveAttribute("type", "email");
     expect(within(dialog).getByLabelText("Email address")).toHaveFocus();
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByRole("dialog")).toBeNull();

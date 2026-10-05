@@ -131,7 +131,15 @@ export function CalendarView({ posts, anchor, canEdit }: { posts: CalendarPost[]
                   <Thumb url={p.thumb?.url ?? null} isVideo={p.thumb?.isVideo ?? false} size={40} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate">{p.caption || "No caption"}</span>
-                    <span className="mt-1 block truncate text-xs text-ps-subtle">{p.destinations.map((d) => d.account).join(", ")}</span>
+                    <span className="mt-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ps-subtle">
+                      {/* Each account with its platform's logo: one brand often has the same name everywhere. */}
+                      {p.destinations.map((d, i) => (
+                        <span key={i} className="inline-flex min-w-0 items-center gap-1.5">
+                          <PlatformMark platform={d.platform} size={16} className="rounded-[5px]" />
+                          <span className="truncate">{d.account}</span>
+                        </span>
+                      ))}
+                    </span>
                   </span>
                   <Status tone={statusOf(p).tone} label={statusOf(p).label} />
                 </button>

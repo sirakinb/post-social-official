@@ -15,16 +15,18 @@ const subscribe = () => () => {};
 export function ActivityFeed({
   rows,
   actors,
-  filterHref,
+  filterPath,
   activeActor,
 }: {
   rows: ActivityRow[];
   actors: Array<{ id: string; kind: ActorKind; display_name: string }>;
-  // When set, filter pills are links (the Activity page filters on the server).
-  filterHref?: (actorId: string | null) => string;
+  // When set, filter pills are links to this page (the Activity page filters on the
+  // server). A path, not a function: functions can't cross from server to client.
+  filterPath?: string;
   activeActor?: string | null;
 }) {
   const [picked, setPicked] = useState<string | null>(null);
+  const filterHref = filterPath ? (actorId: string | null) => (actorId ? `${filterPath}?who=${actorId}` : filterPath) : undefined;
   const who = filterHref ? (activeActor ?? null) : picked;
   const local = useSyncExternalStore(subscribe, () => true, () => false);
 

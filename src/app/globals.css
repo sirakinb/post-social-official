@@ -312,3 +312,46 @@ body::after {
     animation: none;
   }
 }
+
+/* Landing sections below the hero. */
+.lp-label {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #ffc48a;
+}
+
+.lp-h2 {
+  font-size: clamp(1.9rem, 4vw, 2.75rem);
+  line-height: 1.1;
+  letter-spacing: -0.035em;
+  font-weight: 500;
+}
+
+.lp-card {
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* A full-width band with a low lantern glow from the horizon. */
+.lp-band {
+  border-block: 1px solid rgba(255, 255, 255, 0.06);
+  background:
+    radial-gradient(60% 120% at 15% 100%, rgba(255, 170, 100, 0.08), transparent 60%),
+    radial-gradient(50% 100% at 90% 0%, rgba(155, 108, 255, 0.1), transparent 60%),
+    #0e0a1c;
+}
+
+/* An app screen in a lit glass frame. */
+.lp-screen {
+  border-radius: 18px;
+  padding: 6px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.03));
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 40px 100px -20px rgba(0, 0, 0, 0.7),
+    0 0 80px -20px rgba(255, 170, 100, 0.25);
+}
