@@ -12,7 +12,7 @@ type Membership = { role: string; workspace_id: string; workspaces: { name: stri
 const CAN_DO = [
   "See your connected accounts, media and posts",
   "Upload media and write drafts",
-  "Send and schedule posts. Accounts that need your approval still wait for you.",
+  "Publish and schedule posts when you ask it to",
   "Cancel or delete posts it can see",
 ];
 const CANNOT_DO = ["Approve posts", "Connect or disconnect social accounts", "Create API keys or change settings"];

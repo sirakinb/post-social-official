@@ -67,7 +67,7 @@ export function KeysPanel(props: { workspaceId: string; workspaceName: string; c
       <p className="utility-label text-accent">{props.workspaceName} / API keys</p>
       <h1 className="mt-2 text-2xl font-semibold tracking-[-0.035em] text-ink">API keys</h1>
       <p className="mt-1 text-sm text-ink-muted">
-        Keys let your AI tools and scripts use Post Social: Claude Code, Cursor, the REST API. Each key shows up by name in your activity. Posts an AI sends wait for your approval before they go out.
+        Keys let your AI tools and scripts use Post Social: Claude Code, Cursor, the REST API. Each key shows up by name in your activity. Your AI publishes and schedules what you tell it to.
       </p>
 
       {error && <p role="alert" className="mt-6 rounded-lg border border-error/20 bg-error-bg p-3 text-sm text-error">{error}</p>}

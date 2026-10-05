@@ -54,8 +54,9 @@ describe.skipIf(!enabled)("core schema on the dev backend", () => {
     userA = await createUser("a");
     userB = await createUser("b");
 
-    workspaceA = await insert("workspaces", { name: "Workspace A", slug: `ws-a-${suffix}`, created_by: userA.id });
-    workspaceB = await insert("workspaces", { name: "Workspace B", slug: `ws-b-${suffix}`, created_by: userB.id });
+    // Publishing paused: the always-on dev worker must never pick up this test's jobs.
+    workspaceA = await insert("workspaces", { name: "Workspace A", slug: `ws-a-${suffix}`, created_by: userA.id, publishing_paused: true });
+    workspaceB = await insert("workspaces", { name: "Workspace B", slug: `ws-b-${suffix}`, created_by: userB.id, publishing_paused: true });
     await insert("workspace_members", { workspace_id: workspaceA.id, user_id: userA.id, role: "owner" });
     await insert("workspace_members", { workspace_id: workspaceB.id, user_id: userB.id, role: "owner" });
 

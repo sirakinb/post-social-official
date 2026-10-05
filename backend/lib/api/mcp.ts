@@ -11,7 +11,7 @@ export const SERVER_VERSION = "1.0.0";
 const INSTRUCTIONS = [
   "Post Social publishes to the person's connected social accounts (Instagram, Facebook Pages, Threads, YouTube Shorts, TikTok).",
   "Start with list_social_accounts to get account ids and limits. Media must be in Post Social first (import_media from a link), and ready, before it can be attached.",
-  "Use validate_post to check a post, then create_post. Many accounts require the person's approval: the post waits in Post Social and next_step explains it. Never claim a post is live until list_post_results shows a live link.",
+  "The person directs what to post and when: use validate_post to check a post, then create_post to publish it now or at a time (one call per post when scheduling a series). TikTok posts go to the creator's TikTok inbox to confirm. Never claim a post is live until list_post_results shows a live link.",
   "New accounts are connected by the person: give them the link from request_connect_link.",
 ].join(" ");
 

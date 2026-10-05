@@ -42,7 +42,7 @@ const OPTIONS_HELP = [
   "facebook: media_type text | link | image | reel | video; message (overrides caption); link (for link posts); title (videos).",
   "threads: media_type text | image | video | carousel; text (overrides caption).",
   "youtube (Shorts, one vertical video up to 3 min): title (required, up to 100 characters); description; privacy_status public | unlisted | private (required).",
-  "tiktok: delivery_mode direct | inbox (inbox sends a draft to the creator's TikTok app); privacy_level (required for direct; one of the creator's allowed levels, e.g. PUBLIC_TO_EVERYONE or SELF_ONLY); comments_enabled, duet_enabled, stitch_enabled (default off); disclose_your_brand, disclose_branded_content; ai_generated.",
+  "tiktok: delivery_mode must be inbox for AI posts (it goes to the creator's TikTok inbox, where they tap Post; TikTok requires the creator to confirm); comments_enabled, duet_enabled, stitch_enabled (default off); disclose_your_brand, disclose_branded_content; ai_generated.",
 ].join(" ");
 
 const destinations: JsonSchema = {
@@ -71,7 +71,7 @@ function nextStep(post: { status: string; scheduled_at: string | null }) {
     case "draft":
       return "Saved as a draft. Call publish_post to send it (or schedule it).";
     case "awaiting_approval":
-      return "Waiting for the person's approval in Post Social before it goes out.";
+      return "Waiting for approval in Post Social before it goes out (this account is set to ask first).";
     case "scheduled":
       return `Scheduled for ${post.scheduled_at}.`;
     case "processing":
@@ -100,7 +100,7 @@ export const operations: Operation[] = [
   {
     name: "list_social_accounts",
     title: "List connected accounts",
-    description: "Lists the social accounts connected to Post Social, with their ids, health, what each can post (capabilities and limits) and whether AI posts need approval.",
+    description: "Lists the social accounts connected to Post Social, with their ids, health and what each can post (capabilities and limits).",
     method: "GET",
     path: "/v1/accounts",
     input: { properties: { platform: { type: "string", enum: PLATFORMS, description: "Only this platform." } } },
@@ -213,7 +213,7 @@ export const operations: Operation[] = [
     creates: true,
     title: "Create a post",
     description:
-      "Creates a post for one or more accounts and sends it (now, or at scheduled_at), unless draft is true. Accounts that require approval hold the post until the person approves it in Post Social; the result's next_step says what happens. If the post has problems it is saved as a draft and the problems are returned.",
+      "Creates a post for one or more accounts and publishes it now, or at scheduled_at, unless draft is true. To schedule a series, call it once per post with each time. The result's next_step says what happens. If the post has problems it is saved as a draft and the problems are returned.",
     method: "POST",
     path: "/v1/posts",
     input: { properties: { ...postBody, draft: { type: "boolean", default: false, description: "Only save a draft; do not send or schedule." } }, required: ["destinations"] },
@@ -267,7 +267,7 @@ export const operations: Operation[] = [
   {
     name: "publish_post",
     title: "Send a draft",
-    description: "Sends a draft now, or schedules it with scheduled_at. Accounts that require approval hold it for the person first.",
+    description: "Publishes a draft now, or schedules it with scheduled_at.",
     method: "POST",
     path: "/v1/posts/{post_id}/publish",
     input: { properties: { post_id: id("post"), scheduled_at: schedule }, required: ["post_id"] },

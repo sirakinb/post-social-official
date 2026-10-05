@@ -14,14 +14,21 @@ const MAX_DESTINATIONS = 20;
 const MAX_MEDIA = 35;
 const EDITABLE = ["draft", "awaiting_approval", "approved", "scheduled"];
 
-// AI-created posts wait for the person unless the account is autonomous. Posts made by
-// the person in the web app are already their decision. AI posts to TikTok always wait
-// (PRD section 10: TikTok's consent rule inside AI chats is unresolved).
-export function needsApproval(entryPoint: Caller["entryPoint"], policy: Policy, platform: Platform) {
+// People direct their AI, so AI posts go out as directed; they wait only on an account a
+// person has set to ask first (none by default). Posts made in the web app are already
+// the person's decision.
+export function needsApproval(entryPoint: Caller["entryPoint"], policy: Policy, _platform: Platform) {
   if (entryPoint === "ui") return false;
-  if (platform === "tiktok") return true;
   return policy !== "autonomous";
 }
+
+// TikTok requires the creator to confirm each post. For AI posts that confirmation is
+// TikTok's own: the post goes to the creator's TikTok inbox and they post it from the app.
+function tiktokDirectByAi(caller: Caller, destinations: Array<{ platform: Platform; options: DestinationOptions }>) {
+  return caller.entryPoint !== "ui" && destinations.some((d) => d.platform === "tiktok" && (d.options as { delivery_mode?: string }).delivery_mode !== "inbox");
+}
+const TIKTOK_INBOX_ONLY =
+  'TikTok requires the creator to confirm each post, so posts from an AI go to the TikTok inbox: set the TikTok options to delivery_mode "inbox". The post lands in the creator\'s TikTok app, where they tap Post.';
 
 // Test keys can do everything except send or schedule a post.
 function assertMayPublish(caller: Caller) {
@@ -341,6 +348,7 @@ export async function submitPost(deps: PostsDeps, caller: Caller, input: Record<
   if (input.scheduled_at !== undefined) await updatePost(deps, caller, { post_id: postId, scheduled_at: input.scheduled_at });
   const { post, member, destinations } = await loadPost(deps, caller, postId, true);
   if (post.status !== "draft") throw new ApiError(409, `Only drafts can be submitted (this post is ${post.status.replace("_", " ")}).`);
+  if (tiktokDirectByAi(caller, destinations)) throw new ApiError(400, TIKTOK_INBOX_ONLY);
   const result = await validatePost(deps, caller, { post_id: postId });
   if (!result.ok) throw new ApiError(400, `This post can't be published yet. ${result.problems.join(" ")}`);
 
