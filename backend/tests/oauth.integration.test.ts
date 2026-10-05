@@ -31,6 +31,7 @@ describe.skipIf(!enabled)("OAuth sign-in for AI apps on the dev backend (US-042)
       r2: {} as never,
       newId: () => crypto.randomUUID(),
       webAppUrl: ISSUER,
+      analyticsPlatforms: [],
       publicApiUrl: `${ISSUER}/api`,
       callerForKey,
       callerForAccessToken,

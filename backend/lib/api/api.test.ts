@@ -4,7 +4,7 @@ import { createApiHandler, type ApiHandlerDeps } from "../../functions/api/handl
 import { callerForKey, newKey } from "./keys";
 import { handleMcp, PROTOCOL_VERSIONS } from "./mcp";
 import { openApiDocument } from "./openapi";
-import { operations, type ApiDeps } from "./operations";
+import { availableOperations, operations, type ApiDeps } from "./operations";
 import { matchRoute, queryInput } from "./rest";
 
 const caller = (mode: "live" | "test" = "live"): AgentCaller => ({
@@ -20,7 +20,7 @@ const caller = (mode: "live" | "test" = "live"): AgentCaller => ({
 const noSql: Sql = async () => {
   throw new Error("no database in unit tests");
 };
-const deps = (sql: Sql = noSql): ApiDeps => ({ sql, r2: {} as never, newId: () => "id", webAppUrl: "https://www.postsocial.xyz" });
+const deps = (sql: Sql = noSql, analyticsPlatforms: ApiDeps["analyticsPlatforms"] = []): ApiDeps => ({ sql, r2: {} as never, newId: () => "id", webAppUrl: "https://www.postsocial.xyz", analyticsPlatforms });
 
 describe("operations list", () => {
   it("has unique tool names and unique method + path pairs", () => {
@@ -88,10 +88,20 @@ describe("MCP", () => {
 
   it("lists every operation as a tool with safety hints", async () => {
     const { result } = await call({ jsonrpc: "2.0", id: 1, method: "tools/list" });
-    expect(result.tools).toHaveLength(operations.length);
+    expect(result.tools).toHaveLength(availableOperations(deps()).length);
     const del = result.tools.find((t: { name: string }) => t.name === "delete_post");
     expect(del.annotations).toMatchObject({ destructiveHint: true, readOnlyHint: false });
     expect(del.inputSchema).toMatchObject({ type: "object", required: ["post_id"] });
+  });
+
+  it("offers stats tools only where stats are switched on", async () => {
+    const off = await handleMcp(deps(), caller(), { jsonrpc: "2.0", id: 1, method: "tools/list" }) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(off.result.tools.map((t: { name: string }) => t.name)).not.toContain("list_analytics");
+    const on = await handleMcp(deps(noSql, ["instagram"]), caller(), { jsonrpc: "2.0", id: 1, method: "tools/list" }) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(on.result.tools.map((t: { name: string }) => t.name)).toEqual(expect.arrayContaining(["list_analytics", "get_post_analytics", "refresh_analytics"]));
+    const hidden = await handleMcp(deps(), caller(), { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "list_analytics" } }) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(hidden.error.code).toBe(-32602);
+    expect(matchRoute("GET", "/v1/analytics", availableOperations(deps()))).toBeNull();
   });
 
   it("returns tool failures as readable results, not protocol errors", async () => {

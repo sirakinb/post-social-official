@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { BETA_LOGIN } from "@/lib/insforge/auth-rules";
 import { currentUser, insforgeServerClient } from "@/lib/insforge/server";
 import { signOut } from "../actions";
+import { analyticsEnabled } from "../stats-switch";
 import type { GrantSummary, KeySummary } from "./actions";
 import { KeysPanel } from "./keys-panel";
 
@@ -74,6 +75,7 @@ export default async function BetaKeysPage({ searchParams }: { searchParams: Pro
               <Link href="/beta" className="text-ink-muted hover:text-ink">Home</Link>
               <Link href="/beta/accounts" className="text-ink-muted hover:text-ink">Accounts</Link>
               <Link href="/beta/media" className="text-ink-muted hover:text-ink">Media</Link>
+              {analyticsEnabled() && <Link href="/beta/stats" className="text-ink-muted hover:text-ink">Stats</Link>}
               <Link href="/beta/usage" className="text-ink-muted hover:text-ink">Usage</Link>
               <Link href="/beta/keys" aria-current="page" className="font-medium text-ink">API keys</Link>
             </nav>

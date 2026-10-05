@@ -11,7 +11,7 @@ import { callerForKey, keyActions } from "../../lib/api/keys";
 import { handleMcp } from "../../lib/api/mcp";
 import { openApiDocument } from "../../lib/api/openapi";
 import { bodyInput, describeError, errorBody, handleRest } from "../../lib/api/rest";
-import type { ApiDeps } from "../../lib/api/operations";
+import { availableOperations, type ApiDeps } from "../../lib/api/operations";
 import type { SignedInUser } from "../../lib/insforge-admin";
 import {
   authorizationServerMetadata,
@@ -28,6 +28,7 @@ import {
   type AuthorizeParams,
 } from "../../lib/oauth/server";
 import { usageReport } from "../../lib/usage";
+import { listAnalytics, postAnalytics, refreshAnalytics } from "../../lib/analytics";
 import { originAllowed } from "../media/handler";
 
 export type ApiHandlerDeps = ApiDeps & {
@@ -76,7 +77,7 @@ export function createApiHandler(deps: ApiHandlerDeps) {
     if (path === "/oauth/register" || path === "/oauth/token" || path === "/oauth/revoke") return oauthRoute(deps, request, path, issuer);
 
     if (path === "/v1/openapi.json" && request.method === "GET") {
-      return json(200, openApiDocument(`${deps.publicApiUrl}`), { "Access-Control-Allow-Origin": "*" });
+      return json(200, openApiDocument(`${deps.publicApiUrl}`, availableOperations(deps)), { "Access-Control-Allow-Origin": "*" });
     }
 
     if (path === "/mcp") {
@@ -196,10 +197,18 @@ async function personRoute(deps: ApiHandlerDeps, request: Request) {
   try {
     const body = await bodyInput(request);
     const name = String(body.action);
-    if (!Object.hasOwn(allActions, name)) throw new ApiError(400, `Unknown action. Use one of: ${Object.keys(allActions).join(", ")}.`);
+    // Stats actions exist only where stats are switched on.
+    const statsActions = deps.analyticsPlatforms.length
+      ? {
+          analytics: (sql: Sql, caller: Caller, input: Record<string, unknown>) => listAnalytics(sql, caller, deps.analyticsPlatforms, input as { workspace_id: string }),
+          post_analytics: (sql: Sql, caller: Caller, input: Record<string, unknown>) => postAnalytics(sql, caller, deps.analyticsPlatforms, input),
+          refresh_analytics: (sql: Sql, caller: Caller, input: Record<string, unknown>) => refreshAnalytics(sql, caller, deps.analyticsPlatforms, input as { workspace_id: string }),
+        }
+      : {};
+    const actions = { ...allActions, ...statsActions } as Record<string, (sql: Sql, caller: Caller, input: Record<string, unknown>) => Promise<unknown>>;
+    if (!Object.hasOwn(actions, name)) throw new ApiError(400, `Unknown action. Use one of: ${Object.keys(actions).join(", ")}.`);
     const caller: Caller = { userId: user.id, displayName: user.name, entryPoint: "ui" };
-    const action = allActions[name as keyof typeof allActions] as (sql: Sql, caller: Caller, input: Record<string, unknown>) => Promise<unknown>;
-    return json(200, await action(deps.sql, caller, body), cors);
+    return json(200, await actions[name](deps.sql, caller, body), cors);
   } catch (error) {
     const { status, message } = describeError(error);
     return json(status, errorBody(status, message), cors);

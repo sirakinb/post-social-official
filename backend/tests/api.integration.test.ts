@@ -32,7 +32,7 @@ describe.skipIf(!enabled)("API keys, REST API and MCP on the dev backend (US-040
       sql,
       r2: { presignGet: async () => "https://r2.example/view" } as never,
       newId: () => crypto.randomUUID(),
-      webAppUrl: "http://localhost:3333",
+      webAppUrl: "http://localhost:3333", analyticsPlatforms: [],
       publicApiUrl: "http://localhost:3333/api",
       callerForKey,
       callerForAccessToken,

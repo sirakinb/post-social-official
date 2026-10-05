@@ -1,5 +1,5 @@
 // OpenAPI 3.1 description of the REST API, generated from the operations list.
-import { operations } from "./operations";
+import { operations, type Operation } from "./operations";
 import { SERVER_VERSION } from "./mcp";
 
 const errorSchema = {
@@ -8,9 +8,9 @@ const errorSchema = {
   properties: { error: { type: "object", required: ["code", "message"], properties: { code: { type: "string" }, message: { type: "string" } } } },
 };
 
-export function openApiDocument(serverUrl: string) {
+export function openApiDocument(serverUrl: string, ops: Operation[] = operations) {
   const paths: Record<string, Record<string, unknown>> = {};
-  for (const op of operations) {
+  for (const op of ops) {
     const pathParams = [...op.path.matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
     const bodyProps = Object.fromEntries(Object.entries(op.input.properties).filter(([name]) => !pathParams.includes(name)));
     const required = (op.input.required ?? []).filter((name) => !pathParams.includes(name));
