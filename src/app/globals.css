@@ -199,3 +199,177 @@ body::after {
     text-wrap: balance;
   }
 }
+
+/* ===== Landing (Phase 7): ported from the Manor landing, warmed for dusk ===== */
+.lp-wordmark {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-weight: 500;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+}
+
+.lp-display {
+  font-family: var(--font-geist-pixel-grid), var(--font-geist-sans), sans-serif;
+}
+
+/* The highlighted words: plum fading into lantern light. */
+.lp-ink {
+  background: linear-gradient(90deg, #9b6cff 0%, #e7b8ff 55%, #ffe3bf 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.lp-glass {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  -webkit-backdrop-filter: blur(22px);
+  backdrop-filter: blur(22px);
+}
+
+.lp-grain {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  opacity: 0.16;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.lp-sky {
+  pointer-events: none;
+  mix-blend-mode: screen;
+  opacity: 0.9;
+}
+
+.lp-wordmark-canvas {
+  pointer-events: none;
+  filter: drop-shadow(0 0 18px rgba(255, 180, 110, 0.28));
+}
+.lp-wordmark-canvas canvas {
+  pointer-events: auto;
+}
+
+.lp-veil {
+  animation: 8s ease-in-out infinite alternate lp-veil;
+}
+
+.lp-rise {
+  animation: 0.9s cubic-bezier(0.22, 1, 0.36, 1) both lp-rise;
+}
+.lp-rise-delay-1 {
+  animation-delay: 0.12s;
+}
+
+@keyframes lp-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes lp-veil {
+  0% {
+    opacity: 0.75;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-rise,
+  .lp-veil {
+    animation: none;
+  }
+}
+
+/* Landing sections below the hero. */
+.lp-label {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #ffc48a;
+}
+
+.lp-h2 {
+  font-size: clamp(1.9rem, 4vw, 2.75rem);
+  line-height: 1.1;
+  letter-spacing: -0.035em;
+  font-weight: 500;
+}
+
+.lp-card {
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* A full-width band with a low lantern glow from the horizon. */
+.lp-band {
+  border-block: 1px solid rgba(255, 255, 255, 0.06);
+  background:
+    radial-gradient(60% 120% at 15% 100%, rgba(255, 170, 100, 0.08), transparent 60%),
+    radial-gradient(50% 100% at 90% 0%, rgba(155, 108, 255, 0.1), transparent 60%),
+    #0e0a1c;
+}
+
+/* An app screen in a lit glass frame. */
+.lp-screen {
+  border-radius: 18px;
+  padding: 6px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.03));
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 40px 100px -20px rgba(0, 0, 0, 0.7),
+    0 0 80px -20px rgba(255, 170, 100, 0.25);
+}
+
+/* ===== The call to action ===== */
+
+/* Lantern: warm paper lit from within, the brightest thing on the page. */
+.lp-lantern {
+  color: #2a1247;
+  font-weight: 500;
+  background: radial-gradient(130% 150% at 50% 115%, #ffae5e 0%, #ffd6a3 38%, #fff6ea 78%);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow:
+    inset 0 1px 0 #fff,
+    inset 0 -8px 16px rgba(255, 130, 50, 0.28),
+    0 0 0 1px rgba(255, 200, 140, 0.25),
+    0 10px 40px rgba(255, 160, 80, 0.45);
+  animation: lp-glow 3.2s ease-in-out infinite alternate;
+  transition: transform 0.2s ease, filter 0.2s ease;
+}
+.lp-lantern:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.04);
+}
+@keyframes lp-glow {
+  from {
+    box-shadow:
+      inset 0 1px 0 #fff,
+      inset 0 -8px 16px rgba(255, 130, 50, 0.28),
+      0 0 0 1px rgba(255, 200, 140, 0.25),
+      0 10px 36px rgba(255, 160, 80, 0.38);
+  }
+  to {
+    box-shadow:
+      inset 0 1px 0 #fff,
+      inset 0 -8px 16px rgba(255, 130, 50, 0.34),
+      0 0 0 1px rgba(255, 200, 140, 0.35),
+      0 12px 52px rgba(255, 160, 80, 0.6);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-lantern {
+    animation: none;
+  }
+}

@@ -6,6 +6,7 @@
 //   /oauth/register, /oauth/token, /oauth/revoke   OAuth endpoints for AI apps
 //   /oauth/consent     the consent page's decision, with the person's sign-in token
 //   /keys              API keys and connected apps for the web app, with the person's sign-in token
+//   /waitlist          the landing page's waitlist (public, POST {email})
 import { ApiError, type AgentCaller, type Caller, type Sql } from "../../lib/access";
 import { callerForKey, keyActions } from "../../lib/api/keys";
 import { handleMcp } from "../../lib/api/mcp";
@@ -33,6 +34,7 @@ import { tiktokCreatorInfo } from "../../lib/connections/tiktok-creator";
 import type { Settings } from "../../lib/connections/platforms";
 import { listAnalytics, postAnalytics, refreshAnalytics } from "../../lib/analytics";
 import { originAllowed } from "../media/handler";
+import { joinWaitlist } from "../../lib/waitlist";
 
 export type ApiHandlerDeps = ApiDeps & {
   callerForKey: typeof callerForKey;
@@ -72,6 +74,7 @@ export function createApiHandler(deps: ApiHandlerDeps) {
 
     if (path === "/keys") return personRoute(deps, request);
     if (path === "/oauth/consent") return consentRoute(deps, request);
+    if (path === "/waitlist") return waitlistRoute(deps, request);
 
     if (request.method === "OPTIONS" && (path.startsWith("/.well-known/") || path.startsWith("/oauth/") || path === "/mcp")) {
       return new Response(null, { status: 204, headers: OPEN_CORS });
@@ -109,6 +112,25 @@ export function createApiHandler(deps: ApiHandlerDeps) {
 
     return json(404, errorBody(404, "Not found. The API lives under /v1 and the MCP server at /mcp."));
   };
+}
+
+async function waitlistRoute(deps: ApiHandlerDeps, request: Request) {
+  if (request.method !== "POST") return json(405, errorBody(405, "Send a POST with {\"email\": ...}."), { Allow: "POST" });
+  try {
+    const text = await request.text();
+    if (text.length > 2048) throw new ApiError(413, "The request is too large.");
+    let input: unknown;
+    try {
+      input = JSON.parse(text);
+    } catch {
+      throw new ApiError(400, "The body is not valid JSON.");
+    }
+    if (!input || typeof input !== "object" || Array.isArray(input)) throw new ApiError(400, "Send a JSON object with an email.");
+    return json(200, await joinWaitlist(deps.sql, input as Record<string, unknown>));
+  } catch (error) {
+    if (error instanceof ApiError) return json(error.status, errorBody(error.status, error.message));
+    return json(500, errorBody(500, "Joining the waitlist failed. Try again."));
+  }
 }
 
 function secondsToMidnightUtc(now = Date.now()) {

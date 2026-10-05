@@ -1,104 +1,28 @@
-import Link from "next/link";
 import Image from "next/image";
-import { CalendarDays, Check, ChevronRight, Clock, Play } from "lucide-react";
-import { Brand } from "@/components/brand";
-import { PlatformCardIcon, PlatformStrip } from "@/components/platform-logos";
-import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { CLAUDE_PATH, OPENAI_PATH } from "@/components/beta/marks";
+import { DuskSky } from "@/components/landing/dusk-sky";
+import { ParticleWordmark } from "@/components/landing/particle-wordmark";
+import { Waitlist } from "@/components/landing/waitlist";
+import { PlatformCardIcon } from "@/components/platform-logos";
+import { BETA_LOGIN } from "@/lib/insforge/auth-rules";
 import { cn } from "@/lib/utils";
+import { Fraunces, GeistPixelGrid } from "./fonts";
 
-function UtilityLabel({ children }: { children: React.ReactNode }) {
-  return <span className="utility-label inline-block text-accent">{children}</span>;
-}
+// The landing. It opens at dusk (lanterns leaving the lake the way posts leave for every
+// platform), then walks through what Post Social does, with real screens from the app.
 
-function SectionHeading({
-  children,
-  className,
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <h2
-      className={cn(
-        "font-display text-3xl font-semibold tracking-[-0.04em] text-ink md:text-4xl",
-        className,
-      )}
-    >
-      {children}
-    </h2>
-  );
-}
+type Platform = "tiktok" | "instagram" | "facebook" | "threads" | "youtube";
 
-function Body({
-  children,
-  className,
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <p
-      className={cn(
-        "max-w-2xl text-base leading-relaxed text-ink-muted md:text-lg",
-        className,
-      )}
-    >
-      {children}
-    </p>
-  );
-}
+const PLATFORMS: { platform: Platform; name: string; text: string }[] = [
+  { platform: "tiktok", name: "TikTok", text: "Videos and photo posts, or send a draft to your TikTok inbox to finish in the app." },
+  { platform: "instagram", name: "Instagram", text: "Photos, Reels and carousels of up to 10 for professional accounts." },
+  { platform: "facebook", name: "Facebook Pages", text: "Text, links, photos, Reels and videos on the Pages you manage." },
+  { platform: "threads", name: "Threads", text: "Text, photos, videos and carousels of up to 20." },
+  { platform: "youtube", name: "YouTube", text: "Shorts uploaded straight to your channel." },
+];
 
-interface ScreenshotFrameProps {
-  src: string;
-  alt: string;
-  priority?: boolean;
-  sizes?: string;
-  className?: string;
-}
-
-function ScreenshotFrame({
-  src,
-  alt,
-  priority,
-  sizes = "100vw",
-  className,
-}: ScreenshotFrameProps) {
-  return (
-    <div className={cn("relative w-full select-none", className)}>
-      <div className="absolute -inset-px rounded-2xl bg-gradient-to-b from-accent/25 to-transparent opacity-50 blur-sm" />
-      <div className="grooved-surface relative overflow-hidden rounded-2xl border border-border bg-surface/80 shadow-soft backdrop-blur-sm">
-        <Image
-          src={src}
-          alt={alt}
-          width={1440}
-          height={900}
-          priority={priority}
-          sizes={sizes}
-          className="block h-auto w-full"
-        />
-      </div>
-    </div>
-  );
-}
-
-function HeroVideoPlaceholder({ className }: { className?: string }) {
-  return (
-    <div className={cn("relative w-full select-none", className)}>
-      <div className="absolute -inset-px rounded-2xl bg-gradient-to-b from-accent/25 to-transparent opacity-50 blur-sm" />
-      <div
-        className="grooved-surface relative flex aspect-video items-center justify-center overflow-hidden rounded-2xl border border-border bg-surface/80 shadow-soft backdrop-blur-sm"
-        role="img"
-        aria-label="Product video coming soon"
-      >
-        <span className="inline-flex h-16 w-16 items-center justify-center rounded-full border border-border bg-canvas/60 text-ink md:h-20 md:w-20">
-          <Play className="ml-1 h-6 w-6 md:h-8 md:w-8" aria-hidden="true" />
-        </span>
-      </div>
-    </div>
-  );
-}
-
-const navItems = [
+const NAV = [
   { label: "Use with AI", href: "#agents" },
   { label: "How it works", href: "#how-it-works" },
   { label: "Features", href: "#features" },
@@ -106,126 +30,169 @@ const navItems = [
   { label: "FAQ", href: "#faq" },
 ];
 
-export default function LandingPage() {
-  const year = new Date().getFullYear();
+const FAQ = [
+  { q: "Which platforms are supported?", a: "TikTok, Instagram, Facebook Pages, Threads and YouTube, each through the platform's official API and sign-in. LinkedIn, Bluesky and X are next." },
+  { q: "What can I publish?", a: "Videos and photo posts on TikTok; photos, Reels and carousels on Instagram; text, links, photos, Reels and videos on Facebook Pages; text, photos, videos and carousels on Threads; and Shorts on YouTube. What a given account can post depends on its type and the platform's rules, and Post Social checks each file before it goes out." },
+  { q: "Can an AI publish for me?", a: "Yes. Connect Claude, ChatGPT, or any AI agent, or call the API from your own automations. Your AI drafts, schedules and publishes exactly as you direct it. TikTok posts from an AI land in your TikTok inbox for you to finish." },
+  { q: "Can I schedule posts?", a: "Yes. Publish now or pick a date and time, then see everything on the calendar and move it if plans change." },
+  { q: "Do you need my social passwords?", a: "No. Each account connects through the platform's own sign-in page, and you can disconnect it at any time." },
+  { q: "Is Post Social only for developers?", a: "No. If you can ask an AI for something in plain language, you can use Post Social. The web app does everything too, no code required." },
+];
 
+function AiMark({ app, size = 18 }: { app: "claude" | "openai"; size?: number }) {
   return (
-    <div className="technical-grid min-h-screen">
-      <header className="sticky top-0 z-50 border-b border-border bg-canvas/90 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3.5 md:px-8">
-          <Brand />
-          <nav
-            className="hidden items-center gap-1 md:flex"
-            aria-label="Landing page"
-          >
-            {navItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="rounded-md px-3 py-1.5 text-sm font-medium text-ink-muted transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-              >
+    <span className={cn("inline-flex flex-none items-center justify-center rounded-md border border-white/10", app === "claude" ? "bg-[#1A1430]" : "bg-[#0D0D0D]")} style={{ width: size + 8, height: size + 8 }}>
+      <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true">
+        <path fill={app === "claude" ? "#D97757" : "#FFFFFF"} d={app === "claude" ? CLAUDE_PATH : OPENAI_PATH} />
+      </svg>
+    </span>
+  );
+}
+
+function Label({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <p className={cn("lp-label", className)}>{children}</p>;
+}
+
+function Check() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true" className="mt-1 size-4 flex-none text-[#FFC48A]" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m3.5 8.5 3 3 6-7" />
+    </svg>
+  );
+}
+
+function Screen({ src, alt, priority, className }: { src: string; alt: string; priority?: boolean; className?: string }) {
+  return (
+    <div className={cn("lp-screen relative", className)}>
+      <Image src={src} alt={alt} width={2400} height={1500} priority={priority} sizes="(max-width: 768px) 100vw, 60vw" className="block h-auto w-full rounded-[14px]" />
+    </div>
+  );
+}
+
+function Feature({ label, title, text, points, src, alt, flip }: { label: string; title: React.ReactNode; text: string; points: string[]; src: string; alt: string; flip?: boolean }) {
+  return (
+    <div className={cn("grid items-center gap-10 md:gap-14", flip ? "md:grid-cols-[3fr_2fr]" : "md:grid-cols-[2fr_3fr]")}>
+      <div className={cn(flip && "md:order-2")}>
+        <Label>{label}</Label>
+        <h3 className="mt-3 text-2xl font-medium tracking-[-0.03em] md:text-[2rem] md:leading-[1.15]">{title}</h3>
+        <p className="mt-4 leading-relaxed text-[#FAF6F0]/65">{text}</p>
+        <ul className="mt-5 space-y-2.5 text-[15px] text-[#FAF6F0]/75">
+          {points.map((point) => (
+            <li key={point} className="flex gap-2.5">
+              <Check />
+              {point}
+            </li>
+          ))}
+        </ul>
+      </div>
+      <Screen src={src} alt={alt} className={cn(flip && "md:order-1")} />
+    </div>
+  );
+}
+
+export default function LandingPage() {
+  return (
+    <div className={`lp ${Fraunces.variable} ${GeistPixelGrid.variable} relative isolate overflow-x-clip bg-[#0B0816] text-[#FAF6F0]`}>
+      {/* ===== Hero at dusk ===== */}
+      <section className="relative isolate">
+        <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[100svh] min-h-[640px] overflow-hidden">
+          <Image src="/landing/hero-dusk-2560.webp" alt="" fill priority sizes="100vw" className="object-cover object-[50%_42%]" />
+          <DuskSky className="lp-sky absolute inset-0 h-full w-full" />
+          <div className="lp-veil absolute inset-0 bg-[radial-gradient(60%_50%_at_50%_45%,rgba(11,8,22,0.45),transparent_70%),linear-gradient(to_bottom,rgba(11,8,22,0.35)_0%,rgba(11,8,22,0.05)_35%,rgba(11,8,22,0.55)_75%,#0B0816_100%)]" />
+          <div className="lp-grain" />
+        </div>
+
+        <header className="relative z-20 mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-5 sm:px-8">
+          <Link href="/" className="inline-flex items-center gap-2.5" aria-label="Post Social home">
+            {/* eslint-disable-next-line @next/next/no-img-element -- tiny static svg */}
+            <img src="/post-social-icon.svg" alt="" className="size-7 rounded-[8px]" />
+            <span className="lp-wordmark hidden text-[13px] sm:inline">Post Social</span>
+          </Link>
+          <nav aria-label="Landing page" className="lp-glass hidden items-center rounded-full px-1.5 py-1 lg:flex">
+            {NAV.map((item) => (
+              <a key={item.href} href={item.href} className="rounded-full px-3.5 py-1.5 text-[13px] text-[#FAF6F0]/70 transition hover:bg-white/[0.06] hover:text-[#FAF6F0]">
                 {item.label}
-              </Link>
+              </a>
             ))}
           </nav>
-          <div className="flex items-center gap-3">
-            <Link
-              href="/login"
-              className="hidden rounded-md px-2 py-1.5 text-sm font-medium text-ink-muted transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:inline-block"
-            >
-              Log in
+          <div className="flex items-center gap-2">
+            <Link href={BETA_LOGIN} className="rounded-full px-3 py-1.5 text-[13px] text-[#FAF6F0]/70 transition hover:text-[#FAF6F0]">
+              Sign in
             </Link>
-            <Button asChild variant="primary" size="sm">
-              <Link href="/login">Start my first post</Link>
-            </Button>
+            <Waitlist variant="compact" />
           </div>
+        </header>
+
+        <div className="relative z-10 mx-auto flex max-w-6xl flex-col items-center px-5 pt-[6vh] text-center sm:px-8">
+          <div className="lp-wordmark-canvas w-[min(640px,92vw)]">
+            <ParticleWordmark text="POST SOCIAL" fontSize={64} gap={3} label="Post Social" fit />
+          </div>
+
+          <ul aria-label="Publishes to TikTok, Instagram, Facebook Pages, Threads and YouTube" className="lp-rise mt-2 flex gap-2.5 sm:gap-3">
+            {PLATFORMS.map((p) => (
+              <li key={p.platform}>
+                <PlatformCardIcon platform={p.platform} className="shadow-[0_8px_24px_rgba(0,0,0,0.35)] ring-1 ring-white/15" />
+                <span className="sr-only">{p.name}</span>
+              </li>
+            ))}
+          </ul>
+
+          <h1 className="lp-rise mt-7 max-w-4xl text-[2.35rem] leading-[1.06] tracking-[-0.04em] sm:text-6xl">
+            Social media management for <span className="lp-display lp-ink whitespace-nowrap">AI-native</span> creators and <span className="lp-display lp-ink">operators</span>.
+          </h1>
+          <p className="lp-rise lp-rise-delay-1 mt-5 max-w-2xl text-base leading-relaxed text-[#FAF6F0]/75 sm:text-lg">
+            Tell Claude, ChatGPT, or your own agent what to post. Post Social publishes it to every channel, on time, and shows you what happened.
+          </p>
+          <div className="lp-rise lp-rise-delay-1 mt-8 flex flex-col items-center gap-3 sm:flex-row">
+            <Waitlist />
+            <a href="#how-it-works" className="lp-glass inline-flex h-11 items-center rounded-full px-5 text-sm text-[#FAF6F0] transition hover:bg-white/10">
+              See how it works
+            </a>
+          </div>
+          <p className="mt-6 inline-flex items-center gap-2 text-[13px] text-[#FAF6F0]/55">
+            <AiMark app="claude" size={14} />
+            <AiMark app="openai" size={14} />
+            Works with Claude, ChatGPT or any AI agent
+          </p>
+
+          <Screen src="/landing/app-home.webp" alt="The Post Social home screen: what's going out next, what just went live, and what needs you" priority className="mt-16 w-full max-w-5xl sm:mt-20" />
         </div>
-      </header>
+      </section>
 
       <main>
-        <section className="relative mx-auto max-w-6xl px-4 pb-16 pt-14 md:pb-24 md:pt-20">
-          <div className="text-center">
-            <PlatformStrip size="lg" />
-            <h1 className="mx-auto mt-6 max-w-5xl font-display text-4xl font-bold leading-[1.05] tracking-[-0.05em] text-ink md:text-6xl">
-              Social media posting for{" "}
-              <span className="block md:whitespace-nowrap">
-                AI-native creators and operators.
-              </span>
-            </h1>
-            <Body className="mx-auto mt-5 text-balance">
-              Let Claude, ChatGPT, or your own automations draft and schedule to
-              all your channels.
-            </Body>
-            <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <Button asChild variant="primary" size="lg">
-                <Link href="/login">Start my first post</Link>
-              </Button>
-              <Button asChild variant="secondary" size="lg">
-                <Link href="#how-it-works">See how it works</Link>
-              </Button>
-            </div>
-          </div>
-          <HeroVideoPlaceholder className="mx-auto mt-14 max-w-5xl" />
-        </section>
-
-        <section
-          id="agents"
-          className="mx-auto max-w-6xl scroll-mt-20 px-4 py-16 md:py-24"
-        >
-          <div className="grid items-center gap-10 md:grid-cols-2">
+        {/* ===== Use with AI ===== */}
+        <section id="agents" className="mx-auto max-w-6xl scroll-mt-8 px-5 py-24 sm:px-8 md:py-32">
+          <div className="grid items-center gap-12 md:grid-cols-2">
             <div>
-              <UtilityLabel>Use with AI</UtilityLabel>
-              <SectionHeading className="mt-3">
-                Post from ChatGPT, Claude, or any AI you already use.
-              </SectionHeading>
-              <Body className="mt-4">
-                Connect Post Social once, then just ask. Your AI drafts the
-                post, picks the channels, and publishes or schedules it
-                directly, with no copying and no switching tabs.
-              </Body>
-              <ul className="mt-6 space-y-3 text-sm text-ink-muted md:text-base">
-                {[
-                  "Ask in plain language. No code required.",
-                  "Works with Claude, ChatGPT, Codex, and your own automations.",
-                  "Publish now or schedule for later, straight from the chat.",
-                ].map((item) => (
-                  <li key={item} className="flex items-start gap-2">
-                    <Check
-                      className="mt-1 h-4 w-4 shrink-0 text-success"
-                      aria-hidden="true"
-                    />
+              <Label>Use with AI</Label>
+              <h2 className="lp-h2 mt-3">
+                Post from <span className="lp-display lp-ink">ChatGPT, Claude</span>, or any AI you already use.
+              </h2>
+              <p className="mt-5 max-w-xl leading-relaxed text-[#FAF6F0]/65 md:text-lg">
+                Connect Post Social once, then just ask. Your AI writes the post, picks the channels, and publishes or schedules it directly, with no copying and no switching tabs.
+              </p>
+              <ul className="mt-6 space-y-2.5 text-[15px] text-[#FAF6F0]/75">
+                {["Ask in plain language. No code required.", "Works with Claude, ChatGPT, Codex, and your own automations.", "Publish now or schedule for later, straight from the chat."].map((item) => (
+                  <li key={item} className="flex gap-2.5">
+                    <Check />
                     {item}
                   </li>
                 ))}
               </ul>
-              <div className="mt-8">
-                <Button asChild variant="primary" size="lg">
-                  <Link href="/login">
-                    Connect your AI
-                    <ChevronRight className="h-4 w-4" aria-hidden="true" />
-                  </Link>
-                </Button>
-              </div>
             </div>
-            <div
-              className="grooved-surface rounded-2xl border border-border bg-surface/60 p-5 md:p-6"
-              role="img"
-              aria-label="Example chat: a person asks an AI assistant to post a video to TikTok, Instagram, and Threads at 6 PM, and the assistant confirms it is scheduled."
-            >
-              <div className="space-y-4">
-                <div className="ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-accent-muted px-4 py-3 text-sm text-ink">
-                  Post today&apos;s behind-the-scenes clip to TikTok, Instagram,
-                  and Threads at 6pm.
-                </div>
-                <div className="max-w-[90%] rounded-2xl rounded-bl-md border border-border bg-canvas/60 px-4 py-3 text-sm text-ink">
-                  <p>Done. Scheduled for 6:00 PM on all three channels.</p>
-                  <div className="mt-3 flex items-center gap-2">
-                    <PlatformCardIcon platform="tiktok" size="sm" />
-                    <PlatformCardIcon platform="instagram" size="sm" />
-                    <PlatformCardIcon platform="threads" size="sm" />
-                    <span className="ml-1 text-xs text-ink-subtle">
-                      Scheduled today, 6:00 PM
-                    </span>
+            <div className="lp-card p-5 md:p-6" role="img" aria-label="Example chat: someone asks Claude to post a clip to TikTok, Instagram and Threads at 6 PM, and Claude confirms it is scheduled.">
+              <div className="space-y-4 text-[15px]">
+                <div className="ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-[#9B6CFF]/25 px-4 py-3">Post today&apos;s behind-the-scenes clip to TikTok, Instagram and Threads at 6pm.</div>
+                <div className="flex max-w-[92%] gap-3">
+                  <AiMark app="claude" size={16} />
+                  <div className="rounded-2xl rounded-tl-md border border-white/10 bg-black/25 px-4 py-3">
+                    <p>Done. It&apos;s scheduled for 6:00 PM on all three.</p>
+                    <div className="mt-3 flex items-center gap-1.5">
+                      <PlatformCardIcon platform="tiktok" size="sm" />
+                      <PlatformCardIcon platform="instagram" size="sm" />
+                      <PlatformCardIcon platform="threads" size="sm" />
+                      <span className="ml-1.5 text-xs text-[#FAF6F0]/50">Today, 6:00 PM</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -233,385 +200,194 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section className="border-y border-border bg-surface/40">
-          <div className="mx-auto max-w-6xl px-4 py-16 md:py-20">
-            <UtilityLabel>One post. Eight destinations.</UtilityLabel>
-            <SectionHeading className="mt-3">
-              Stop rebuilding the same post eight times.
-            </SectionHeading>
-            <Body className="mt-4">
-              No more downloading and re-uploading, switching tabs, or wondering
-              whether a post went live. Post Social keeps your media,
-              destination choices, timing, and publishing result together in
-              one place.
-            </Body>
-            <div className="mt-8 grid gap-4 sm:grid-cols-3">
+        {/* ===== Product video (placeholder until the demo is recorded) ===== */}
+        <section id="demo" className="mx-auto max-w-6xl scroll-mt-8 px-5 pb-24 sm:px-8 md:pb-32">
+          <div role="img" aria-label="Product video coming soon" className="lp-screen relative mx-auto aspect-video max-w-5xl">
+            <div className="flex h-full w-full items-center justify-center rounded-[14px] border border-white/[0.06] bg-[radial-gradient(70%_80%_at_50%_100%,rgba(255,170,100,0.12),transparent_70%),linear-gradient(180deg,#1b1530,#140f24)]">
+              <span className="grid size-16 place-items-center rounded-full border border-white/15 bg-[#0B0816]/80 text-[#FAF6F0] shadow-[0_0_40px_rgba(255,170,100,0.18)] md:size-20">
+                <svg viewBox="0 0 24 24" aria-hidden="true" className="ml-1 size-6 md:size-8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round">
+                  <path d="M7 4.5v15l12-7.5z" />
+                </svg>
+              </span>
+            </div>
+          </div>
+        </section>
+
+        {/* ===== The problem ===== */}
+        <section className="lp-band">
+          <div className="mx-auto max-w-6xl px-5 py-20 sm:px-8 md:py-24">
+            <Label>One post. Every channel.</Label>
+            <h2 className="lp-h2 mt-3 max-w-3xl">Stop rebuilding the same post five times.</h2>
+            <p className="mt-5 max-w-2xl leading-relaxed text-[#FAF6F0]/65 md:text-lg">
+              No more downloading and re-uploading, switching tabs, or wondering whether a post went live. Post Social keeps your media, channels, timing and results together in one place.
+            </p>
+            <div className="mt-10 grid gap-4 sm:grid-cols-3">
               {[
-                "Less tab switching",
-                "Platform-ready details",
-                "One clear publishing history",
-              ].map((title) => (
-                <div
-                  key={title}
-                  className="rounded-xl border border-border bg-canvas/60 px-4 py-3.5"
-                >
-                  <span className="text-sm font-medium text-ink">{title}</span>
+                { title: "Less tab switching", text: "Write once, choose your channels, done." },
+                { title: "Ready for each platform", text: "Sizes, lengths and captions checked before anything goes out." },
+                { title: "One clear history", text: "Every post, every channel, and what happened to it." },
+              ].map((item) => (
+                <div key={item.title} className="lp-card px-5 py-5">
+                  <p className="font-medium">{item.title}</p>
+                  <p className="mt-1.5 text-sm leading-relaxed text-[#FAF6F0]/60">{item.text}</p>
                 </div>
               ))}
             </div>
           </div>
         </section>
 
-        <section
-          id="how-it-works"
-          className="mx-auto max-w-6xl scroll-mt-20 px-4 py-16 md:py-24"
-        >
-          <SectionHeading className="text-center">
-            From idea to everywhere in three steps.
-          </SectionHeading>
-          <div className="mt-10 grid gap-6 md:grid-cols-3">
+        {/* ===== How it works ===== */}
+        <section id="how-it-works" className="mx-auto max-w-6xl scroll-mt-8 px-5 py-24 sm:px-8 md:py-32">
+          <div className="text-center">
+            <Label>How it works</Label>
+            <h2 className="lp-h2 mx-auto mt-3 max-w-3xl">
+              From idea to <span className="lp-display lp-ink">everywhere</span> in three steps.
+            </h2>
+          </div>
+          <ol className="mt-14 grid gap-5 md:grid-cols-3">
             {[
-              {
-                step: "01",
-                title: "Bring your post",
-                text: "Upload an image or video and write the main caption once. Everything starts here.",
-              },
-              {
-                step: "02",
-                title: "Make each version fit",
-                text: "Choose destinations and adjust platform-specific details without starting over.",
-              },
-              {
-                step: "03",
-                title: "Publish now or pick the moment",
-                text: "Confirm the post, schedule it, and see what happened for every destination.",
-              },
-            ].map((item) => (
-              <div
-                key={item.step}
-                className="grooved-surface relative rounded-2xl border border-border bg-surface/60 p-6"
-              >
-                <span className="utility-label text-ink-subtle">
-                  Step {item.step}
-                </span>
-                <h3 className="mt-3 font-display text-xl font-semibold text-ink">
-                  {item.title}
-                </h3>
-                <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-                  {item.text}
-                </p>
-              </div>
+              { title: "Connect your accounts", text: "Sign in to each platform once through its official page. Connect your AI app the same way." },
+              { title: "Say what to post", text: "Ask your AI, or use the composer: add your video or photos, write the caption once, pick the channels." },
+              { title: "It goes out, you see it land", text: "Publish now or pick the moment. Each channel reports back, and anything that needs you is flagged in plain words." },
+            ].map((step, i) => (
+              <li key={step.title} className="lp-card relative overflow-hidden p-6 md:p-7">
+                <span className="lp-display text-5xl text-[#FFC48A]/80">{String(i + 1).padStart(2, "0")}</span>
+                <h3 className="mt-5 text-xl font-medium tracking-[-0.02em]">{step.title}</h3>
+                <p className="mt-2 text-[15px] leading-relaxed text-[#FAF6F0]/60">{step.text}</p>
+              </li>
             ))}
-          </div>
-          <div className="mt-10 text-center">
-            <Button asChild variant="primary" size="lg">
-              <Link href="/login">Start posting</Link>
-            </Button>
+          </ol>
+          <div className="mt-12 flex justify-center">
+            <Waitlist label="Get early access" />
           </div>
         </section>
 
-        <section
-          id="features"
-          className="mx-auto max-w-6xl scroll-mt-20 px-4 pb-16 md:pb-24"
-        >
-          <div className="space-y-16 md:space-y-24">
-            <div className="grid items-center gap-8 md:grid-cols-2">
-              <div>
-                <UtilityLabel>Workspace</UtilityLabel>
-                <h3 className="mt-3 font-display text-2xl font-semibold tracking-[-0.035em] text-ink md:text-3xl">
-                  One workspace for the whole posting loop.
-                </h3>
-                <p className="mt-3 text-sm leading-relaxed text-ink-muted md:text-base">
-                  Create a post, manage connected accounts, browse the calendar,
-                  keep media handy, and review activity history—all without
-                  leaving Post Social.
-                </p>
-                <ul className="mt-5 space-y-2 text-sm text-ink-muted">
-                  {[
-                    "Connected accounts and connection status",
-                    "Calendar view of scheduled posts",
-                    "Media library for reuse",
-                    "Activity history with plain-language status",
-                  ].map((item) => (
-                    <li key={item} className="flex items-start gap-2">
-                      <Check
-                        className="mt-0.5 h-4 w-4 shrink-0 text-success"
-                        aria-hidden="true"
-                      />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <ScreenshotFrame
-                src="/landing/post-social-create.png"
-                alt="Post Social workspace with the create post form"
-                sizes="(max-width: 768px) 100vw, 50vw"
-              />
-            </div>
-
-            <div className="grid items-center gap-8 md:grid-cols-2">
-              <div className="order-2 md:order-1">
-                <ScreenshotFrame
-                  src="/landing/post-social-calendar.png"
-                  alt="Post Social calendar view of scheduled posts"
-                  sizes="(max-width: 768px) 100vw, 50vw"
-                />
-              </div>
-              <div className="order-1 md:order-2">
-                <UtilityLabel>Scheduling</UtilityLabel>
-                <h3 className="mt-3 font-display text-2xl font-semibold tracking-[-0.035em] text-ink md:text-3xl">
-                  Schedule it, then get back to your work.
-                </h3>
-                <p className="mt-3 text-sm leading-relaxed text-ink-muted md:text-base">
-                  Pick a date and time for each post. The calendar keeps your
-                  plan visible so you can batch content and move on to the next
-                  thing.
-                </p>
-                <div className="mt-5 flex flex-wrap gap-3">
-                  <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-canvas-ivory px-3 py-1.5 text-xs font-medium text-ink">
-                    <CalendarDays
-                      className="h-3.5 w-3.5 text-accent"
-                      aria-hidden="true"
-                    />
-                    Calendar view
-                  </span>
-                  <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-canvas-ivory px-3 py-1.5 text-xs font-medium text-ink">
-                    <Clock
-                      className="h-3.5 w-3.5 text-accent"
-                      aria-hidden="true"
-                    />
-                    Publish later
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid items-center gap-8 md:grid-cols-2">
-              <div>
-                <UtilityLabel>Activity</UtilityLabel>
-                <h3 className="mt-3 font-display text-2xl font-semibold tracking-[-0.035em] text-ink md:text-3xl">
-                  Know what happened after you click publish.
-                </h3>
-                <p className="mt-3 text-sm leading-relaxed text-ink-muted md:text-base">
-                  Each destination gets its own status: processing, published,
-                  or needs attention. No guessing, no tab switching to check.
-                </p>
-                <ul className="mt-5 space-y-2 text-sm text-ink-muted">
-                  {[
-                    "Per-destination status",
-                    "Plain-language activity feed",
-                    "Clear next step when something needs you",
-                  ].map((item) => (
-                    <li key={item} className="flex items-start gap-2">
-                      <Check
-                        className="mt-0.5 h-4 w-4 shrink-0 text-success"
-                        aria-hidden="true"
-                      />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <ScreenshotFrame
-                src="/landing/post-social-activity.png"
-                alt="Post Social activity feed with publishing status"
-                sizes="(max-width: 768px) 100vw, 50vw"
-              />
-            </div>
-          </div>
+        {/* ===== Features, with real screens ===== */}
+        <section id="features" className="mx-auto max-w-6xl scroll-mt-8 space-y-24 px-5 pb-24 sm:px-8 md:space-y-32 md:pb-32">
+          <Feature
+            label="Create"
+            title="Write it once. It fits everywhere."
+            text="Drop in a video or photos, write the caption, and pick your channels. The preview shows each platform's version, and Post Social checks lengths, sizes and formats before anything goes out."
+            points={["Live preview for every channel", "Per-platform options, like TikTok privacy and disclosures", "Your media library, ready to reuse"]}
+            src="/landing/app-create.webp"
+            alt="The Post Social composer with a video, caption, chosen channels and a live preview"
+          />
+          <Feature
+            flip
+            label="Calendar"
+            title="Schedule it, then get back to your work."
+            text="See the week ahead at a glance, with every post shown as its picture and the channels it goes to. Batch your content, then move on."
+            points={["Week, two-week and list views", "Posts from you and from your AI, side by side", "Reschedule in a couple of clicks"]}
+            src="/landing/app-calendar.webp"
+            alt="The Post Social calendar showing a week of scheduled posts"
+          />
+          <Feature
+            label="Activity"
+            title="Know what happened after you hit publish."
+            text="Every channel reports back on its own: live, scheduled, or needs attention. When something needs you, it says what and why, in plain words."
+            points={["A status for every channel", "Who posted it: you, Claude, ChatGPT or an automation", "A clear next step when something needs you"]}
+            src="/landing/app-activity.webp"
+            alt="The Post Social activity feed with a status for each post and channel"
+          />
+          <Feature
+            flip
+            label="Accounts & AI"
+            title="Your channels and your AI, in one place."
+            text="Connect each platform through its official sign-in, then connect Claude or ChatGPT in a click. See exactly which apps can post for you, and switch any of them off at any time."
+            points={["Official sign-in for every platform", "Connected AI apps and API keys, with what each can do", "Disconnect anything, any time"]}
+            src="/landing/app-accounts.webp"
+            alt="Post Social connected accounts and connected AI apps"
+          />
         </section>
 
-        <section
-          id="platforms"
-          className="scroll-mt-20 border-y border-border bg-surface/40"
-        >
-          <div className="mx-auto max-w-6xl px-4 py-16 md:py-24">
-            <SectionHeading>
-              Starting with the places your content already lives.
-            </SectionHeading>
-            <Body className="mt-4">
-              Eight destinations, one workspace. Each connects through the
-              platform&apos;s official sign-in.
-            </Body>
-            <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {[
-                {
-                  platform: "tiktok" as const,
-                  name: "TikTok",
-                  description:
-                    "Direct video publishing with audience, interaction, and disclosure choices.",
-                },
-                {
-                  platform: "instagram" as const,
-                  name: "Instagram",
-                  description:
-                    "Photo posts and Reels for connected professional accounts.",
-                },
-                {
-                  platform: "facebook" as const,
-                  name: "Facebook Pages",
-                  description: "Photo publishing for Pages you manage.",
-                },
-                {
-                  platform: "threads" as const,
-                  name: "Threads",
-                  description: "Text posts and one image for connected accounts.",
-                },
-                {
-                  platform: "youtube" as const,
-                  name: "YouTube",
-                  description: "Video uploads to your channel.",
-                },
-                {
-                  platform: "linkedin" as const,
-                  name: "LinkedIn",
-                  description: "Posts for your professional profile.",
-                },
-                {
-                  platform: "bluesky" as const,
-                  name: "Bluesky",
-                  description: "Text and image posts.",
-                },
-                {
-                  platform: "x" as const,
-                  name: "X",
-                  description: "Text and media posts.",
-                },
-              ].map((platform) => (
-                <div
-                  key={platform.platform}
-                  className="rounded-2xl border border-border bg-canvas/60 p-6 transition-colors hover:border-border-strong"
-                >
-                  <PlatformCardIcon platform={platform.platform} />
-                  <h3 className="mt-4 font-display text-lg font-semibold text-ink">
-                    {platform.name}
-                  </h3>
-                  <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-                    {platform.description}
-                  </p>
+        {/* ===== Platforms ===== */}
+        <section id="platforms" className="lp-band scroll-mt-8">
+          <div className="mx-auto max-w-6xl px-5 py-24 sm:px-8 md:py-28">
+            <Label>Platforms</Label>
+            <h2 className="lp-h2 mt-3 max-w-3xl">Starting with the places your content already lives.</h2>
+            <p className="mt-5 max-w-2xl leading-relaxed text-[#FAF6F0]/65 md:text-lg">Five platforms, one workspace. Each connects through the platform&apos;s official sign-in.</p>
+            <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {PLATFORMS.map((p) => (
+                <div key={p.platform} className="lp-card p-6 transition-colors hover:border-white/20">
+                  <PlatformCardIcon platform={p.platform} />
+                  <h3 className="mt-4 text-lg font-medium">{p.name}</h3>
+                  <p className="mt-2 text-[15px] leading-relaxed text-[#FAF6F0]/60">{p.text}</p>
                 </div>
               ))}
+              <div className="lp-card flex flex-col justify-between border-dashed p-6">
+                <div className="flex gap-2 opacity-60">
+                  <PlatformCardIcon platform="linkedin" />
+                  <PlatformCardIcon platform="bluesky" />
+                  <PlatformCardIcon platform="x" />
+                </div>
+                <div>
+                  <h3 className="mt-4 text-lg font-medium">Coming next</h3>
+                  <p className="mt-2 text-[15px] leading-relaxed text-[#FAF6F0]/60">LinkedIn, Bluesky and X.</p>
+                </div>
+              </div>
             </div>
           </div>
         </section>
 
-        <section
-          id="faq"
-          className="mx-auto max-w-3xl scroll-mt-20 px-4 py-16 md:py-24"
-        >
-          <SectionHeading className="text-center">FAQ</SectionHeading>
-          <div className="mt-10 space-y-3">
-            {[
-              {
-                question: "Which platforms are supported?",
-                answer:
-                  "TikTok, Instagram, Facebook Pages, Threads, YouTube, LinkedIn, Bluesky, and X. Each uses official platform APIs.",
-              },
-              {
-                question: "What can I publish?",
-                answer:
-                  "TikTok videos, Instagram photos and Reels for connected professional accounts, Facebook Page photos, Threads text posts with one optional image, YouTube videos, and text or media posts for LinkedIn, Bluesky, and X. Eligibility depends on your account type and platform requirements.",
-              },
-              {
-                question: "Can I schedule posts?",
-                answer:
-                  "Yes. Choose publish now or a future date and time, then track it in the calendar.",
-              },
-              {
-                question: "Can an AI agent publish for me?",
-                answer:
-                  "Yes. Connect ChatGPT, Claude, or your own automations, and they can draft, schedule, and publish for you directly.",
-              },
-              {
-                question: "Do you need my social passwords?",
-                answer:
-                  "No. We use official authorization pages from each platform.",
-              },
-              {
-                question: "Is Post Social only for developers?",
-                answer:
-                  "No. If you can ask an AI for something in plain language, you can use Post Social. No code required.",
-              },
-            ].map((faq) => (
-              <details
-                key={faq.question}
-                className="group rounded-xl border border-border bg-canvas/60 open:bg-surface/40"
-              >
-                <summary className="flex cursor-pointer list-none items-center justify-between rounded-xl px-5 py-4 text-sm font-semibold text-ink transition-colors hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-                  {faq.question}
-                  <ChevronRight
-                    className="h-4 w-4 shrink-0 text-ink-subtle transition-transform group-open:rotate-90"
-                    aria-hidden="true"
-                  />
+        {/* ===== FAQ ===== */}
+        <section id="faq" className="mx-auto max-w-3xl scroll-mt-8 px-5 py-24 sm:px-8 md:py-32">
+          <div className="text-center">
+            <Label>FAQ</Label>
+            <h2 className="lp-h2 mt-3">Questions, answered.</h2>
+          </div>
+          <div className="mt-12 space-y-3">
+            {FAQ.map((item) => (
+              <details key={item.q} className="lp-card group open:bg-white/[0.06]">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 font-medium [&::-webkit-details-marker]:hidden">
+                  {item.q}
+                  <svg viewBox="0 0 16 16" aria-hidden="true" className="size-4 flex-none text-[#FAF6F0]/50 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                    <path d="m6 3.5 4.5 4.5L6 12.5" />
+                  </svg>
                 </summary>
-                <div className="px-5 pb-5 text-sm leading-relaxed text-ink-muted">
-                  {faq.answer}
-                </div>
+                <p className="px-5 pb-5 text-[15px] leading-relaxed text-[#FAF6F0]/65">{item.a}</p>
               </details>
             ))}
           </div>
         </section>
 
-        <section className="mx-auto max-w-4xl px-4 pb-16 pt-4 text-center md:pb-24">
-          <div className="grooved-surface rounded-3xl border border-border bg-surface/60 p-8 md:p-14">
-            <UtilityLabel>Your content is ready to move</UtilityLabel>
-            <h2 className="mt-4 font-display text-3xl font-semibold tracking-[-0.04em] text-ink md:text-4xl">
-              Spend less time posting. Keep showing up.
+        {/* ===== Closing call, back at the lake ===== */}
+        <section className="px-5 pb-24 sm:px-8 md:pb-32">
+          <div className="relative isolate mx-auto max-w-5xl overflow-hidden rounded-[28px] border border-white/10 px-6 py-16 text-center md:px-14 md:py-24">
+            <Image src="/landing/hero-dusk-2560.webp" alt="" fill sizes="(max-width: 1024px) 100vw, 1024px" className="-z-10 object-cover object-[30%_70%]" />
+            <div aria-hidden="true" className="absolute inset-0 -z-10 bg-[linear-gradient(to_bottom,rgba(11,8,22,0.55),rgba(11,8,22,0.75))]" />
+            <Label>Your content is ready to move</Label>
+            <h2 className="lp-h2 mx-auto mt-4 max-w-2xl">
+              Spend less time posting. <span className="lp-display lp-ink">Keep showing up.</span>
             </h2>
-            <Body className="mx-auto mt-4">
-              Publish across eight destinations from one workspace, or straight
-              from your AI.
-            </Body>
-            <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <Button asChild variant="primary" size="lg">
-                <Link href="/login">Start my first post</Link>
-              </Button>
-              <Button asChild variant="secondary" size="lg">
-                <Link href="/login">Log in</Link>
-              </Button>
+            <p className="mx-auto mt-5 max-w-xl leading-relaxed text-[#FAF6F0]/70 md:text-lg">Publish everywhere from one workspace, or straight from your AI. We&apos;re letting people in a few at a time.</p>
+            <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <Waitlist />
+              <Link href={BETA_LOGIN} className="lp-glass inline-flex h-11 items-center rounded-full px-5 text-sm text-[#FAF6F0] transition hover:bg-white/10">
+                Sign in
+              </Link>
             </div>
           </div>
         </section>
       </main>
 
-      <footer className="border-t border-border bg-surface">
-        <div className="mx-auto max-w-6xl px-4 py-10 md:px-8">
-          <div className="flex flex-col items-start justify-between gap-8 md:flex-row md:items-center">
-            <div>
-              <Brand size="sm" />
-              <p className="mt-2 max-w-xs text-sm text-ink-subtle">
-                Social media posting for AI-native creators and operators.
-              </p>
+      <footer className="border-t border-white/[0.07]">
+        <div className="mx-auto flex max-w-6xl flex-col gap-8 px-5 py-10 sm:px-8 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="flex items-center gap-2.5">
+              {/* eslint-disable-next-line @next/next/no-img-element -- tiny static svg */}
+              <img src="/post-social-icon.svg" alt="" className="size-6 rounded-[7px]" />
+              <span className="lp-wordmark text-[12px]">Post Social</span>
             </div>
-            <nav
-              className="flex flex-wrap items-center gap-6 text-sm text-ink-muted"
-              aria-label="Legal"
-            >
-              <Link
-                href="/terms"
-                className="rounded-md px-1 py-1 transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-              >
-                Terms
-              </Link>
-              <Link
-                href="/privacy"
-                className="rounded-md px-1 py-1 transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-              >
-                Privacy
-              </Link>
-              <Link
-                href="/data-deletion"
-                className="rounded-md px-1 py-1 transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-              >
-                Data deletion
-              </Link>
-            </nav>
+            <p className="mt-3 max-w-xs text-sm text-[#FAF6F0]/45">Social media management for AI-native creators and operators.</p>
           </div>
-          <div className="mt-8 border-t border-border pt-6 text-xs text-ink-subtle">
-            © {year} Pentridge Media. All rights reserved.
-          </div>
+          <nav aria-label="Legal" className="flex flex-wrap gap-6 text-sm text-[#FAF6F0]/55">
+            <Link href="/docs" className="hover:text-[#FAF6F0]">Docs</Link>
+            <Link href="/privacy" className="hover:text-[#FAF6F0]">Privacy</Link>
+            <Link href="/terms" className="hover:text-[#FAF6F0]">Terms</Link>
+            <Link href="/data-deletion" className="hover:text-[#FAF6F0]">Data deletion</Link>
+          </nav>
         </div>
+        <p className="mx-auto max-w-6xl px-5 pb-8 text-xs text-[#FAF6F0]/35 sm:px-8">© 2026 Pentridge Media. All rights reserved.</p>
       </footer>
     </div>
   );
