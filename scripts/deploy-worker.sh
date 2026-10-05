@@ -31,6 +31,9 @@ trap 'rm -f "$env_file"' EXIT
   done
   # Dev only publishes to the owner's approved test accounts (platform account ids).
   if [[ "$target" == "dev" ]]; then echo "PUBLISH_ALLOWLIST=$(secret PUBLISH_ALLOWLIST)"; fi
+  # Post stats only for platforms switched on in this environment (optional; none on prod
+  # until each platform's review approves the read permissions).
+  echo "ANALYTICS_PLATFORMS=$(secret ANALYTICS_PLATFORMS 2>/dev/null || true)"
   echo "MEDIA_RETENTION_DAYS=30"
   echo "WORKER_CONCURRENCY=3"
 } > "$env_file"

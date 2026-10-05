@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { BETA_LOGIN } from "@/lib/insforge/auth-rules";
 import { currentUser, insforgeServerClient } from "@/lib/insforge/server";
 import { signOut } from "./actions";
+import { analyticsEnabled } from "./stats-switch";
 
 export const metadata = { title: "Post Social beta" };
 
@@ -39,6 +40,7 @@ export default async function BetaHomePage() {
         <p className="mt-4 flex gap-6">
           <Link href="/beta/accounts" className="text-sm font-medium text-accent underline-offset-4 hover:underline">Connected accounts →</Link>
           <Link href="/beta/media" className="text-sm font-medium text-accent underline-offset-4 hover:underline">Media library →</Link>
+          {analyticsEnabled() && <Link href="/beta/stats" className="text-sm font-medium text-accent underline-offset-4 hover:underline">Stats →</Link>}
           <Link href="/beta/usage" className="text-sm font-medium text-accent underline-offset-4 hover:underline">Usage →</Link>
           <Link href="/beta/keys" className="text-sm font-medium text-accent underline-offset-4 hover:underline">API keys →</Link>
         </p>

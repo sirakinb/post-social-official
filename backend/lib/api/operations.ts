@@ -2,14 +2,21 @@
 // tools, the OpenAPI document (and later the CLI) are all generated from this list, so they
 // cannot drift apart. Each operation runs the same service code as the web app.
 import { ApiError, requireUuid, type AgentCaller, type Sql } from "../access";
-import { DISPLAY_NAMES, PLATFORMS } from "../connections/platforms";
+import { DISPLAY_NAMES, PLATFORMS, type Platform } from "../connections/platforms";
+import { ANALYTICS_PERIODS, listAnalytics, postAnalytics, refreshAnalytics } from "../analytics";
 import { mediaActions, type MediaDeps } from "../media/service";
 import type { R2 } from "../media/r2";
 import { postActions } from "../publishing/service";
 import { listAccounts, listMedia, listPosts, listResults } from "./reads";
 import { PERIODS, usageReport } from "../usage";
 
-export type ApiDeps = { sql: Sql; r2: R2; newId: () => string; webAppUrl: string };
+export type ApiDeps = {
+  sql: Sql;
+  r2: R2;
+  newId: () => string;
+  webAppUrl: string;
+  analyticsPlatforms: Platform[]; // platforms whose stats are switched on here (none: no stats tools)
+};
 
 type JsonSchema = Record<string, unknown>;
 export type Operation = {
@@ -22,6 +29,7 @@ export type Operation = {
   readOnly?: boolean;
   destructive?: boolean;
   creates?: boolean; // REST answers 201 Created
+  analytics?: boolean; // only offered where stats are switched on
   run: (deps: ApiDeps, caller: AgentCaller, input: Record<string, unknown>) => Promise<unknown>;
 };
 
@@ -314,6 +322,46 @@ export const operations: Operation[] = [
     run: (deps, caller, input) => usageReport(deps.sql, caller, { ...input, workspace_id: caller.workspaceId }),
   },
   {
+    name: "list_analytics",
+    analytics: true,
+    title: "Post stats",
+    description:
+      "Lists published posts with their stats (views, likes, comments, shares, and saves, reposts or quotes where the platform reports them), plus totals per platform. Sort by any stat to find what performed best.",
+    method: "GET",
+    path: "/v1/analytics",
+    input: {
+      properties: {
+        platform: { type: "string", enum: PLATFORMS },
+        period: { type: "string", enum: [...ANALYTICS_PERIODS], default: "last_30_days", description: "Posts published in this period." },
+        sort: { type: "string", enum: ["published_at", "views", "likes", "comments", "shares", "saves", "reposts", "quotes"], default: "published_at" },
+        ...paging,
+      },
+    },
+    readOnly: true,
+    run: (deps, caller, input) => listAnalytics(deps.sql, caller, deps.analyticsPlatforms, { ...input, workspace_id: caller.workspaceId }),
+  },
+  {
+    name: "get_post_analytics",
+    analytics: true,
+    title: "One post's stats over time",
+    description: "Shows one post's stats on each platform it went to, with a day-by-day history.",
+    method: "GET",
+    path: "/v1/posts/{post_id}/analytics",
+    input: { properties: { post_id: id("post") }, required: ["post_id"] },
+    readOnly: true,
+    run: (deps, caller, input) => postAnalytics(deps.sql, caller, deps.analyticsPlatforms, input),
+  },
+  {
+    name: "refresh_analytics",
+    analytics: true,
+    title: "Refresh stats now",
+    description: "Fetches fresh stats from the platforms for one post (or all recent posts) instead of waiting for the next automatic update. At most every 30 minutes per post.",
+    method: "POST",
+    path: "/v1/analytics/refresh",
+    input: { properties: { post_id: id("post") } },
+    run: (deps, caller, input) => refreshAnalytics(deps.sql, caller, deps.analyticsPlatforms, { ...input, workspace_id: caller.workspaceId }),
+  },
+  {
     name: "list_post_results",
     title: "Publishing results",
     description: "Shows each account's outcome: published (with the live link), failed (with the platform's reason in plain language), or still in progress. One post's results, or the most recent overall.",
@@ -325,3 +373,8 @@ export const operations: Operation[] = [
       listResults(deps.sql, caller, { ...input, workspace_id: caller.workspaceId, post_id: input.post_id === undefined || input.post_id === "" ? undefined : requireUuid(input.post_id, "Post") }),
   },
 ];
+
+// The operations offered in an environment: stats tools only where stats are switched on.
+export function availableOperations(deps: Pick<ApiDeps, "analyticsPlatforms">) {
+  return operations.filter((op) => !op.analytics || deps.analyticsPlatforms.length > 0);
+}

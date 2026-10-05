@@ -29,7 +29,7 @@ describe.skipIf(!enabled)("usage and limits on the dev backend (US-045)", () => 
   const person = (who: AccountResult): Caller => ({ userId: who.userId, displayName: "Person", entryPoint: "ui" });
   const handler = () =>
     createApiHandler({
-      sql, r2: {} as never, newId: () => crypto.randomUUID(), webAppUrl: "http://localhost:3333", publicApiUrl: "http://localhost:3333/api",
+      sql, r2: {} as never, newId: () => crypto.randomUUID(), webAppUrl: "http://localhost:3333", analyticsPlatforms: [], publicApiUrl: "http://localhost:3333/api",
       callerForKey, callerForAccessToken, userForToken: async () => null, allowedOrigins: [],
     });
   const call = async (url: string, body?: unknown) => {

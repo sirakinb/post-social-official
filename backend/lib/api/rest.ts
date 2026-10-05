@@ -3,7 +3,7 @@
 // with the same key within 24 hours returns the first result instead of acting twice.
 import { ApiError, type AgentCaller } from "../access";
 import { sha256Hex } from "../connections/crypto";
-import { operations, type ApiDeps, type Operation } from "./operations";
+import { availableOperations, operations, type ApiDeps, type Operation } from "./operations";
 
 const CODES: Record<number, string> = {
   400: "invalid_request",
@@ -34,10 +34,10 @@ export function describeError(error: unknown): { status: number; message: string
   return { status: 500, message: "Something went wrong on our side. Try again in a moment." };
 }
 
-export function matchRoute(method: string, pathname: string): { operation: Operation; params: Record<string, string> } | { allowed: string[] } | null {
+export function matchRoute(method: string, pathname: string, ops: Operation[] = operations): { operation: Operation; params: Record<string, string> } | { allowed: string[] } | null {
   const parts = pathname.split("/").filter(Boolean);
   const allowed: string[] = [];
-  for (const operation of operations) {
+  for (const operation of ops) {
     const pattern = operation.path.split("/").filter(Boolean);
     if (pattern.length !== parts.length) continue;
     const params: Record<string, string> = {};
@@ -129,7 +129,7 @@ async function once(deps: ApiDeps, caller: AgentCaller, idempotencyKey: string, 
 }
 
 export async function handleRest(deps: ApiDeps, caller: AgentCaller, request: Request, pathname: string): Promise<{ status: number; body: unknown; headers?: Record<string, string> }> {
-  const route = matchRoute(request.method, pathname);
+  const route = matchRoute(request.method, pathname, availableOperations(deps));
   if (!route) return { status: 404, body: errorBody(404, "No such endpoint. See /v1/openapi.json.") };
   if ("allowed" in route) return { status: 405, body: errorBody(405, `Use ${route.allowed.join(" or ")}.`), headers: { Allow: route.allowed.join(", ") } };
   const { operation, params } = route;

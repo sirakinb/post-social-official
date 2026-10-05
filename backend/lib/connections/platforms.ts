@@ -46,6 +46,31 @@ export const SCOPES: Record<Platform, string[]> = {
   youtube: ["https://www.googleapis.com/auth/youtube.upload"],
 };
 
+// Read permissions for post stats (Phase 5D). They are requested only where analytics is
+// switched on (ANALYTICS_PLATFORMS), because platforms refuse or skip permissions their
+// review has not approved yet. Facebook's come from its Meta login configuration instead.
+export const ANALYTICS_SCOPES: Record<Platform, string[]> = {
+  tiktok: ["video.list"],
+  instagram: ["instagram_business_manage_insights"],
+  facebook: [],
+  threads: ["threads_manage_insights"],
+  youtube: ["https://www.googleapis.com/auth/youtube.readonly"],
+};
+
+export function analyticsPlatforms(setting: Settings): Platform[] {
+  let raw = "";
+  try {
+    raw = setting("ANALYTICS_PLATFORMS");
+  } catch {
+    return [];
+  }
+  return raw.split(",").map((p) => p.trim()).filter((p): p is Platform => PLATFORMS.includes(p as Platform));
+}
+
+export function scopesFor(platform: Platform, setting: Settings) {
+  return analyticsPlatforms(setting).includes(platform) ? [...SCOPES[platform], ...ANALYTICS_SCOPES[platform]] : SCOPES[platform];
+}
+
 export const DISPLAY_NAMES: Record<Platform, string> = {
   instagram: "Instagram",
   facebook: "Facebook Pages",
@@ -108,29 +133,29 @@ export function authorizeUrl(platform: Platform, state: string, redirectUri: str
     case "tiktok":
       url = new URL("https://www.tiktok.com/v2/auth/authorize/");
       url.searchParams.set("client_key", setting("TIKTOK_CLIENT_KEY"));
-      url.searchParams.set("scope", SCOPES.tiktok.join(","));
+      url.searchParams.set("scope", scopesFor("tiktok", setting).join(","));
       break;
     case "instagram":
       url = new URL("https://www.instagram.com/oauth/authorize");
       url.searchParams.set("client_id", setting("INSTAGRAM_APP_ID"));
-      url.searchParams.set("scope", SCOPES.instagram.join(","));
+      url.searchParams.set("scope", scopesFor("instagram", setting).join(","));
       break;
     case "facebook":
       url = new URL(`https://www.facebook.com/${META_VERSION}/dialog/oauth`);
       url.searchParams.set("client_id", setting("META_APP_ID"));
-      url.searchParams.set("scope", SCOPES.facebook.join(","));
+      url.searchParams.set("scope", scopesFor("facebook", setting).join(","));
       url.searchParams.set("config_id", setting("META_LOGIN_CONFIG_ID"));
       url.searchParams.set("override_default_response_type", "true");
       break;
     case "threads":
       url = new URL("https://threads.net/oauth/authorize");
       url.searchParams.set("client_id", setting("THREADS_APP_ID"));
-      url.searchParams.set("scope", SCOPES.threads.join(","));
+      url.searchParams.set("scope", scopesFor("threads", setting).join(","));
       break;
     case "youtube":
       url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
       url.searchParams.set("client_id", setting("GOOGLE_CLIENT_ID"));
-      url.searchParams.set("scope", SCOPES.youtube.join(" "));
+      url.searchParams.set("scope", scopesFor("youtube", setting).join(" "));
       // offline + consent makes Google return a refresh token every time.
       url.searchParams.set("access_type", "offline");
       url.searchParams.set("prompt", "consent");

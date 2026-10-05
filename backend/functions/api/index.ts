@@ -2,6 +2,7 @@
 import { createSql, userForToken } from "../../lib/insforge-admin";
 import { callerForKey } from "../../lib/api/keys";
 import { callerForAccessToken } from "../../lib/oauth/server";
+import { analyticsPlatforms } from "../../lib/connections/platforms";
 import { createR2 } from "../../lib/media/r2";
 import { createApiHandler } from "./handler";
 
@@ -26,6 +27,7 @@ export default createApiHandler({
   }),
   newId: () => crypto.randomUUID(),
   webAppUrl,
+  analyticsPlatforms: analyticsPlatforms(setting),
   publicApiUrl: `${webAppUrl}/api`,
   callerForKey,
   callerForAccessToken,

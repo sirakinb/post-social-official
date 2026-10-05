@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { BETA_LOGIN } from "@/lib/insforge/auth-rules";
 import { currentUser, insforgeServerClient } from "@/lib/insforge/server";
 import { signOut } from "../actions";
+import { analyticsEnabled } from "../stats-switch";
 import { MediaLibrary, type MediaItem } from "./media-library";
 
 export const metadata = { title: "Media · Post Social beta" };
@@ -63,6 +64,7 @@ export default async function BetaMediaPage({ searchParams }: { searchParams: Pr
               <Link href="/beta" className="text-ink-muted hover:text-ink">Home</Link>
               <Link href="/beta/accounts" className="text-ink-muted hover:text-ink">Accounts</Link>
               <Link href="/beta/media" aria-current="page" className="font-medium text-ink">Media</Link>
+              {analyticsEnabled() && <Link href="/beta/stats" className="text-ink-muted hover:text-ink">Stats</Link>}
               <Link href="/beta/usage" className="text-ink-muted hover:text-ink">Usage</Link>
               <Link href="/beta/keys" className="text-ink-muted hover:text-ink">API keys</Link>
             </nav>

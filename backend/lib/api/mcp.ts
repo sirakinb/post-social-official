@@ -2,7 +2,7 @@
 // gets a JSON reply; there are no sessions or server-sent streams. Tools are generated from
 // the operations list, so they match the REST API exactly.
 import type { AgentCaller } from "../access";
-import { operations, type ApiDeps, type Operation } from "./operations";
+import { availableOperations, type ApiDeps, type Operation } from "./operations";
 import { describeError } from "./rest";
 
 export const PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
@@ -57,10 +57,10 @@ export async function handleMcp(deps: ApiDeps, caller: AgentCaller, raw: unknown
     case "ping":
       return rpcResult(message.id, {});
     case "tools/list":
-      return rpcResult(message.id, { tools: operations.map(toolDefinition) });
+      return rpcResult(message.id, { tools: availableOperations(deps).map(toolDefinition) });
     case "tools/call": {
       const name = String(message.params?.name ?? "");
-      const operation = operations.find((o) => o.name === name);
+      const operation = availableOperations(deps).find((o) => o.name === name);
       if (!operation) return rpcError(message.id, -32602, `Unknown tool: ${name}`);
       const args = message.params?.arguments;
       if (args !== undefined && (typeof args !== "object" || args === null || Array.isArray(args))) {
