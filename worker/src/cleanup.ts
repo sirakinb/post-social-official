@@ -19,6 +19,7 @@ export async function expireUnusedMedia(sql: Sql, r2: R2, retentionDays: number)
       continue;
     }
     await r2.delete(item.storage_key);
+    await r2.delete(item.storage_key.replace(/\/[^/]*$/, "/poster.jpg")); // its poster frame, if any
     await sql(
       `WITH audit AS (
          INSERT INTO public.audit_events (workspace_id, entry_point, event_type, entity_type, entity_id, summary)

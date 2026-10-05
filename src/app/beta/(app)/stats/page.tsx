@@ -2,16 +2,13 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { getAccessTokenCookieName } from "@insforge/sdk/ssr";
-import { Brand } from "@/components/brand";
 import { PlatformCardIcon } from "@/components/platform-logos";
-import { Button } from "@/components/ui/button";
 import { BETA_LOGIN } from "@/lib/insforge/auth-rules";
 import { currentUser, insforgeServerClient } from "@/lib/insforge/server";
-import { signOut } from "../actions";
 import { analyticsEnabled } from "../stats-switch";
 import { RefreshButton } from "./refresh-button";
 
-export const metadata = { title: "Stats · Post Social beta" };
+export const metadata = { title: "Stats · Post Social" };
 
 type Stats = Partial<Record<"views" | "likes" | "comments" | "shares" | "saves" | "reposts" | "quotes", number>>;
 type Report = {
@@ -71,40 +68,23 @@ export default async function BetaStatsPage({ searchParams }: { searchParams: Pr
   };
 
   return (
-    <div className="technical-grid flex min-h-screen flex-col">
-      <header className="border-b border-border bg-[#080610]/90">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 md:px-8">
-          <div className="flex items-center gap-6">
-            <Brand />
-            <nav className="flex gap-4 text-sm">
-              <Link href="/beta" className="text-ink-muted hover:text-ink">Home</Link>
-              <Link href="/beta/accounts" className="text-ink-muted hover:text-ink">Accounts</Link>
-              <Link href="/beta/media" className="text-ink-muted hover:text-ink">Media</Link>
-              <Link href="/beta/stats" aria-current="page" className="font-medium text-ink">Stats</Link>
-              <Link href="/beta/usage" className="text-ink-muted hover:text-ink">Usage</Link>
-              <Link href="/beta/keys" className="text-ink-muted hover:text-ink">API keys</Link>
-            </nav>
-          </div>
-          <form action={signOut}><Button type="submit" variant="secondary">Sign out</Button></form>
-        </div>
-      </header>
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-10 md:px-8">
+    <div className="flex flex-col">
+      <main className="w-full max-w-[1100px] flex-1 px-8 pb-12 pt-5">
         {!current ? (
-          <p className="text-sm text-ink-muted">You are not a member of any workspace yet.</p>
+          <p className="text-sm text-ps-muted">You are not a member of any workspace yet.</p>
         ) : !report ? (
-          <p role="alert" className="text-sm text-error">Stats could not be loaded. Refresh the page to try again.</p>
+          <p role="alert" className="text-sm text-[#FF8A8E]">Stats could not be loaded. Refresh the page to try again.</p>
         ) : (
           <>
-            <p className="utility-label text-accent">{current.workspaces?.name ?? "Workspace"} / Stats</p>
             <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
               <div>
-                <h1 className="text-2xl font-semibold tracking-[-0.035em] text-ink">Post stats</h1>
-                <p className="mt-1 text-sm text-ink-muted">How your published posts are doing on {report.platforms.join(", ")}. Updated automatically; newer posts more often.</p>
+                <h1 className="m-0 text-lg font-medium text-ps-text">Post stats</h1>
+                <p className="mt-1 text-sm text-ps-muted">How your published posts are doing on {report.platforms.join(", ")}. Updated automatically; newer posts more often.</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <nav aria-label="Period" className="flex gap-1 rounded-lg border border-border bg-surface p-1 text-sm">
+                <nav aria-label="Period" className="flex gap-1 rounded-lg border border-ps-line bg-ps-surface p-1 text-sm">
                   {PERIODS.map((p) => (
-                    <Link key={p.id} href={link({ period: p.id })} aria-current={p.id === period ? "page" : undefined} className={`rounded-md px-3 py-1 ${p.id === period ? "bg-accent text-white" : "text-ink-muted hover:text-ink"}`}>{p.label}</Link>
+                    <Link key={p.id} href={link({ period: p.id })} aria-current={p.id === period ? "page" : undefined} className={`rounded-md px-3 py-1 ${p.id === period ? "bg-[#2A2142] text-ps-text" : "text-ps-muted hover:text-ps-text"}`}>{p.label}</Link>
                   ))}
                 </nav>
                 <RefreshButton workspaceId={current.workspace_id} />
@@ -113,21 +93,21 @@ export default async function BetaStatsPage({ searchParams }: { searchParams: Pr
 
             <section className="mt-8" aria-label="By platform">
               {report.totals_by_platform.length === 0 ? (
-                <p className="rounded-xl border border-border bg-surface p-8 text-center text-sm text-ink-muted">No published posts in this period yet. Stats appear a few minutes after a post goes live.</p>
+                <p className="rounded-xl border border-ps-line bg-ps-surface p-8 text-center text-sm text-ps-muted">No published posts in this period yet. Stats appear a few minutes after a post goes live.</p>
               ) : (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {report.totals_by_platform.map((t) => (
-                    <div key={t.platform} className="grooved-surface rounded-xl border border-border bg-surface p-4">
+                    <div key={t.platform} className="grooved-surface rounded-xl border border-ps-line bg-ps-surface p-4">
                       <div className="flex items-center gap-2">
                         <PlatformCardIcon platform={t.platform as "instagram"} size="sm" />
-                        <p className="text-sm font-medium text-ink">{t.platform_name}</p>
-                        <span className="ml-auto text-xs text-ink-subtle">{t.posts} post{t.posts === 1 ? "" : "s"}</span>
+                        <p className="text-sm font-medium text-ps-text">{t.platform_name}</p>
+                        <span className="ml-auto text-xs text-ps-subtle">{t.posts} post{t.posts === 1 ? "" : "s"}</span>
                       </div>
                       <dl className="mt-3 grid grid-cols-3 gap-2 text-center">
                         {COLUMNS.filter(([key]) => t.stats[key] !== undefined).slice(0, 6).map(([key, label]) => (
                           <div key={key}>
-                            <dt className="text-[11px] text-ink-subtle">{label}</dt>
-                            <dd className="text-lg font-semibold text-ink">{show(t.stats[key])}</dd>
+                            <dt className="text-[11px] text-ps-subtle">{label}</dt>
+                            <dd className="text-lg font-semibold text-ps-text">{show(t.stats[key])}</dd>
                           </div>
                         ))}
                       </dl>
@@ -140,17 +120,17 @@ export default async function BetaStatsPage({ searchParams }: { searchParams: Pr
             {report.posts.length > 0 && (
               <section className="mt-8" aria-label="Posts">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h2 className="text-sm font-semibold text-ink">Posts</h2>
+                  <h2 className="text-sm font-semibold text-ps-text">Posts</h2>
                   <nav aria-label="Sort" className="flex gap-3 text-xs">
                     {SORTS.map((s) => (
-                      <Link key={s.id} href={link({ sort: s.id })} aria-current={s.id === sort ? "page" : undefined} className={s.id === sort ? "font-semibold text-accent" : "text-ink-muted hover:text-ink"}>{s.label}</Link>
+                      <Link key={s.id} href={link({ sort: s.id })} aria-current={s.id === sort ? "page" : undefined} className={s.id === sort ? "font-semibold text-ps-plum-soft" : "text-ps-muted hover:text-ps-text"}>{s.label}</Link>
                     ))}
                   </nav>
                 </div>
-                <div className="mt-3 overflow-x-auto rounded-xl border border-border bg-surface">
+                <div className="mt-3 overflow-x-auto rounded-xl border border-ps-line bg-ps-surface">
                   <table className="w-full min-w-[720px] text-sm">
                     <thead>
-                      <tr className="text-left text-xs text-ink-subtle">
+                      <tr className="text-left text-xs text-ps-subtle">
                         <th className="px-4 py-2 font-medium">Post</th>
                         {COLUMNS.map(([key, label]) => <th key={key} className="px-3 py-2 text-right font-medium">{label}</th>)}
                       </tr>
@@ -162,22 +142,22 @@ export default async function BetaStatsPage({ searchParams }: { searchParams: Pr
                             <div className="flex items-start gap-2">
                               <PlatformCardIcon platform={p.platform as "instagram"} size="sm" />
                               <div className="min-w-0">
-                                <p className="truncate text-ink">{p.caption || "(no caption)"}</p>
-                                <p className="text-xs text-ink-subtle">
+                                <p className="truncate text-ps-text">{p.caption || "(no caption)"}</p>
+                                <p className="text-xs text-ps-subtle">
                                   {p.account} · {when(p.published_at)}
-                                  {p.live_url && <> · <a className="text-accent hover:underline" href={p.live_url} target="_blank" rel="noreferrer">View</a></>}
+                                  {p.live_url && <> · <a className="text-ps-plum-soft hover:underline" href={p.live_url} target="_blank" rel="noreferrer">View</a></>}
                                 </p>
-                                {p.note && <p className="mt-1 text-xs text-warning">{p.note}</p>}
+                                {p.note && <p className="mt-1 text-xs text-ps-attention">{p.note}</p>}
                               </div>
                             </div>
                           </td>
-                          {COLUMNS.map(([key]) => <td key={key} className="px-3 py-3 text-right tabular-nums text-ink">{show(p.stats[key])}</td>)}
+                          {COLUMNS.map(([key]) => <td key={key} className="px-3 py-3 text-right tabular-nums text-ps-text">{show(p.stats[key])}</td>)}
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-                <p className="mt-2 text-xs text-ink-subtle">“—” means the platform doesn&apos;t report that number for this post.</p>
+                <p className="mt-2 text-xs text-ps-subtle">“—” means the platform doesn&apos;t report that number for this post.</p>
               </section>
             )}
           </>

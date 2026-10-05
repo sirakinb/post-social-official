@@ -120,6 +120,11 @@ export function createR2(config: R2Config, fetchImpl: typeof fetch = fetch) {
       };
     },
 
+    // A small file in one request (video poster frames).
+    async put(key: string, body: Uint8Array<ArrayBuffer>, contentType: string) {
+      await expectOk(await send(objectUrl(key), { method: "PUT", body, headers: { "Content-Type": contentType } }), "save file");
+    },
+
     async delete(key: string) {
       const response = await send(objectUrl(key), { method: "DELETE" });
       if (!response.ok && response.status !== 404) await expectOk(response, "delete file");
