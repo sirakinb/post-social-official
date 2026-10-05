@@ -12,13 +12,16 @@ export async function mediaLinks(sql: Sql, r2: R2, caller: Caller, input: { work
   await membership(sql, caller, workspaceId, false);
   const ids = Array.isArray(input.media_ids) ? [...new Set(input.media_ids.slice(0, MAX))].map((id) => requireUuid(id, "Media")) : [];
   if (!ids.length) return { links: {} };
-  const rows = await sql<{ id: string; storage_key: string; media_type: string; status: string }>(
-    `SELECT id, storage_key, media_type, status FROM public.media_assets WHERE workspace_id = $1 AND id = ANY($2::uuid[])`,
+  const rows = await sql<{ id: string; storage_key: string; media_type: string; status: string; poster_key: string | null }>(
+    `SELECT id, storage_key, media_type, status, poster_key FROM public.media_assets WHERE workspace_id = $1 AND id = ANY($2::uuid[])`,
     [workspaceId, ids],
   );
   const links: Record<string, string> = {};
+  const posters: Record<string, string> = {};
   for (const row of rows) {
-    if (row.status === "ready") links[row.id] = await r2.presignGet(row.storage_key, SECONDS);
+    if (row.status !== "ready") continue;
+    links[row.id] = await r2.presignGet(row.storage_key, SECONDS);
+    if (row.poster_key) posters[row.id] = await r2.presignGet(row.poster_key, SECONDS);
   }
-  return { links, expires_in_seconds: SECONDS };
+  return { links, posters, expires_in_seconds: SECONDS };
 }

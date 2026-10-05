@@ -32,7 +32,11 @@ export async function getCreatorInfo(accountId: string): Promise<Result<CreatorI
   return data ? { ok: true, data } : { ok: false, error: "TikTok didn't return this account's settings. Try again in a moment." };
 }
 
-export async function getMediaLinks(workspaceId: string, mediaIds: string[]): Promise<Record<string, string>> {
-  if (!mediaIds.length) return {};
-  return (await callServer<{ links: Record<string, string> }>("media_links", { workspace_id: workspaceId, media_ids: mediaIds }))?.links ?? {};
+export type MediaLinks = { links: Record<string, string>; posters: Record<string, string> };
+
+// View links for media (and a still frame for each video), valid for an hour.
+export async function getMediaLinks(workspaceId: string, mediaIds: string[]): Promise<MediaLinks> {
+  if (!mediaIds.length) return { links: {}, posters: {} };
+  const r = await callServer<MediaLinks>("media_links", { workspace_id: workspaceId, media_ids: mediaIds.slice(0, 60) });
+  return { links: r?.links ?? {}, posters: r?.posters ?? {} };
 }

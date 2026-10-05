@@ -4,7 +4,7 @@
 
 export type Platform = "instagram" | "facebook" | "threads" | "youtube" | "tiktok";
 export type ComposerAccount = { id: string; platform: Platform; name: string; handle: string; avatarUrl: string | null; captionMax: number | null; videoMaxSeconds: number | null };
-export type ComposerMedia = { id: string; name: string; type: "image" | "video"; width: number | null; height: number | null; duration: number | null; url: string | null };
+export type ComposerMedia = { id: string; name: string; type: "image" | "video"; width: number | null; height: number | null; duration: number | null; url: string | null; poster?: string | null };
 
 // Per-account settings as the person chose them. `caption` overrides the shared caption.
 export type PlatformChoice = {

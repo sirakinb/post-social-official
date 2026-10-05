@@ -117,14 +117,16 @@ export async function loadHome(client: Client, workspace: Workspace) {
   type UpRow = { id: string; caption: string; scheduled_at: string | null; status: string; destinations: Array<{ platform: PlatformId; connected_accounts: { display_name: string } | null }>; post_media: Array<{ position: number; media_assets: { id: string; media_type: string; status: string } | null }> };
   const upRows = (upcomingRes.data ?? []) as unknown as UpRow[];
   const firstMedia = upRows.map((p) => [...p.post_media].sort((a, b) => a.position - b.position)[0]?.media_assets ?? null);
-  const imageIds = firstMedia.filter((m) => m && m.media_type === "image" && m.status === "ready").map((m) => m!.id);
-  const links = imageIds.length ? ((await callServer<{ links: Record<string, string> }>("media_links", { workspace_id: ws, media_ids: imageIds }))?.links ?? {}) : {};
+  const readyIds = firstMedia.filter((m) => m && m.status === "ready").map((m) => m!.id);
+  const linkSet = readyIds.length ? await callServer<{ links: Record<string, string>; posters: Record<string, string> }>("media_links", { workspace_id: ws, media_ids: readyIds }) : null;
+  const links = linkSet?.links ?? {};
+  const posters = linkSet?.posters ?? {};
   const upcoming: UpcomingPost[] = upRows.map((p, i) => ({
     id: p.id,
     caption: p.caption,
     scheduledAt: p.scheduled_at,
     status: p.status,
-    thumb: firstMedia[i] ? { url: links[firstMedia[i]!.id] ?? null, isVideo: firstMedia[i]!.media_type === "video" } : null,
+    thumb: firstMedia[i] ? { url: (firstMedia[i]!.media_type === "video" ? posters : links)[firstMedia[i]!.id] ?? null, isVideo: firstMedia[i]!.media_type === "video" } : null,
     destinations: p.destinations.map((d) => ({ platform: d.platform, account: d.connected_accounts?.display_name ?? "" })),
   }));
 

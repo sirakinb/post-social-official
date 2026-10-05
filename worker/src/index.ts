@@ -8,6 +8,7 @@ import { runNextJob, type WorkerDeps } from "./jobs";
 import { probeStoredFile } from "./probe";
 import { safeFetch } from "./safe-fetch";
 import { refreshDueTokens } from "./tokens";
+import { makePosters } from "./posters";
 import { runNextPublishJob } from "./publish/runner";
 import { runMetricsSweep } from "./analytics/runner";
 import { PLATFORMS, type Platform } from "../../backend/lib/connections/platforms";
@@ -91,6 +92,7 @@ for (let slot = 0; slot < concurrency; slot++) void jobLoop(slot);
 void every(60 * 60 * 1000, "retention sweep", () => expireUnusedMedia(sql, r2, retentionDays));
 void every(6 * 60 * 60 * 1000, "orphan sweep", () => removeOrphanedFiles(sql, r2));
 void every(60 * 60 * 1000, "sign-in sweep", () => removeExpiredSignIns(sql));
+void every(60 * 1000, "poster sweep", () => makePosters(sql, r2));
 // Post stats, only for platforms switched on here (ANALYTICS_PLATFORMS, e.g. "instagram,threads").
 const analyticsPlatforms = (process.env.ANALYTICS_PLATFORMS ?? "").split(",").map((p) => p.trim()).filter((p): p is Platform => PLATFORMS.includes(p as Platform));
 if (analyticsPlatforms.length) void every(2 * 60 * 1000, "stats sweep", () => runMetricsSweep({ sql, setting: (name) => setting(name), platforms: analyticsPlatforms, log }));

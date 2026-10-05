@@ -67,7 +67,7 @@ function MediaView({ media, className, cover }: { media: ComposerMedia | null; c
   if (!media) return <div className={`${className} bg-gradient-to-b from-[#2A2142] to-[#0A0A0F]`} />;
   if (!media.url) return <div className={`${className} flex items-center justify-center bg-[#1A1430] text-xs text-white/50`}>{media.name}</div>;
   if (media.type === "video") {
-    return <video src={media.url} className={`${className} ${cover ? "object-cover" : ""}`} muted loop playsInline autoPlay preload="metadata" />;
+    return <video src={media.url} poster={media.poster ?? undefined} className={`${className} ${cover ? "object-cover" : ""}`} muted loop playsInline autoPlay preload="metadata" />;
   }
   // eslint-disable-next-line @next/next/no-img-element -- signed link to private storage
   return <img src={media.url} alt="" className={`${className} ${cover ? "object-cover" : ""}`} />;

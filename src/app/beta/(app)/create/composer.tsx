@@ -35,12 +35,12 @@ const toLocalInput = (iso: string) => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-export function Composer({ workspaceId, accounts, library: initialLibrary, editing }: { workspaceId: string; accounts: ComposerAccount[]; library: ComposerMedia[]; editing: EditingPost | null }) {
+export function Composer({ workspaceId, accounts, library: initialLibrary, editing, initialMedia = [] }: { workspaceId: string; accounts: ComposerAccount[]; library: ComposerMedia[]; editing: EditingPost | null; initialMedia?: string[] }) {
   const [library, setLibrary] = useState(initialLibrary);
   const [selected, setSelected] = useState<string[]>(editing?.accounts.map((a) => a.accountId) ?? []);
   const [choices, setChoices] = useState<Record<string, PlatformChoice>>(() => Object.fromEntries((editing?.accounts ?? []).map((a) => [a.accountId, a.choice])));
   const [caption, setCaption] = useState(editing?.caption ?? "");
-  const [mediaIds, setMediaIds] = useState<string[]>(editing?.mediaIds ?? []);
+  const [mediaIds, setMediaIds] = useState<string[]>(editing?.mediaIds ?? initialMedia);
   const [tab, setTab] = useState<string>("all");
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [when, setWhen] = useState<"now" | "later">(editing?.scheduledAt ? "later" : "now");
@@ -59,8 +59,8 @@ export function Composer({ workspaceId, accounts, library: initialLibrary, editi
   const setChoice = (id: string, change: Partial<PlatformChoice>) => setChoices((all) => ({ ...all, [id]: { ...all[id], ...change } }));
 
   const { uploads, upload, dismiss } = useUpload(workspaceId, async (m: ReadyMedia) => {
-    const links = await getMediaLinks(workspaceId, [m.id]);
-    setLibrary((all) => [{ id: m.id, name: m.name ?? "Upload", type: m.media_type, width: m.width, height: m.height, duration: m.duration_seconds === null ? null : Number(m.duration_seconds), url: links[m.id] ?? null }, ...all]);
+    const { links, posters } = await getMediaLinks(workspaceId, [m.id]);
+    setLibrary((all) => [{ id: m.id, name: m.name ?? "Upload", type: m.media_type, width: m.width, height: m.height, duration: m.duration_seconds === null ? null : Number(m.duration_seconds), url: links[m.id] ?? null, poster: posters[m.id] ?? null }, ...all]);
     setMediaIds((ids) => [...ids, m.id]);
   });
 
@@ -240,7 +240,7 @@ export function Composer({ workspaceId, accounts, library: initialLibrary, editi
           <div className="flex flex-wrap gap-2.5">
             {media.map((m, i) => (
               <div key={m.id} className="group relative">
-                <Thumb url={m.type === "image" ? m.url : null} isVideo={m.type === "video"} size={84} />
+                <Thumb url={m.type === "image" ? m.url : (m.poster ?? null)} isVideo={m.type === "video"} size={84} />
                 {media.length > 1 && <span className="absolute left-1 top-1 rounded bg-black/60 px-1 font-mono text-[10px]">{i + 1}</span>}
                 {m.duration && <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 font-mono text-[10px]">{Math.floor(m.duration / 60)}:{String(Math.round(m.duration % 60)).padStart(2, "0")}</span>}
                 <div className="absolute inset-x-1 top-1 hidden justify-end gap-1 group-hover:flex group-focus-within:flex">
@@ -456,6 +456,9 @@ function MediaPicker({ library, selected, onClose, onToggle, onFiles }: { librar
                   {m.url && m.type === "image" ? (
                     // eslint-disable-next-line @next/next/no-img-element -- signed link
                     <img src={m.url} alt="" className="h-full w-full object-cover" />
+                  ) : m.poster ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- signed link
+                    <img src={m.poster} alt="" className="h-full w-full object-cover" />
                   ) : m.url ? (
                     <video src={m.url} muted preload="metadata" className="h-full w-full object-cover" />
                   ) : null}

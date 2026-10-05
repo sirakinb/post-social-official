@@ -10,8 +10,8 @@ const EDITABLE = ["draft", "awaiting_approval", "approved", "scheduled"];
 
 type MediaRow = { id: string; display_name: string | null; file_name: string; media_type: "image" | "video"; width: number | null; height: number | null; duration_seconds: number | null };
 
-export default async function CreatePage({ searchParams }: { searchParams: Promise<{ post?: string }> }) {
-  const { post: postId } = await searchParams;
+export default async function CreatePage({ searchParams }: { searchParams: Promise<{ post?: string; media?: string }> }) {
+  const { post: postId, media: startMedia } = await searchParams;
   const { workspace, client } = await loadViewer("/beta/create");
   if (!workspace) return <p className="p-8 text-ps-muted">You are not a member of any workspace yet.</p>;
   if (workspace.role === "reviewer") return <p className="p-8 text-ps-muted">Reviewers can see posts but not create them.</p>;
@@ -69,14 +69,18 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
     const { data } = await client.database.from("media_assets").select("id, display_name, file_name, media_type, width, height, duration_seconds").in("id", missing);
     library.push(...((data ?? []) as MediaRow[]).map(toComposerMedia));
   }
-  const links = await getMediaLinks(workspace.id, library.map((m) => m.id));
-  for (const m of library) m.url = links[m.id] ?? null;
+  const { links, posters } = await getMediaLinks(workspace.id, library.map((m) => m.id));
+  for (const m of library) {
+    m.url = links[m.id] ?? null;
+    m.poster = posters[m.id] ?? null;
+  }
 
-  return <Composer workspaceId={workspace.id} accounts={accounts} library={library} editing={editing} />;
+  const initialMedia = !editing && startMedia && UUID.test(startMedia) && library.some((m) => m.id === startMedia) ? [startMedia] : [];
+  return <Composer workspaceId={workspace.id} accounts={accounts} library={library} editing={editing} initialMedia={initialMedia} />;
 }
 
 function toComposerMedia(m: MediaRow): ComposerMedia {
-  return { id: m.id, name: m.display_name ?? m.file_name, type: m.media_type, width: m.width, height: m.height, duration: m.duration_seconds === null ? null : Number(m.duration_seconds), url: null };
+  return { id: m.id, name: m.display_name ?? m.file_name, type: m.media_type, width: m.width, height: m.height, duration: m.duration_seconds === null ? null : Number(m.duration_seconds), url: null, poster: null };
 }
 
 function choiceFromOptions(platform: Platform, o: Record<string, unknown>): PlatformChoice {

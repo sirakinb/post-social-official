@@ -39,8 +39,8 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const rows = [...((scheduled.data ?? []) as unknown as Row[]), ...((immediate.data ?? []) as unknown as Row[])];
 
   const firstMedia = rows.map((r) => [...r.post_media].sort((a, b) => a.position - b.position)[0]?.media_assets ?? null);
-  const imageIds = firstMedia.filter((m) => m && m.status === "ready" && m.media_type === "image").map((m) => m!.id);
-  const links = await getMediaLinks(workspace.id, imageIds.slice(0, 60));
+  const readyIds = firstMedia.filter((m) => m && m.status === "ready").map((m) => m!.id);
+  const { links, posters } = await getMediaLinks(workspace.id, readyIds);
 
   const posts: CalendarPost[] = rows.map((r, i) => ({
     id: r.id,
@@ -50,7 +50,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     scheduled: Boolean(r.scheduled_at),
     by: r.actors ? { kind: r.actors.kind, name: r.actors.display_name } : null,
     via: r.entry_point,
-    thumb: firstMedia[i] ? { url: links[firstMedia[i]!.id] ?? null, isVideo: firstMedia[i]!.media_type === "video" } : null,
+    thumb: firstMedia[i] ? { url: (firstMedia[i]!.media_type === "video" ? posters : links)[firstMedia[i]!.id] ?? null, isVideo: firstMedia[i]!.media_type === "video" } : null,
     destinations: r.destinations.map((d) => ({ platform: d.platform, status: d.status, account: d.connected_accounts?.display_name ?? "", liveUrl: d.live_url })),
   }));
 
