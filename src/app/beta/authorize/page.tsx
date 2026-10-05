@@ -34,7 +34,8 @@ export default async function AuthorizePage({ searchParams }: { searchParams: Pr
   const workspaces = ((data ?? []) as unknown as Membership[]).map((m) => ({ id: m.workspace_id, name: m.workspaces?.name ?? "Workspace", role: m.role }));
 
   return (
-    <div className="technical-grid flex min-h-screen flex-col items-center justify-center px-4 py-12">
+    // data-ph-mask: replays hide the email and workspace names shown here.
+    <div data-ph-mask className="technical-grid flex min-h-screen flex-col items-center justify-center px-4 py-12">
       <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-sm">
         <Brand />
         {!check.ok ? (
