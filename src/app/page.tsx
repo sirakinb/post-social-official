@@ -200,6 +200,19 @@ export default function LandingPage() {
           </div>
         </section>
 
+        {/* ===== Product video (placeholder until the demo is recorded) ===== */}
+        <section id="demo" className="mx-auto max-w-6xl scroll-mt-8 px-5 pb-24 sm:px-8 md:pb-32">
+          <div role="img" aria-label="Product video coming soon" className="lp-screen relative mx-auto aspect-video max-w-5xl">
+            <div className="flex h-full w-full items-center justify-center rounded-[14px] border border-white/[0.06] bg-[radial-gradient(70%_80%_at_50%_100%,rgba(255,170,100,0.12),transparent_70%),linear-gradient(180deg,#1b1530,#140f24)]">
+              <span className="grid size-16 place-items-center rounded-full border border-white/15 bg-[#0B0816]/80 text-[#FAF6F0] shadow-[0_0_40px_rgba(255,170,100,0.18)] md:size-20">
+                <svg viewBox="0 0 24 24" aria-hidden="true" className="ml-1 size-6 md:size-8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round">
+                  <path d="M7 4.5v15l12-7.5z" />
+                </svg>
+              </span>
+            </div>
+          </div>
+        </section>
+
         {/* ===== The problem ===== */}
         <section className="lp-band">
           <div className="mx-auto max-w-6xl px-5 py-20 sm:px-8 md:py-24">

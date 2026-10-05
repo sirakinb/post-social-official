@@ -59,6 +59,13 @@ describe("LandingPage", () => {
     expect(document.body.textContent).not.toMatch(/\d+%|free trial|testimonial|eight destinations/i);
   });
 
+  it("keeps a place for the product video above the problem section", () => {
+    render(<LandingPage />);
+    const video = screen.getByRole("img", { name: "Product video coming soon" });
+    const problem = screen.getByRole("heading", { name: "Stop rebuilding the same post five times." });
+    expect(video.compareDocumentPosition(problem) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("answers common questions in an accessible list", () => {
     render(<LandingPage />);
     const faq = document.getElementById("faq") as HTMLElement;
