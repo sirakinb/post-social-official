@@ -19,13 +19,36 @@ type Asset = { id: string; storage_key: string; size_bytes: string | number; med
 const IMPORT_TIMEOUT_MS = 30 * 60 * 1000;
 const PART_BYTES = 16 * 1024 * 1024;
 
-// Claims and runs one job. Returns false when nothing was due.
-export async function runNextJob(deps: WorkerDeps, leaseSeconds = 45 * 60): Promise<boolean> {
+// Claims and runs one job. Returns false when nothing was due. The claim is short and
+// renewed while the job runs, so if the worker dies (out of memory, a deploy) another
+// slot picks the job up within minutes instead of the job looking stuck.
+export async function runNextJob(deps: WorkerDeps, leaseSeconds = 3 * 60, renewEveryMs = 60_000): Promise<boolean> {
   const [job] = await deps.sql<Job>(`SELECT * FROM public.claim_media_job($1)`, [leaseSeconds]);
   if (!job) return false;
+  const renew = setInterval(() => {
+    deps
+      .sql(`UPDATE public.media_jobs SET lease_expires_at = now() + make_interval(secs => $3) WHERE id = $1 AND attempt_count = $2 AND state = 'running'`, [job.id, job.attempt_count, leaseSeconds])
+      .catch((error) => deps.log("lease renewal failed", { job: job.id, error: (error as Error).message }));
+  }, renewEveryMs);
+  try {
+    return await runClaimed(deps, job);
+  } finally {
+    clearInterval(renew);
+  }
+}
+
+async function runClaimed(deps: WorkerDeps, job: Job): Promise<boolean> {
   const [asset] = await deps.sql<Asset>(`SELECT * FROM public.media_assets WHERE id = $1`, [job.media_asset_id]);
   if (!asset) {
     await finishJob(deps, job, "complete", null);
+    return true;
+  }
+  // Reclaimed after its worker died on every attempt (e.g. a file that exhausts memory):
+  // stop instead of crashing the worker again.
+  if (job.attempt_count > job.max_attempts) {
+    await failAsset(deps, job, asset, "Processing kept failing. Try uploading the file again.");
+    await finishJob(deps, job, "failed", "The worker stopped during every attempt.");
+    deps.log("job abandoned", { job: job.id, attempt: job.attempt_count });
     return true;
   }
   deps.log("job started", { job: job.id, kind: job.kind, attempt: job.attempt_count });

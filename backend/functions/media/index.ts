@@ -1,5 +1,6 @@
 // Deno entry point for the `media` InsForge function. Bundled into one file by
 // scripts/deploy-function.sh. Settings come from InsForge secrets.
+import { withReporting } from "../../lib/telemetry";
 import { createSql, userForToken } from "../../lib/insforge-admin";
 import { createR2 } from "../../lib/media/r2";
 import { createMediaHandler } from "./handler";
@@ -14,7 +15,7 @@ function setting(name: string) {
 
 const baseUrl = setting("INSFORGE_BASE_URL");
 
-export default createMediaHandler({
+export default withReporting("media", (name) => Deno.env.get(name), createMediaHandler({
   sql: createSql(baseUrl, setting("API_KEY")),
   r2: createR2({
     accountId: setting("R2_ACCOUNT_ID"),
@@ -25,4 +26,4 @@ export default createMediaHandler({
   newId: () => crypto.randomUUID(),
   userForToken: (token) => userForToken(baseUrl, token),
   allowedOrigins: (Deno.env.get("WEB_APP_ORIGINS") ?? "").split(",").map((o) => o.trim()).filter(Boolean),
-});
+}));

@@ -7,6 +7,7 @@
 //   /oauth/consent     the consent page's decision, with the person's sign-in token
 //   /keys              API keys and connected apps for the web app, with the person's sign-in token
 //   /waitlist          the landing page's waitlist (public, POST {email})
+//   /internal/limits   sign-in and password-reset limits, for our website only (shared secret)
 import { ApiError, type AgentCaller, type Caller, type Sql } from "../../lib/access";
 import { callerForKey, keyActions } from "../../lib/api/keys";
 import { handleMcp } from "../../lib/api/mcp";
@@ -35,6 +36,8 @@ import type { Settings } from "../../lib/connections/platforms";
 import { listAnalytics, postAnalytics, refreshAnalytics } from "../../lib/analytics";
 import { originAllowed } from "../media/handler";
 import { joinWaitlist } from "../../lib/waitlist";
+import { reportError } from "../../lib/telemetry";
+import { clientIp, enforceLimit, fromOurWebsite, hashId, retryHeaders, takeLimit } from "../../lib/rate-limit";
 
 export type ApiHandlerDeps = ApiDeps & {
   callerForKey: typeof callerForKey;
@@ -43,6 +46,8 @@ export type ApiHandlerDeps = ApiDeps & {
   allowedOrigins: string[];
   publicApiUrl: string; // where developers reach the API, e.g. https://www.postsocial.xyz/api
   setting?: Settings; // secrets, for reading a connected account's live settings (TikTok)
+  // Shared with our website, which forwards visitors' addresses (rate limits per address).
+  proxySecret?: string | null;
 };
 
 function json(status: number, body: unknown, headers: Record<string, string> = {}) {
@@ -75,6 +80,7 @@ export function createApiHandler(deps: ApiHandlerDeps) {
     if (path === "/keys") return personRoute(deps, request);
     if (path === "/oauth/consent") return consentRoute(deps, request);
     if (path === "/waitlist") return waitlistRoute(deps, request);
+    if (path === "/internal/limits") return internalLimitsRoute(deps, request);
 
     if (request.method === "OPTIONS" && (path.startsWith("/.well-known/") || path.startsWith("/oauth/") || path === "/mcp")) {
       return new Response(null, { status: 204, headers: OPEN_CORS });
@@ -89,9 +95,13 @@ export function createApiHandler(deps: ApiHandlerDeps) {
 
     if (path === "/mcp") {
       if (request.method !== "POST") return json(405, errorBody(405, "This MCP server answers POST requests only (no event stream)."), { Allow: "POST" });
+      const flood = await addressLimit(deps, request);
+      if (flood) return json(429, errorBody(429, "Too many requests from this network. Try again shortly."), { ...OPEN_CORS, "Retry-After": String(flood) });
       const caller = await agentFor(deps, request, "mcp");
       if (!caller) return unauthorized("Sign in to Post Social, or send an API key: Authorization: Bearer ps_live_...");
       if (caller.overLimit) return json(429, errorBody(429, caller.overLimit), { ...OPEN_CORS, "Retry-After": secondsToMidnightUtc() });
+      const wait = await takeLimit(deps.sql, "api_credential", caller.credentialId);
+      if (wait) return json(429, errorBody(429, tooFast(wait)), { ...OPEN_CORS, "Retry-After": String(wait) });
       let message: unknown;
       try {
         message = await bodyInputAllowingArrays(request);
@@ -103,9 +113,13 @@ export function createApiHandler(deps: ApiHandlerDeps) {
     }
 
     if (path === "/v1" || path.startsWith("/v1/")) {
+      const flood = await addressLimit(deps, request);
+      if (flood) return json(429, errorBody(429, "Too many requests from this network. Try again shortly."), { "Retry-After": String(flood) });
       const caller = await agentFor(deps, request, "api");
       if (!caller) return unauthorized("Send a valid API key: Authorization: Bearer ps_live_... Create one in Post Social under API keys.");
       if (caller.overLimit) return json(429, errorBody(429, caller.overLimit), { "Retry-After": secondsToMidnightUtc() });
+      const wait = await takeLimit(deps.sql, "api_credential", caller.credentialId);
+      if (wait) return json(429, errorBody(429, tooFast(wait)), { "Retry-After": String(wait) });
       const result = await handleRest(deps, caller, request, path);
       return json(result.status, result.body, result.headers);
     }
@@ -117,6 +131,7 @@ export function createApiHandler(deps: ApiHandlerDeps) {
 async function waitlistRoute(deps: ApiHandlerDeps, request: Request) {
   if (request.method !== "POST") return json(405, errorBody(405, "Send a POST with {\"email\": ...}."), { Allow: "POST" });
   try {
+    await enforceLimit(deps.sql, "waitlist_ip", await hashId(clientIp(request, deps.proxySecret), deps.proxySecret), "Too many sign-ups from this network. Try again later.");
     const text = await request.text();
     if (text.length > 2048) throw new ApiError(413, "The request is too large.");
     let input: unknown;
@@ -128,9 +143,48 @@ async function waitlistRoute(deps: ApiHandlerDeps, request: Request) {
     if (!input || typeof input !== "object" || Array.isArray(input)) throw new ApiError(400, "Send a JSON object with an email.");
     return json(200, await joinWaitlist(deps.sql, input as Record<string, unknown>));
   } catch (error) {
-    if (error instanceof ApiError) return json(error.status, errorBody(error.status, error.message));
+    if (error instanceof ApiError) return json(error.status, errorBody(error.status, error.message), retryHeaders(error));
+    reportError(error, { area: "waitlist" });
     return json(500, errorBody(500, "Joining the waitlist failed. Try again."));
   }
+}
+
+const tooFast = (wait: number) => `Too many requests from this key or app. Wait ${wait} seconds, then try again.`;
+
+// Sign-in and password-reset limits, checked by our website before it talks to the sign-in
+// service. Only callers holding the shared proxy secret may use it.
+async function internalLimitsRoute(deps: ApiHandlerDeps, request: Request) {
+  if (request.method !== "POST" || !fromOurWebsite(request, deps.proxySecret)) return json(404, errorBody(404, "Not found."));
+  try {
+    const body = await bodyInput(request);
+    const ip = await hashId(clientIp(request, deps.proxySecret), deps.proxySecret);
+    const email = typeof body.email === "string" && body.email.trim() ? await hashId(body.email, deps.proxySecret) : null;
+    const emailAndIp = email ? await hashId(`${email}|${ip}`, deps.proxySecret) : null;
+    if (body.check === "signin") {
+      await enforceLimit(deps.sql, "signin_ip", ip);
+      if (emailAndIp) await enforceLimit(deps.sql, "signin_email_ip", emailAndIp);
+      if (email) await enforceLimit(deps.sql, "signin_email", email);
+    } else if (body.check === "reset_request") {
+      await enforceLimit(deps.sql, "reset_request_ip", ip);
+      // Over the per-email cap: answer as usual but send nothing, so a stranger can neither
+      // fill someone's inbox nor turn the form into an error for them.
+      if (email && (await takeLimit(deps.sql, "reset_request_email", email)) > 0) return json(200, { ok: true, send: false });
+    } else if (body.check === "reset_complete") {
+      if (emailAndIp) await enforceLimit(deps.sql, "reset_complete_email_ip", emailAndIp);
+      if (email) await enforceLimit(deps.sql, "reset_complete_email", email);
+    } else {
+      throw new ApiError(400, "Unknown check.");
+    }
+    return json(200, { ok: true, send: true });
+  } catch (error) {
+    const { status, message } = describeError(error);
+    return json(status, errorBody(status, message), retryHeaders(error));
+  }
+}
+
+// Every /v1 and /mcp request, per address, before the key or token is looked up.
+async function addressLimit(deps: ApiHandlerDeps, request: Request): Promise<number> {
+  return takeLimit(deps.sql, "api_ip", await hashId(clientIp(request, deps.proxySecret), deps.proxySecret));
 }
 
 function secondsToMidnightUtc(now = Date.now()) {
@@ -163,6 +217,8 @@ async function formInput(request: Request): Promise<Record<string, string | unde
 async function oauthRoute(deps: ApiHandlerDeps, request: Request, path: string, issuer: string) {
   if (request.method !== "POST") return json(405, { error: "invalid_request", error_description: "Use POST." }, { ...OPEN_CORS, Allow: "POST" });
   try {
+    const ipId = await hashId(clientIp(request, deps.proxySecret), deps.proxySecret);
+    await enforceLimit(deps.sql, path === "/oauth/register" ? "oauth_register_ip" : "oauth_token_ip", ipId);
     if (path === "/oauth/register") {
       const body = (await bodyInput(request).catch(() => {
         throw new OAuthError("invalid_client_metadata", "Send the registration as a JSON object.");
@@ -174,6 +230,7 @@ async function oauthRoute(deps: ApiHandlerDeps, request: Request, path: string, 
     return json(200, await revokeToken(deps.sql, form), OPEN_CORS);
   } catch (error) {
     if (error instanceof OAuthError) return json(error.status, { error: error.error, error_description: error.description }, OPEN_CORS);
+    if (error instanceof ApiError && error.status === 429) return json(429, { error: "temporarily_unavailable", error_description: error.message }, { ...OPEN_CORS, ...retryHeaders(error) });
     const { status } = describeError(error);
     return json(status >= 500 ? 500 : 400, { error: status >= 500 ? "server_error" : "invalid_request", error_description: "The request could not be completed." }, OPEN_CORS);
   }
@@ -186,6 +243,7 @@ async function consentRoute(deps: ApiHandlerDeps, request: Request) {
   const user = await deps.userForToken(bearer(request));
   if (!user) return json(401, errorBody(401, "Sign in to approve an app."));
   try {
+    await enforceLimit(deps.sql, "consent_user", user.id);
     const body = await bodyInput(request);
     const params = (body.params ?? {}) as AuthorizeParams;
     if (body.action === "check") {
@@ -207,7 +265,7 @@ async function consentRoute(deps: ApiHandlerDeps, request: Request) {
   } catch (error) {
     if (error instanceof OAuthError) return json(400, { error: { code: error.error, message: error.description } });
     const { status, message } = describeError(error);
-    return json(status, errorBody(status, message));
+    return json(status, errorBody(status, message), retryHeaders(error));
   }
 }
 
@@ -221,6 +279,7 @@ async function personRoute(deps: ApiHandlerDeps, request: Request) {
   const user = await deps.userForToken(bearer(request));
   if (!user) return json(401, errorBody(401, "Sign in to manage API keys and connected apps."), cors);
   try {
+    await enforceLimit(deps.sql, "person_user", user.id);
     const body = await bodyInput(request);
     const name = String(body.action);
     // Stats actions exist only where stats are switched on.
@@ -244,6 +303,6 @@ async function personRoute(deps: ApiHandlerDeps, request: Request) {
     return json(200, await actions[name](deps.sql, caller, body), cors);
   } catch (error) {
     const { status, message } = describeError(error);
-    return json(status, errorBody(status, message), cors);
+    return json(status, errorBody(status, message), { ...cors, ...retryHeaders(error) });
   }
 }

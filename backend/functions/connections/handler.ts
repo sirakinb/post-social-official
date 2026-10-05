@@ -2,13 +2,16 @@
 // path is stable for platform dashboards:
 //   POST /start                         { workspace_id, platform, return_to } -> { url }
 //   POST /disconnect                    { account_id }
-//   GET  /oauth/{platform}/callback     platform sign-in callback (redirects to the web app)
+//   GET  /oauth/{platform}/callback     platform sign-in callback: sends the browser to the web
+//                                       app's /beta/connect/finish, which finishes it as the
+//                                       signed-in person (POST /complete)
+//   POST /complete                      { platform, params } -> where to go next
 //   POST /meta/data-deletion            Meta data-deletion callback
 //   GET  /meta/data-deletion/status     ?code=
 //   POST /meta/deauthorize              Meta deauthorize callback
 import { ApiError } from "../../lib/access";
 import type { SignedInUser } from "../../lib/insforge-admin";
-import { completeConnection, disconnectAccount, isPlatform, startConnection, type ConnectionDeps } from "../../lib/connections/service";
+import { completeConnection, disconnectAccount, finishingOrigin, isPlatform, startConnection, type ConnectionDeps } from "../../lib/connections/service";
 import { deletionStatus, handleDataDeletion, handleDeauthorize } from "../../lib/connections/meta-deletion";
 
 export type ConnectionsHandlerDeps = ConnectionDeps & {
@@ -46,8 +49,15 @@ export function createConnectionsHandler(deps: ConnectionsHandlerDeps) {
       const callback = path.match(/^\/oauth\/([a-z]+)\/callback$/);
       if (callback && method === "GET") {
         if (!isPlatform(callback[1])) return json(404, { error: "Unknown platform." });
-        const result = await completeConnection(deps, callback[1], new URL(request.url).searchParams);
-        return redirectTo(result.returnTo ?? deps.webAppHome, result.ok ? { connected: result.platform, message: result.message } : { error: result.message });
+        // Nothing is finished here: anyone holding the sign-in link can reach this page.
+        // The web app finishes it as the signed-in person who started it.
+        const query = new URL(request.url).searchParams;
+        const origin = await finishingOrigin(deps, callback[1], query.get("state"));
+        if (!origin) return redirectTo(deps.webAppHome, { error: "This connection request expired or was already used. Start again." });
+        const finish = new URL("/beta/connect/finish", origin);
+        finish.searchParams.set("platform", callback[1]);
+        query.forEach((value, key) => finish.searchParams.set(key, value));
+        return new Response(null, { status: 302, headers: { Location: finish.toString(), "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" } });
       }
 
       if (path === "/meta/data-deletion" && method === "POST") {
@@ -61,7 +71,7 @@ export function createConnectionsHandler(deps: ConnectionsHandlerDeps) {
         return json(200, await handleDeauthorize({ sql: deps.sql, appSecrets: deps.metaAppSecrets }, request));
       }
 
-      if (path === "/start" || path === "/disconnect") {
+      if (path === "/start" || path === "/disconnect" || path === "/complete") {
         const headers = cors(request, deps);
         if (method === "OPTIONS") return new Response(null, { status: 204, headers });
         if (method !== "POST") return json(405, { error: "Use POST." }, headers);
@@ -71,6 +81,11 @@ export function createConnectionsHandler(deps: ConnectionsHandlerDeps) {
         const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
         if (!body) return json(400, { error: "Send a JSON body." }, headers);
         const caller = { userId: user.id, displayName: user.name, entryPoint: "ui" as const };
+        if (path === "/complete") {
+          if (!isPlatform(body.platform)) return json(400, { error: "Unknown platform." }, headers);
+          const params = new URLSearchParams(Object.entries((body.params ?? {}) as Record<string, unknown>).filter(([, v]) => typeof v === "string") as Array<[string, string]>);
+          return json(200, await completeConnection(deps, body.platform, params, user.id), headers);
+        }
         const result = path === "/start" ? await startConnection(deps, caller, body) : await disconnectAccount(deps, caller, body);
         return json(200, result, headers);
       }

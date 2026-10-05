@@ -40,10 +40,19 @@ const nextConfig: NextConfig = {
   },
   // The REST API and MCP server run as an InsForge function; this site gives them their
   // public addresses (/api/v1/..., /mcp).
+  // PostHog (analytics, replays, error tracking) is reached through this site, so the strict
+  // content policy above still holds and blockers don't drop error reports.
+  skipTrailingSlashRedirect: true,
   async rewrites() {
+    const posthog = [
+      { source: "/ingest/static/:path*", destination: "https://us-assets.i.posthog.com/static/:path*" },
+      { source: "/ingest/array/:path*", destination: "https://us-assets.i.posthog.com/array/:path*" },
+      { source: "/ingest/:path*", destination: "https://us.i.posthog.com/:path*" },
+    ];
     const api = process.env.API_BASE_URL;
-    if (!api) return [];
+    if (!api) return posthog;
     return [
+      ...posthog,
       { source: "/api/v1/:path*", destination: `${api}/v1/:path*` },
       { source: "/mcp", destination: `${api}/mcp` },
       // OAuth for AI apps (ChatGPT, the Claude app): discovery, registration and tokens.

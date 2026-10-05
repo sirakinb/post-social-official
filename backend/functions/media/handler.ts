@@ -1,5 +1,7 @@
 // HTTP layer for the `media` InsForge function: POST { action, ...input } with the person's
 // access token as a Bearer token. Runtime-neutral so it can be tested in Node.
+import { enforceLimit, RateLimitError, retryHeaders } from "../../lib/rate-limit";
+import { reportError } from "../../lib/telemetry";
 import { MediaError, mediaActions, type MediaDeps } from "../../lib/media/service";
 import type { SignedInUser } from "../../lib/insforge-admin";
 
@@ -57,12 +59,16 @@ export function createMediaHandler(deps: HandlerDeps) {
     const action = mediaActions[actionName as keyof typeof mediaActions];
 
     try {
+      await enforceLimit(deps.sql, "media_user", user.id);
+      // Starting uploads and imports also counts toward an hourly cap (storage and bandwidth).
+      if (actionName === "create_upload" || actionName === "import") await enforceLimit(deps.sql, "media_upload_user", user.id, "Too many uploads this hour. Try again later.");
       const caller = { userId: user.id, displayName: user.name, entryPoint: "ui" as const };
       const result = await (action as (d: MediaDeps, c: typeof caller, i: Record<string, unknown>) => Promise<unknown>)(deps, caller, body);
       return json(200, result, cors);
     } catch (error) {
       if (error instanceof MediaError) return json(error.status, { error: error.message }, cors);
-      console.error("media function error", error);
+      if (error instanceof RateLimitError) return json(429, { error: error.message }, { ...cors, ...retryHeaders(error) });
+      reportError(error, { area: "media function", action: typeof body?.action === "string" ? body.action : null });
       return json(500, { error: "Something went wrong on our side. Try again in a moment." }, cors);
     }
   };

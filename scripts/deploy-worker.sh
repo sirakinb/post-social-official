@@ -34,10 +34,14 @@ trap 'rm -f "$env_file"' EXIT
   # Post stats only for platforms switched on in this environment (optional; none on prod
   # until each platform's review approves the read permissions).
   echo "ANALYTICS_PLATFORMS=$(secret ANALYTICS_PLATFORMS 2>/dev/null || true)"
+  # Monitoring (PostHog): the project's public key; optional.
+  echo "POSTHOG_KEY=$(secret POSTHOG_KEY 2>/dev/null || true)"
+  # "production" or "dev", matching the website's labels in PostHog.
+  if [[ "$target" == "prod" ]]; then echo "APP_ENV=production"; else echo "APP_ENV=dev"; fi
   echo "MEDIA_RETENTION_DAYS=30"
   echo "WORKER_CONCURRENCY=3"
 } > "$env_file"
 
 scripts/insforge-env.sh "$target" compute deploy worker --name post-social-worker \
-  --port 8080 --cpu shared-1x --memory 512 --region iad --env-file "$env_file" \
+  --port 8080 --cpu shared-1x --memory 1024 --region iad --env-file "$env_file" \
   --always-on  # it polls for jobs and gets no web traffic to wake it

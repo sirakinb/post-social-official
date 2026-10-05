@@ -1,3 +1,4 @@
+import { IdentifyViewer } from "@/components/analytics/identify";
 import { Sidebar } from "@/components/beta/sidebar";
 import { loadViewer } from "@/lib/beta/workspace";
 import { signOut } from "../actions";
@@ -21,7 +22,9 @@ export default async function BetaAppLayout({ children }: { children: React.Reac
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-ps-ground font-sans text-[13px] text-ps-text md:flex-row">
+    // data-ph-mask: session replays hide this app's text and pictures (instrumentation-client.ts).
+    <div data-ph-mask className="flex min-h-screen flex-col bg-ps-ground font-sans text-[13px] text-ps-text md:flex-row">
+      <IdentifyViewer userId={viewer.id} role={workspace?.role ?? "member"} />
       <Sidebar
         workspaceName={workspace?.name ?? "Post Social"}
         viewer={{ name: viewer.name, avatarUrl: viewer.avatarUrl, role: workspace?.role ?? "member" }}

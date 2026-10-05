@@ -15,3 +15,12 @@ describe("Content-Security-Policy", () => {
     expect(sources.some((s) => s.includes("*.r2.cloudflarestorage.com"))).toBe(false);
   });
 });
+
+describe("PostHog through this site", () => {
+  it("forwards /ingest to PostHog without widening the content policy", async () => {
+    const rewrites = (await nextConfig.rewrites!()) as Array<{ source: string; destination: string }>;
+    expect(rewrites.find((r) => r.source === "/ingest/:path*")?.destination).toBe("https://us.i.posthog.com/:path*");
+    expect(rewrites.find((r) => r.source === "/ingest/static/:path*")?.destination).toBe("https://us-assets.i.posthog.com/static/:path*");
+    expect((await connectSources()).some((s) => s.includes("posthog"))).toBe(false);
+  });
+});

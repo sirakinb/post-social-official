@@ -160,6 +160,15 @@ describe.skipIf(!enabled)("OAuth sign-in for AI apps on the dev backend (US-042)
     expect((await refresh(second.body.refresh_token)).body.error).toBe("invalid_grant");
   });
 
+  it("two refreshes racing with the same token: only one gets new tokens", async () => {
+    const { verifier, challenge } = pkce();
+    const first = await exchange(await approve(owner, challenge), verifier);
+    const refresh = () => send("POST", "/oauth/token", { grant_type: "refresh_token", refresh_token: first.body.refresh_token, client_id: clientId }, {}, true);
+    const results = await Promise.all([refresh(), refresh(), refresh()]);
+    expect(results.filter((r) => r.status === 200)).toHaveLength(1);
+    expect(results.filter((r) => r.body.error === "invalid_grant")).toHaveLength(2);
+  });
+
   it("signing in again retires the old refresh token without ending the connection", async () => {
     const one = pkce();
     const first = await exchange(await approve(owner, one.challenge), one.verifier);

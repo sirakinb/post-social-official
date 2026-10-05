@@ -10,6 +10,7 @@ import {
   safeNextPath,
   signInErrorMessage,
 } from "@/lib/insforge/auth-rules";
+import { checkAuthLimit } from "@/lib/security/limits";
 
 export type FormState = { error?: string; notice?: string; step?: "request" | "complete"; email?: string };
 
@@ -22,6 +23,8 @@ export async function signIn(_previous: FormState, formData: FormData): Promise<
   const email = field(formData, "email");
   const password = String(formData.get("password") ?? "");
   if (!email || !password) return { error: "Enter your email and password." };
+  const limit = await checkAuthLimit("signin", email);
+  if (limit.blocked) return { error: limit.blocked };
 
   const auth = await insforgeAuthActions();
   const { data, error } = await auth.signInWithPassword({ email, password });
@@ -40,6 +43,11 @@ export async function signOut() {
 export async function requestPasswordReset(_previous: FormState, formData: FormData): Promise<FormState> {
   const email = field(formData, "email");
   if (!email) return { step: "request", error: "Enter the email you sign in with." };
+  const limit = await checkAuthLimit("reset_request", email);
+  if (limit.blocked) return { step: "request", email, error: limit.blocked };
+  const sent = "If that email has an account, we sent it a reset code. It expires soon, so use it now.";
+  // Too many reset emails for this address already: answer the same, send nothing more.
+  if (!limit.send) return { step: "complete", email, notice: sent };
 
   const client = createServerClient();
   const { error } = await client.auth.sendResetPasswordEmail({ email });
@@ -50,7 +58,7 @@ export async function requestPasswordReset(_previous: FormState, formData: FormD
   return {
     step: "complete",
     email,
-    notice: "If that email has an account, we sent it a reset code. It expires soon, so use it now.",
+    notice: sent,
   };
 }
 
@@ -61,6 +69,8 @@ export async function completePasswordReset(_previous: FormState, formData: Form
   const problem = passwordProblem(newPassword);
   if (!email || !code) return { step: "complete", email, error: "Enter the code from the email." };
   if (problem) return { step: "complete", email, error: problem };
+  const limit = await checkAuthLimit("reset_complete", email);
+  if (limit.blocked) return { step: "complete", email, error: limit.blocked };
 
   const client = createServerClient();
   const exchange = await client.auth.exchangeResetPasswordToken({ email, code });

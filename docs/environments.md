@@ -56,11 +56,16 @@ in order to dev, then to prod, exactly the same files.
    `npm run test:db` runs the database tests against dev: they create throwaway users
    and workspaces, check access rules, and delete everything afterwards. They refuse to
    run unless the folder is linked to dev.
-3. **Review.** Push, open a pull request, CI runs checks, Greptile reviews.
+3. **Review.** Push, open a pull request, CI runs checks.
    Fix findings, then merge to `main` with the owner's OK.
 4. **Promote.** On `main`, in sync with GitHub: `npm run db:promote`. It refuses to
    run from any other branch, refuses if any migration in git was never applied to
    dev, lists what prod is missing, and asks you to type `prod` before applying it.
+   Before applying anything it takes a named backup of prod
+   (`before-promote-<date>-<commit>`) and waits for it; if the backup fails, nothing is
+   applied. InsForge keeps only the latest nightly backup, so this restore point is what
+   protects us from a bad migration. `npm run db:backup:prod` takes one by hand (also
+   only from a synced `main`).
    It then shows any differences between `insforge.toml` and prod's settings and asks
    again before applying them.
 5. **Deploy the web app.** Vercel builds a preview for every pull request (pointing at
@@ -168,3 +173,15 @@ apps under API keys, Connected apps.
   private), e.g. `postsocial/claude-code`.
 - `/docs` (setup for Claude, ChatGPT, Claude Code, Cursor, the CLI and REST) and
   `/llms.txt` are generated from the operations list, like the API itself.
+
+
+## Known limits (security review, 2026-10-05)
+
+- **InsForge sign-in has no throttling of its own.** Our website limits sign-in and
+  password-reset attempts (per visitor, per email and address), but the InsForge auth API
+  is public and anyone can call it directly; 26 rapid wrong-password attempts on dev all
+  answered normally. Until InsForge adds limits, rely on the password policy (12+
+  characters with a number) and closed sign-up. Must be solved before public sign-up.
+- **Dev allows a wildcard origin** for Vercel previews (`WEB_APP_ORIGINS` on dev). A
+  stranger could register a matching Vercel name; it only affects dev, which holds test
+  data. Prod lists exact addresses only; never add a pattern there.

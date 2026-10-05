@@ -9,5 +9,6 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   if (!(await isAuthenticated())) redirect("/login");
-  return <AuthenticatedApp><AppShell>{children}</AppShell></AuthenticatedApp>;
+  // data-ph-mask: session replays hide this app's text and pictures (instrumentation-client.ts).
+  return <div data-ph-mask><AuthenticatedApp><AppShell>{children}</AppShell></AuthenticatedApp></div>;
 }

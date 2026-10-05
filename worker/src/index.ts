@@ -12,6 +12,7 @@ import { makePosters } from "./posters";
 import { runNextPublishJob } from "./publish/runner";
 import { runMetricsSweep } from "./analytics/runner";
 import { PLATFORMS, type Platform } from "../../backend/lib/connections/platforms";
+import { createTelemetry } from "../../backend/lib/telemetry";
 
 function setting(name: string, fallback?: string) {
   const value = process.env[name] ?? fallback;
@@ -22,6 +23,9 @@ function setting(name: string, fallback?: string) {
 function log(message: string, details: Record<string, unknown> = {}) {
   console.log(JSON.stringify({ time: new Date().toISOString(), message, ...details }));
 }
+
+// Errors and post outcomes go to PostHog when POSTHOG_KEY is set.
+const telemetry = createTelemetry({ key: process.env.POSTHOG_KEY, host: process.env.POSTHOG_HOST, service: "worker", environment: process.env.APP_ENV ?? "dev" });
 
 const sql = createSql(setting("INSFORGE_BASE_URL"), setting("INSFORGE_API_KEY"));
 const r2 = createR2({
@@ -45,7 +49,7 @@ let lastLoopAt = Date.now();
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const allowlist = (process.env.PUBLISH_ALLOWLIST ?? "").split(",").map((id) => id.trim()).filter(Boolean);
-const publishDeps = { sql, r2, setting: (name: string) => setting(name), allowlist, log };
+const publishDeps = { sql, r2, setting: (name: string) => setting(name), allowlist, log, telemetry };
 
 async function jobLoop(slot: number) {
   while (!stopping) {
@@ -57,6 +61,7 @@ async function jobLoop(slot: number) {
       if (!published && !processed) await sleep(2000);
     } catch (error) {
       log("job loop error", { slot, error: (error as Error).message });
+      void telemetry.captureException(error, { area: "job loop", slot });
       await sleep(5000);
     }
   }
@@ -69,14 +74,21 @@ async function every(ms: number, name: string, task: () => Promise<number>) {
       if (count) log(`${name} done`, { count });
     } catch (error) {
       log(`${name} error`, { error: (error as Error).message });
+      void telemetry.captureException(error, { area: name });
     }
     await sleep(ms);
   }
 }
 
-// Health check for the platform: unhealthy if the job loop has stalled.
+process.on("unhandledRejection", (reason) => {
+  log("unhandled rejection", { error: String(reason) });
+  void telemetry.captureException(reason, { area: "unhandled rejection" });
+});
+
+// Health check for the platform and the uptime monitor: unhealthy if the job loop has
+// stalled. A long upload can hold one slot for minutes, never all of them for 15.
 createServer((_request, response) => {
-  const healthy = Date.now() - lastLoopAt < 60 * 60 * 1000;
+  const healthy = Date.now() - lastLoopAt < 15 * 60 * 1000;
   response.writeHead(healthy ? 200 : 503, { "Content-Type": "application/json" });
   response.end(JSON.stringify({ ok: healthy }));
 }).listen(Number(process.env.PORT ?? 8080));

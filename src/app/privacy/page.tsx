@@ -25,7 +25,7 @@ export default function PrivacyPage() {
           <h1 className="font-display text-3xl font-semibold text-ink">
             Privacy Policy
           </h1>
-          <p className="mt-2 text-sm text-ink-subtle">Effective July 21, 2026 · Updated August 4, 2026</p>
+          <p className="mt-2 text-sm text-ink-subtle">Effective July 21, 2026 · Updated October 5, 2026</p>
 
           <div className="mt-8 space-y-6 text-ink-muted">
             <section>
@@ -36,7 +36,8 @@ export default function PrivacyPage() {
                 We collect the information you provide (name, email, workspace
                 details) and the data required to publish on your behalf,
                 including OAuth tokens, account handles, profile avatars, post
-                content, media files, and publishing logs.
+                content, media files, and publishing logs. If you join the
+                waitlist, we keep the email address you give us to invite you.
               </p>
             </section>
 
@@ -134,12 +135,31 @@ export default function PrivacyPage() {
                 Service providers and security
               </h2>
               <p className="mt-2 text-sm leading-relaxed">
-                We use service providers, including Convex for application data,
-                scheduled functions, and file storage, only to operate Post
-                Social. We limit stored permissions to the product features in
+                We use service providers only to operate Post Social: InsForge
+                for the database, sign-in and backend; Cloudflare R2 for media
+                storage; Vercel for hosting the website; Fly.io for the
+                background service that publishes posts; and PostHog for
+                product analytics and error reports. We limit stored permissions to the product features in
                 use, encrypt platform credentials at rest, and keep a
                 time-stamped security and publishing record. No internet
                 service can guarantee absolute security.
+              </p>
+            </section>
+
+            <section>
+              <h2 className="font-display text-xl font-semibold text-ink">
+                Product analytics and error reports
+              </h2>
+              <p className="mt-2 text-sm leading-relaxed">
+                We use PostHog to understand how the website and app are used and
+                to find bugs: pages visited, buttons used, errors, and session
+                recordings of how pages are used. Recordings never include what
+                you type, and inside the signed-in app they hide your text,
+                images and videos, so they show where you click, not your posts.
+                When you are signed in, this activity is linked to your account
+                ID, never your email. Error reports from our servers contain the
+                error and technical context, with tokens and keys removed. We do
+                not use this data for advertising.
               </p>
             </section>
 
