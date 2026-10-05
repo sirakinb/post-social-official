@@ -241,7 +241,7 @@ describe.skipIf(!enabled)("publishing engine on the dev backend (US-027 to US-03
     // Refused before anything changed: still scheduled, still to Threads only.
     const after = await act(person(), "get", { post_id: draft.id });
     expect(after.status).toBe("scheduled");
-    expect(after.destinations.map((d: { platform: string }) => d.platform)).toEqual(["threads"]);
+    expect(after.destinations.map((d) => d.platform)).toEqual(["threads"]);
     await act(person(), "cancel", { post_id: draft.id });
   });
 

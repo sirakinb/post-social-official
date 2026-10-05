@@ -1,14 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 // Google only accepts sign-in callbacks on domains we own, so YouTube's registered callback
-// is this page (www.postsocial.xyz in prod, localhost on dev). It forwards Google's query
-// to the `connections` function, which finishes the sign-in like every other platform.
+// is this page (www.postsocial.xyz in prod, localhost on dev). It hands Google's answer to
+// /beta/connect/finish, which finishes it as the signed-in person who started it.
 export function GET(request: NextRequest) {
-  const base = process.env.CONNECTIONS_BASE_URL;
-  if (!base) {
-    return NextResponse.redirect(new URL("/beta/accounts?error=YouTube+connections+are+not+configured.", request.nextUrl.origin));
-  }
-  const target = new URL(`${base}/oauth/youtube/callback`);
-  request.nextUrl.searchParams.forEach((value, key) => target.searchParams.set(key, value));
-  return NextResponse.redirect(target);
+  const finish = new URL("/beta/connect/finish", request.nextUrl.origin);
+  finish.searchParams.set("platform", "youtube");
+  request.nextUrl.searchParams.forEach((value, key) => finish.searchParams.set(key, value));
+  return NextResponse.redirect(finish, { headers: { "Referrer-Policy": "no-referrer" } });
 }

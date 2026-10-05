@@ -62,20 +62,43 @@ type StateRow = { workspace_id: string; user_id: string | null; return_to: strin
 
 export type CallbackResult = { returnTo: string | null; ok: boolean; message: string; platform: Platform };
 
-// Finishes a sign-in. Always resolves with where to send the person and what to tell them.
-export async function completeConnection(deps: ConnectionDeps, platform: Platform, params: URLSearchParams): Promise<CallbackResult> {
+// Where the platform's callback should send the browser to finish: the web app the
+// sign-in started from (its address was checked when the sign-in started). Reads the state
+// without using it up.
+export async function finishingOrigin(deps: ConnectionDeps, platform: Platform, state: string | null): Promise<string | null> {
+  if (!state) return null;
+  const [row] = await deps.sql<{ return_to: string | null }>(
+    `SELECT return_to FROM public.oauth_states WHERE state_hash = $1 AND provider = $2 AND used_at IS NULL AND expires_at > now()`,
+    [await sha256Hex(state), platform],
+  );
+  if (!row) return null;
+  try {
+    return row.return_to ? new URL(row.return_to).origin : null;
+  } catch {
+    return null;
+  }
+}
+
+// Finishes a sign-in for the signed-in person who started it. Always resolves with where
+// to send the person and what to tell them.
+//
+// The platform's callback can be opened by anyone holding the sign-in link, so finishing
+// is bound to the person: someone tricked into approving another person's link (signed in
+// as themselves, or not at all) can't attach their account to that person's workspace.
+export async function completeConnection(deps: ConnectionDeps, platform: Platform, params: URLSearchParams, userId: string): Promise<CallbackResult> {
   const state = params.get("state") ?? "";
-  // Single use: the state is marked used in the same statement that reads it.
+  // Single use, and only by the person who started it: the state is marked used in the
+  // same statement that reads it, so a mismatch leaves it unused.
   const [session] = state
     ? await deps.sql<StateRow>(
         `UPDATE public.oauth_states SET used_at = now()
-         WHERE state_hash = $1 AND provider = $2 AND used_at IS NULL AND expires_at > now()
+         WHERE state_hash = $1 AND provider = $2 AND user_id = $3 AND used_at IS NULL AND expires_at > now()
          RETURNING workspace_id, user_id, return_to`,
-        [await sha256Hex(state), platform],
+        [await sha256Hex(state), platform, userId],
       )
     : [];
   const name = DISPLAY_NAMES[platform];
-  if (!session) return { returnTo: null, ok: false, platform, message: `The ${name} connection request expired or was already used. Start again.` };
+  if (!session) return { returnTo: null, ok: false, platform, message: `This ${name} connection request expired, was already used, or was started by someone else. Start again from your own account.` };
   const fail = (message: string): CallbackResult => ({ returnTo: session.return_to, ok: false, platform, message });
 
   const denied = params.get("error") ?? params.get("error_reason");

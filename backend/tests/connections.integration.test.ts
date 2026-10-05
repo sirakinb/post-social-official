@@ -75,16 +75,36 @@ describe.skipIf(!enabled)("connections on the dev backend (US-016, US-025, US-02
       body: body === undefined ? undefined : JSON.stringify(body),
     }));
 
+  const starters = new Map<string, AccountResult>();
   async function start(platform: string, owner: AccountResult) {
     const response = await call("POST", "/start", { workspace_id: owner.workspaceId, platform, return_to: "http://localhost:3333/beta/accounts?workspace=x" }, tokens[owner.userId]);
     expect(response.status).toBe(200);
-    return new URL(((await response.json()) as { url: string }).url).searchParams.get("state")!;
+    const state = new URL(((await response.json()) as { url: string }).url).searchParams.get("state")!;
+    starters.set(state, owner);
+    return state;
   }
 
-  async function callback(platform: string, state: string, extra = "code=abc") {
+  // The platform's callback only forwards the browser to the web app's finish page, which
+  // finishes the sign-in as the signed-in person (by default, whoever started it). Returns
+  // where the person ends up, like the web app's /beta/connect/finish route.
+  async function callback(platform: string, state: string, extra = "code=abc", signedInAs?: AccountResult) {
     const response = await call("GET", `/oauth/${platform}/callback?state=${encodeURIComponent(state)}&${extra}`);
     expect(response.status).toBe(302);
-    return new URL(response.headers.get("location")!);
+    const next = new URL(response.headers.get("location")!);
+    if (next.pathname !== "/beta/connect/finish") return next; // nothing to finish
+    expect(next.origin).toBe("http://localhost:3333");
+    expect(next.searchParams.get("platform")).toBe(platform);
+    const person = signedInAs ?? starters.get(state)!;
+    const params = Object.fromEntries([...next.searchParams].filter(([key]) => key !== "platform"));
+    const finished = await call("POST", "/complete", { platform, params }, tokens[person.userId]);
+    expect(finished.status).toBe(200);
+    const result = (await finished.json()) as { ok: boolean; returnTo: string | null; message: string; platform: string };
+    const target = new URL(result.returnTo ?? "http://localhost:3333/beta/accounts");
+    if (result.ok) {
+      target.searchParams.set("connected", result.platform);
+      target.searchParams.set("message", result.message);
+    } else target.searchParams.set("error", result.message);
+    return target;
   }
 
   let ownerA: AccountResult;
@@ -131,8 +151,8 @@ describe.skipIf(!enabled)("connections on the dev backend (US-016, US-025, US-02
   it("uses each sign-in state once, and refuses unknown ones", async () => {
     const state = await start("instagram", ownerA);
     expect((await callback("instagram", state)).searchParams.get("connected")).toBe("instagram");
-    expect((await callback("instagram", state)).searchParams.get("error")).toMatch(/expired or was already used/);
-    expect((await callback("instagram", "made-up")).searchParams.get("error")).toMatch(/expired or was already used/);
+    expect((await callback("instagram", state)).searchParams.get("error")).toMatch(/expired|already used/);
+    expect((await callback("instagram", "made-up")).searchParams.get("error")).toMatch(/expired|already used/);
   });
 
   it("reconnecting updates the same account instead of adding a duplicate", async () => {
@@ -145,6 +165,17 @@ describe.skipIf(!enabled)("connections on the dev backend (US-016, US-025, US-02
   it("refuses an account that is already connected to another workspace", async () => {
     const back = await callback("instagram", await start("instagram", ownerB));
     expect(back.searchParams.get("error")).toMatch(/already connected to another workspace/);
+  });
+
+  it("a sign-in link sent to someone else can't attach their account to the sender's workspace", async () => {
+    const state = await start("instagram", ownerA);
+    // ownerB (signed in as themselves) approves ownerA's link: refused, and nothing changes.
+    const hijack = await callback("instagram", state, "code=abc", ownerB);
+    expect(hijack.searchParams.get("error")).toMatch(/started by someone else/);
+    // The request wasn't used up, so the person who started it can still finish it.
+    expect((await callback("instagram", state)).searchParams.get("connected")).toBe("instagram");
+    // Finishing needs a signed-in person at all.
+    expect((await call("POST", "/complete", { platform: "instagram", params: { state, code: "abc" } })).status).toBe(401);
   });
 
   it("shows a plain message when the person declines on the platform", async () => {
