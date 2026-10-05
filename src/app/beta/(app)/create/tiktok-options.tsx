@@ -7,14 +7,26 @@ import { cn } from "@/lib/utils";
 // TikTok's posting options, built to its content sharing guidelines: the creator's
 // nickname, an audience with no default, interactions off by default (greyed out when the
 // creator turned them off), and the commercial content disclosure with its labels.
-export function TikTokOptions({ value, onChange, info, infoError, accountName }: { value: TikTokChoice; onChange: (v: TikTokChoice) => void; info: CreatorInfo | null; infoError: string | null; accountName: string }) {
+export function TikTokOptions({ value, onChange, info, infoError, accountName, photo }: { value: TikTokChoice; onChange: (v: TikTokChoice) => void; info: CreatorInfo | null; infoError: string | null; accountName: string; photo: boolean }) {
   const set = (change: Partial<TikTokChoice>) => onChange({ ...value, ...change });
-  const label = tiktokLabel(value);
+  const label = tiktokLabel(value, photo);
+  // Photo posts can't be duetted or stitched; TikTok only offers comments for them.
+  const interactions = ([
+    ["comments", "Comment", info?.comment_disabled],
+    ["duet", "Duet", info?.duet_disabled],
+    ["stitch", "Stitch", info?.stitch_disabled],
+  ] as const).filter(([key]) => !photo || key === "comments");
   return (
     <div className="flex flex-col gap-3">
       <div className="text-ps-muted">
-        Posting to <span className="text-ps-text">{info?.nickname ?? accountName}</span> on TikTok
+        Posting {photo ? "a photo post" : "a video"} to <span className="text-ps-text">{info?.nickname ?? accountName}</span> on TikTok
       </div>
+      {photo && (
+        <label className="flex flex-col gap-1.5">
+          <span className="flex justify-between text-xs text-ps-muted">Title (optional) <span className="font-mono">{(value.title ?? "").length} / 90</span></span>
+          <input id="tiktok-photo-title" value={value.title ?? ""} maxLength={90} placeholder="Shown above the caption" onChange={(e) => set({ title: e.target.value })} className="h-9 rounded-lg border border-ps-line-strong bg-ps-ground px-2.5 text-[13px]" />
+        </label>
+      )}
       <div className="inline-flex self-start rounded-[9px] border border-white/[0.08] bg-ps-ground p-[3px]" role="radiogroup" aria-label="How to send it">
         {(
           [
@@ -29,7 +41,7 @@ export function TikTokOptions({ value, onChange, info, infoError, accountName }:
       </div>
 
       {value.mode === "inbox" ? (
-        <p className="m-0 text-xs leading-relaxed text-ps-muted">The video lands in your TikTok inbox. Open TikTok, add any sound or effects, and tap Post when you&apos;re ready.</p>
+        <p className="m-0 text-xs leading-relaxed text-ps-muted">The {photo ? "photos land" : "video lands"} in your TikTok inbox. Open TikTok, add any sound or effects, and tap Post when you&apos;re ready.</p>
       ) : infoError ? (
         <p role="alert" className="m-0 text-xs text-[#FF8A8E]">{infoError}</p>
       ) : !info ? (
@@ -53,13 +65,7 @@ export function TikTokOptions({ value, onChange, info, infoError, accountName }:
 
           <fieldset className="m-0 flex flex-wrap gap-x-5 gap-y-2 border-0 p-0">
             <legend className="mb-1.5 text-xs text-ps-muted">Allow viewers to</legend>
-            {(
-              [
-                ["comments", "Comment", info.comment_disabled],
-                ["duet", "Duet", info.duet_disabled],
-                ["stitch", "Stitch", info.stitch_disabled],
-              ] as const
-            ).map(([key, text, off]) => (
+            {interactions.map(([key, text, off]) => (
               <label key={key} className={cn("flex items-center gap-2", off && "opacity-50")} title={off ? `${text} is turned off in this TikTok account's settings` : undefined}>
                 <input type="checkbox" checked={!off && value[key]} disabled={off} onChange={(e) => set({ [key]: e.target.checked } as Partial<TikTokChoice>)} className="h-4 w-4 accent-[#9B6CFF]" />
                 {text}
@@ -71,7 +77,7 @@ export function TikTokOptions({ value, onChange, info, infoError, accountName }:
             <label className="flex items-center justify-between gap-3">
               <span>
                 Disclose video content
-                <span className="block text-xs text-ps-subtle">Turn on if this video promotes yourself, a brand, product or service.</span>
+                <span className="block text-xs text-ps-subtle">Turn on if this {photo ? "post" : "video"} promotes yourself, a brand, product or service.</span>
               </span>
               <input type="checkbox" role="switch" checked={value.disclose} onChange={(e) => set({ disclose: e.target.checked, yourBrand: false, brandedContent: false })} className="h-4 w-4 accent-[#9B6CFF]" />
             </label>

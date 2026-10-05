@@ -35,7 +35,7 @@ describe("TikTok guideline rules", () => {
   const info = { privacy_level_options: ["PUBLIC_TO_EVERYONE", "SELF_ONLY"], can_post: true, max_video_post_duration_sec: 60 };
 
   it("sends inbox posts without any posting choices", () => {
-    expect(destinationOptions(account("tiktok"), { tiktok: NEW_TIKTOK }, "Hi", [video])).toEqual({ delivery_mode: "inbox", ai_generated: false });
+    expect(destinationOptions(account("tiktok"), { tiktok: NEW_TIKTOK }, "Hi", [video])).toEqual({ delivery_mode: "inbox", media_type: "video", ai_generated: false });
     expect(tiktokProblems(NEW_TIKTOK, null, [video])).toEqual([]);
   });
 
@@ -45,6 +45,17 @@ describe("TikTok guideline rules", () => {
     expect(tiktokProblems({ ...direct, privacyLevel: "PUBLIC_TO_EVERYONE", disclose: true }, info, [video])).toEqual(["You turned on content disclosure: choose Your brand, Branded content, or both."]);
     expect(tiktokProblems({ ...direct, privacyLevel: "SELF_ONLY", disclose: true, brandedContent: true }, info, [video])).toEqual(["Branded content can't be private on TikTok. Choose a wider audience."]);
     expect(tiktokProblems({ ...direct, privacyLevel: "PUBLIC_TO_EVERYONE" }, info, [{ ...video, duration: 75 }])[0]).toMatch(/up to 60 seconds/);
+  });
+
+  it("turns images into a photo post with an optional title and no Duet or Stitch", () => {
+    const photo: ComposerMedia = { ...video, id: "p1", type: "image", duration: null };
+    const direct = { ...NEW_TIKTOK, mode: "direct" as const, privacyLevel: "SELF_ONLY", comments: true, duet: true, stitch: true, title: " Three looks " };
+    expect(destinationOptions(account("tiktok"), { tiktok: direct }, "Hi", [photo, { ...photo, id: "p2" }])).toMatchObject({
+      delivery_mode: "direct", media_type: "photo", title: "Three looks", comments_enabled: true, duet_enabled: false, stitch_enabled: false,
+    });
+    expect(destinationOptions(account("tiktok"), { tiktok: { ...NEW_TIKTOK, title: "Kept for photos only" } }, "Hi", [video])).toEqual({ delivery_mode: "inbox", media_type: "video", ai_generated: false });
+    expect(tiktokProblems(direct, info, Array.from({ length: 36 }, (_, i) => ({ ...photo, id: `p${i}` })))).toEqual(["TikTok photo posts can have at most 35 images; this one has 36."]);
+    expect(tiktokLabel({ ...direct, disclose: true, yourBrand: true }, true)).toBe("Your photo will be labeled “Promotional content”.");
   });
 
   it("tells the person how TikTok will label the post", () => {

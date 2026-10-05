@@ -19,9 +19,20 @@ import { publicErrorMessage } from "./lib/publicErrors";
 const http = httpRouter();
 authComponent.registerRoutes(http, createAuth);
 
+async function sha256Hex(value: string) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 function oauthCallback(provider: "tiktok" | "instagram" | "facebook" | "threads" | "youtube") {
   return httpAction(async (ctx, request) => {
     const url = new URL(request.url); const code = url.searchParams.get("code"); const state = url.searchParams.get("state"); const site = process.env.SITE_URL!;
+    // TikTok has only approved this address so far, so the new InsForge app sends its TikTok
+    // sign-ins here too. Any state this app didn't create goes on to the new app unchanged.
+    const forwardTo = provider === "tiktok" ? process.env.TIKTOK_FORWARD_URL : undefined;
+    if (forwardTo && state && !(await ctx.runQuery(internal.oauthState.isKnown, { stateHash: await sha256Hex(state) }))) {
+      return new Response(null, { status: 302, headers: { Location: `${forwardTo}${url.search}`, "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" } });
+    }
     if (!code || !state) return Response.redirect(`${site}/app/accounts?error=${encodeURIComponent(url.searchParams.get("error_description") ?? "Connection was cancelled.")}`);
     try {
       if (provider === "tiktok") {

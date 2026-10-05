@@ -14,6 +14,7 @@ import {
   MEDIA_TYPES,
   NAMES,
   NEW_TIKTOK,
+  isTikTokPhotoPost,
   tiktokProblems,
   type ComposerAccount,
   type ComposerMedia,
@@ -434,7 +435,7 @@ function PlatformOptions({ account, choice, media, caption, onChange, creator, c
           </div>
         </>
       )}
-      {account.platform === "tiktok" && <TikTokOptions value={choice.tiktok ?? NEW_TIKTOK} onChange={(t) => onChange({ tiktok: t })} info={creator} infoError={creatorError} accountName={account.name} />}
+      {account.platform === "tiktok" && <TikTokOptions value={choice.tiktok ?? NEW_TIKTOK} onChange={(t) => onChange({ tiktok: t })} info={creator} infoError={creatorError} accountName={account.name} photo={isTikTokPhotoPost(media)} />}
     </div>
   );
 }

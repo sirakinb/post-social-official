@@ -25,6 +25,13 @@ export const consume = internalMutation({
   },
 });
 
+// Whether this app started the sign-in with this state (used or not). Sign-ins it doesn't
+// know came from the new InsForge app and are forwarded there.
+export const isKnown = internalQuery({
+  args: { stateHash: v.string() },
+  handler: async (ctx, { stateHash }) => (await ctx.db.query("oauthStates").withIndex("by_state_hash", q => q.eq("stateHash", stateHash)).unique()) !== null,
+});
+
 export const existingAccount = internalQuery({
   args: { platform, externalAccountId: v.string() },
   handler: async (ctx, args) => await ctx.db.query("connectedAccounts").withIndex("by_platform_external", q => q.eq("platform", args.platform).eq("externalAccountId", args.externalAccountId)).unique(),

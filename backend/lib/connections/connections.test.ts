@@ -81,6 +81,13 @@ describe("sign-in links", () => {
     expect(google.searchParams.get("access_type")).toBe("offline");
     expect(google.searchParams.get("prompt")).toBe("consent");
   });
+
+  it("sends TikTok to an already-approved address when one is set", () => {
+    expect(callbackUrl("tiktok", setting)).toBe("https://fn.example/connections/oauth/tiktok/callback");
+    const withOverride = (name: string) => (name === "TIKTOK_REDIRECT_URI" ? "https://old.example/api/oauth/tiktok/callback" : setting(name));
+    expect(callbackUrl("tiktok", withOverride)).toBe("https://old.example/api/oauth/tiktok/callback");
+    expect(callbackUrl("instagram", withOverride)).toBe("https://fn.example/connections/oauth/instagram/callback");
+  });
 });
 
 describe("return addresses", () => {

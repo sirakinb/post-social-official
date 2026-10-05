@@ -106,6 +106,7 @@ function choiceFromOptions(platform: Platform, o: Record<string, unknown>): Plat
           yourBrand: o.disclose_your_brand === true,
           brandedContent: o.disclose_branded_content === true,
           aiGenerated: o.ai_generated === true,
+          title: str("title") ?? "",
         },
       };
   }

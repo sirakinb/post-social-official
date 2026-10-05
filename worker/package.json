@@ -4,6 +4,7 @@
   "type": "module",
   "description": "Runtime dependencies installed inside the worker container. Everything else is bundled.",
   "dependencies": {
-    "mediainfo.js": "0.3.8"
+    "mediainfo.js": "0.3.8",
+    "sharp": "0.35.3"
   }
 }

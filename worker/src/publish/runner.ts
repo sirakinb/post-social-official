@@ -10,6 +10,7 @@ import { destinationProblems, type DestinationOptions } from "../../../backend/l
 import { publishFacebook } from "./facebook";
 import { publishInstagram, publishThreads } from "./meta";
 import { publishTikTok } from "./tiktok";
+import { tiktokPhotoLinks } from "./tiktok-photos";
 import { PublishError, type Adapter, type Bundle, type Checkpoint, type StepContext, type StepResult } from "./types";
 import { publishYouTube } from "./youtube";
 
@@ -39,6 +40,15 @@ export type PublishDeps = {
 };
 
 type Job = { id: string; workspace_id: string; post_id: string; destination_id: string; attempt_count: number; poll_count: number; max_attempts: number; checkpoint: Checkpoint; started_at: string };
+
+// The verified domain TikTok fetches photos from (TIKTOK_MEDIA_SITE overrides it).
+function tiktokMediaSite(setting: Settings) {
+  try {
+    return setting("TIKTOK_MEDIA_SITE");
+  } catch {
+    return "https://www.postsocial.xyz";
+  }
+}
 
 const BACKOFF_MS = [30_000, 2 * 60_000, 10 * 60_000];
 const MAX_POLL_MINUTES = 30;
@@ -96,6 +106,7 @@ export async function runNextPublishJob(deps: PublishDeps): Promise<boolean> {
       renewLease: async () => {
         await deps.sql(`UPDATE public.publish_jobs SET lease_expires_at = now() + make_interval(secs => $2) WHERE ${fence}`, [job.id, LEASE_SECONDS]);
       },
+      tiktokPhotoLinks: b.platform === "tiktok" ? tiktokPhotoLinks({ r2: deps.r2, site: tiktokMediaSite(deps.setting), http: deps.http }) : undefined,
       reserve: async (operation, limit, windowSeconds) => {
         const [{ reserve_platform_call: retryAt }] = await deps.sql<{ reserve_platform_call: string | null }>(
           `SELECT public.reserve_platform_call($1, $2, $3, $4)`,

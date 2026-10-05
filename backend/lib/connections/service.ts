@@ -20,9 +20,23 @@ export function isPlatform(value: unknown): value is Platform {
 
 // The platform sends people back here. YouTube is the exception: Google only allows
 // callbacks on domains we own, so its callback is on the web app, which forwards here.
+// TikTok can be pointed at another address it has already approved (TIKTOK_REDIRECT_URI,
+// the old Convex callback, which forwards here) while a new address waits for its review.
 export function callbackUrl(platform: Platform, setting: Settings) {
   if (platform === "youtube") return setting("GOOGLE_REDIRECT_URI");
+  if (platform === "tiktok") {
+    const override = optionalSetting(setting, "TIKTOK_REDIRECT_URI");
+    if (override) return override;
+  }
   return `${setting("CONNECTIONS_BASE_URL")}/oauth/${platform}/callback`;
+}
+
+function optionalSetting(setting: Settings, name: string) {
+  try {
+    return setting(name).trim() || null;
+  } catch {
+    return null;
+  }
 }
 
 export function originAllowedFor(returnTo: string, allowed: string[]) {

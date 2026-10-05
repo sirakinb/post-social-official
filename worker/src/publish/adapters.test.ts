@@ -233,6 +233,74 @@ describe("TikTok", () => {
     expect(error.message).toMatch(/can only post to TikTok accounts set to Private/);
   });
 
+  describe("photo posts", () => {
+    const creator = (u: URL) => (u.pathname.endsWith("/creator_info/query/") ? json({ data: { can_post: true, privacy_level_options: ["SELF_ONLY"], max_video_post_duration_sec: 600 }, error: { code: "ok" } }) : undefined);
+    const photos = [{}, {}, {}];
+    const withLinks = (h: ReturnType<typeof harness>, prepared: string[][]) => {
+      h.ctx.tiktokPhotoLinks = async (media) => {
+        prepared.push(media.map((m) => m.id));
+        return media.map((m) => `https://www.postsocial.example/tiktok-media/${m.id}.jpg`);
+      };
+    };
+
+    it("hands TikTok the photo links in order as one direct post, then polls", async () => {
+      let sent: Record<string, any> = {}; // eslint-disable-line @typescript-eslint/no-explicit-any
+      let status = "PROCESSING_DOWNLOAD";
+      const h = harness("tiktok", { ...direct, title: "Three looks", comments_enabled: true, disclose_your_brand: true }, [
+        creator,
+        (u, i) => (u.pathname.endsWith("/content/init/") ? ((sent = JSON.parse(String(i.body))), json({ data: { publish_id: "pub-p" }, error: { code: "ok" } })) : undefined),
+        (u) => (u.pathname.endsWith("/status/fetch/") ? json({ data: { status, publicaly_available_post_id: status === "PUBLISH_COMPLETE" ? ["888"] : [] }, error: { code: "ok" } }) : undefined),
+      ], { media: photos });
+      const prepared: string[][] = [];
+      withLinks(h, prepared);
+
+      expect(await publishTikTok(h.ctx)).toMatchObject({ kind: "wait", message: "TikTok is processing the photos." });
+      expect(prepared).toEqual([["m0", "m1", "m2"]]);
+      expect(sent).toEqual({
+        post_info: { title: "Three looks", description: "Hello world", privacy_level: "SELF_ONLY", disable_comment: false, brand_content_toggle: false, brand_organic_toggle: true },
+        source_info: { source: "PULL_FROM_URL", photo_images: ["m0", "m1", "m2"].map((id) => `https://www.postsocial.example/tiktok-media/${id}.jpg`), photo_cover_index: 0 },
+        post_mode: "DIRECT_POST",
+        media_type: "PHOTO",
+      });
+      expect(h.checkpoint).toMatchObject({ publish_id: "pub-p", uploaded: true });
+      status = "PUBLISH_COMPLETE";
+      expect(await publishTikTok(h.ctx)).toMatchObject({ kind: "published", platformId: "888", liveUrl: "https://www.tiktok.com/@aki/photo/888" });
+      expect(h.calls.filter((c) => c.includes("/content/init/"))).toHaveLength(1);
+      expect(h.calls.some((c) => c.includes("/video/init/"))).toBe(false);
+    });
+
+    it("sends photos to the inbox with only the title and caption", async () => {
+      let sent: Record<string, any> = {}; // eslint-disable-line @typescript-eslint/no-explicit-any
+      const h = harness("tiktok", { kind: "tiktok", delivery_mode: "inbox", media_type: "photo" }, [
+        creator,
+        (u, i) => (u.pathname.endsWith("/content/init/") ? ((sent = JSON.parse(String(i.body))), json({ data: { publish_id: "pub-i" }, error: { code: "ok" } })) : undefined),
+      ], { media: photos });
+      withLinks(h, []);
+      await publishTikTok(h.ctx);
+      expect(sent.post_mode).toBe("MEDIA_UPLOAD");
+      expect(sent.post_info).toEqual({ description: "Hello world" });
+    });
+
+    it("never posts twice when an earlier attempt may have reached TikTok", async () => {
+      const h = harness("tiktok", direct, [creator], { media: photos, checkpoint: { photo_post_sent_at: "2026-10-05T11:59:00Z" } });
+      withLinks(h, []);
+      const error = (await publishTikTok(h.ctx).catch((e) => e)) as PublishError;
+      expect(error).toMatchObject({ code: "unconfirmed", retryable: false });
+      expect(h.calls.some((c) => c.includes("/content/init/"))).toBe(false);
+    });
+
+    it("allows a retry when TikTok answered with an error", async () => {
+      const h = harness("tiktok", direct, [
+        creator,
+        (u) => (u.pathname.endsWith("/content/init/") ? json({ error: { code: "url_ownership_unverified", message: "nope" } }, 403) : undefined),
+      ], { media: photos });
+      withLinks(h, []);
+      const error = (await publishTikTok(h.ctx).catch((e) => e)) as PublishError;
+      expect(error.message).toMatch(/isn't verified with TikTok/);
+      expect(h.checkpoint.photo_post_sent_at).toBeUndefined();
+    });
+  });
+
   it("splits large videos into chunks of at most 64 MB", () => {
     const plan = chunkPlan(150 * 1024 * 1024);
     expect(plan.ranges).toHaveLength(3);
