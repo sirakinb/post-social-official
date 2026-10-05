@@ -1,111 +1,57 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import React from "react";
 import LandingPage from "./page";
 
 vi.mock("next/image", () => ({
-  default: ({ src, alt }: { src: string; alt: string }) =>
-    React.createElement("div", { "data-testid": "avatar-image", "data-src": src, "data-alt": alt }),
+  default: ({ src, alt }: { src: string; alt: string }) => React.createElement("div", { "data-testid": "hero-image", "data-src": src, "data-alt": alt }),
 }));
+vi.mock("./fonts", () => ({ Fraunces: { variable: "font-fraunces" }, GeistPixelGrid: { variable: "font-pixel" } }));
+// Canvas and WebGL layers draw nothing in jsdom; the wordmark keeps its accessible name.
+vi.mock("@/components/landing/dusk-sky", () => ({ DuskSky: () => null }));
+vi.mock("@/components/landing/particle-wordmark", () => ({
+  ParticleWordmark: ({ label }: { label: string }) => React.createElement("canvas", { role: "img", "aria-label": label }),
+}));
+vi.mock("./waitlist-action", () => ({ joinWaitlist: vi.fn(async () => ({ ok: true })) }));
 
 describe("LandingPage", () => {
-  it("renders the hero headline and platform strip", () => {
+  it("keeps the headline, with the two words set in the display face", () => {
     render(<LandingPage />);
-    expect(
-      screen.getByRole("heading", { level: 1, name: /Social media posting for AI-native creators and operators/i })
-    ).toBeInTheDocument();
-    const strip = screen.getByLabelText(/TikTok, Instagram, Facebook Pages, Threads, YouTube, LinkedIn, Bluesky, and X/i);
-    expect(within(strip).getByRole("img", { name: /TikTok/i })).toBeInTheDocument();
-    expect(within(strip).getByRole("img", { name: /Instagram/i })).toBeInTheDocument();
-    expect(within(strip).getByRole("img", { name: /Facebook/i })).toBeInTheDocument();
-    expect(within(strip).getByRole("img", { name: /Threads/i })).toBeInTheDocument();
-    expect(within(strip).getByRole("img", { name: /YouTube/i })).toBeInTheDocument();
-    expect(within(strip).getByRole("img", { name: /LinkedIn/i })).toBeInTheDocument();
-    expect(within(strip).getByRole("img", { name: /Bluesky/i })).toBeInTheDocument();
-    expect(within(strip).getByRole("img", { name: /X/i })).toBeInTheDocument();
+    const h1 = screen.getByRole("heading", { level: 1, name: /Social media posting for AI-native creators and operators/i });
+    expect(within(h1).getByText("AI-native")).toHaveClass("lp-display");
+    expect(within(h1).getByText("operators")).toHaveClass("lp-display");
   });
 
-  it("renders the primary CTA linking to login with visitor-owned language", () => {
+  it("shows the particle wordmark and the dusk painting", () => {
     render(<LandingPage />);
-    const ctas = screen.getAllByRole("link", { name: /Start my first post/i });
-    expect(ctas.length).toBeGreaterThanOrEqual(1);
-    ctas.forEach((cta) => {
-      expect(cta).toHaveAttribute("href", "/login");
-    });
+    expect(screen.getByRole("img", { name: "Post Social" })).toBeInTheDocument();
+    expect(screen.getByTestId("hero-image")).toHaveAttribute("data-src", "/landing/hero-dusk-2560.webp");
   });
 
-  it("renders anchor navigation for each section", () => {
+  it("names only the platforms that work today", () => {
     render(<LandingPage />);
-    ["Use with AI", "How it works", "Features", "Platforms", "FAQ"].forEach((label) => {
-      expect(screen.getByRole("link", { name: label })).toBeInTheDocument();
-    });
-  });
-
-  it("mentions only the supported platforms without inventing metrics", () => {
-    render(<LandingPage />);
-    expect(screen.getAllByText(/TikTok/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Instagram/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Facebook Pages/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Threads/i).length).toBeGreaterThan(0);
-
     const body = document.body.textContent ?? "";
-    expect(body).not.toMatch(/\d+%/);
-    expect(body).not.toMatch(/free trial/i);
-    expect(body).not.toMatch(/testimonial/i);
+    for (const name of ["TikTok", "Instagram", "Facebook", "Threads", "YouTube"]) expect(body).toContain(name);
+    expect(body).not.toMatch(/LinkedIn|Bluesky/);
+    expect(body).not.toMatch(/\d+%|free trial|testimonial/i);
   });
 
-  it("renders the FAQ as an accessible details list", () => {
+  it("links to sign in, docs and the legal pages", () => {
     render(<LandingPage />);
-    expect(screen.getByText(/Which platforms are supported\?/i)).toBeInTheDocument();
-    expect(screen.getByText(/Can an AI agent publish for me\?/i)).toBeInTheDocument();
-    expect(document.querySelectorAll("details").length).toBeGreaterThanOrEqual(6);
+    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/beta/login");
+    const legal = screen.getByRole("navigation", { name: "Legal" });
+    expect(within(legal).getByRole("link", { name: "Privacy" })).toHaveAttribute("href", "/privacy");
+    expect(within(legal).getByRole("link", { name: "Terms" })).toHaveAttribute("href", "/terms");
+    expect(within(legal).getByRole("link", { name: "Docs" })).toHaveAttribute("href", "/docs");
   });
 
-  it("leads with posting from AI assistants", () => {
+  it("opens the waitlist form from the main button and closes it with Escape", () => {
     render(<LandingPage />);
-    const agents = document.getElementById("agents");
-    expect(agents).not.toBeNull();
-    expect(agents).toHaveTextContent(/Post from ChatGPT, Claude, or any AI you already use/i);
-    expect(agents).toHaveTextContent(/publishes or schedules it directly/i);
-    expect(document.body.textContent).not.toMatch(/Your accounts stay yours/i);
-    expect(document.body.textContent).not.toMatch(/never ask for your social passwords/i);
-  });
-
-  it("shows all eight destinations in the platforms section", () => {
-    render(<LandingPage />);
-    const platforms = document.getElementById("platforms");
-    expect(platforms).not.toBeNull();
-    ["TikTok", "Instagram", "Facebook Pages", "Threads", "YouTube", "LinkedIn", "Bluesky", "X"].forEach((name) => {
-      expect(within(platforms as HTMLElement).getByRole("heading", { name: new RegExp(`^${name}`) })).toBeInTheDocument();
-    });
-  });
-
-  it("shows a video placeholder in the hero with no real account names", () => {
-    render(<LandingPage />);
-    expect(screen.getByRole("img", { name: /Product video coming soon/i })).toBeInTheDocument();
-    expect(document.body.textContent).not.toMatch(/Sirakinb|Still Meditation/i);
-  });
-
-  it("renders the real product screenshots with useful alt text", () => {
-    render(<LandingPage />);
-    const images = screen.getAllByTestId("avatar-image");
-    const screenshots = images.filter((img) =>
-      img.getAttribute("data-src")?.startsWith("/landing/post-social-"),
-    );
-
-    expect(screenshots).toHaveLength(3);
-    expect(screenshots.map((img) => img.getAttribute("data-src"))).toEqual(
-      expect.arrayContaining([
-        "/landing/post-social-create.png",
-        "/landing/post-social-calendar.png",
-        "/landing/post-social-activity.png",
-      ]),
-    );
-
-    screenshots.forEach((img) => {
-      const alt = img.getAttribute("data-alt");
-      expect(alt).toBeTruthy();
-      expect(alt?.length).toBeGreaterThan(5);
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Join the waitlist" }));
+    const dialog = screen.getByRole("dialog", { name: "Join the waitlist" });
+    expect(within(dialog).getByLabelText("Email address")).toHaveAttribute("type", "email");
+    expect(within(dialog).getByLabelText("Email address")).toHaveFocus();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

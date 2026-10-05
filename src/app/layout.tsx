@@ -4,11 +4,17 @@ import "./globals.css";
 import { ConvexClientProvider } from "@/components/convex-client-provider";
 import { EnvironmentBadge } from "@/components/environment-badge";
 
+const title = "Post Social — Social media posting for AI-native creators and operators";
+const description = "Tell Claude, ChatGPT, or your own agent what to post. Post Social publishes it to TikTok, Instagram, Facebook, Threads and YouTube.";
+
 export const metadata: Metadata = {
-  title: "Post Social — Social media posting for AI-native creators and operators",
-  description:
-    "Let Claude, ChatGPT, or your own automations draft and schedule to TikTok, Instagram, Facebook, Threads, YouTube, LinkedIn, Bluesky, and X.",
+  // Share cards need absolute image links; Vercel's production domain, else the live site.
+  metadataBase: new URL(process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "https://www.postsocial.xyz"),
+  title,
+  description,
   icons: { icon: "/post-social-icon.svg" },
+  openGraph: { title, description, siteName: "Post Social", type: "website", url: "/" },
+  twitter: { card: "summary_large_image", title, description },
 };
 
 export default function RootLayout({

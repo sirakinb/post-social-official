@@ -199,3 +199,116 @@ body::after {
     text-wrap: balance;
   }
 }
+
+/* ===== Landing (Phase 7): ported from the Manor landing, warmed for dusk ===== */
+.lp-wordmark {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-weight: 500;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+}
+
+.lp-display {
+  font-family: var(--font-geist-pixel-grid), var(--font-geist-sans), sans-serif;
+}
+
+/* The highlighted words: plum fading into lantern light. */
+.lp-ink {
+  background: linear-gradient(90deg, #9b6cff 0%, #e7b8ff 55%, #ffe3bf 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.lp-glass {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  -webkit-backdrop-filter: blur(22px);
+  backdrop-filter: blur(22px);
+}
+
+.lp-grain {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  opacity: 0.16;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.lp-sky {
+  pointer-events: none;
+  mix-blend-mode: screen;
+  opacity: 0.9;
+}
+
+.lp-wordmark-canvas {
+  pointer-events: none;
+  filter: drop-shadow(0 0 18px rgba(255, 180, 110, 0.28));
+}
+.lp-wordmark-canvas canvas {
+  pointer-events: auto;
+}
+
+.lp-veil {
+  animation: 8s ease-in-out infinite alternate lp-veil;
+}
+
+.lp-rise {
+  animation: 0.9s cubic-bezier(0.22, 1, 0.36, 1) both lp-rise;
+}
+.lp-rise-delay-1 {
+  animation-delay: 0.12s;
+}
+
+@keyframes lp-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes lp-veil {
+  0% {
+    opacity: 0.75;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Lumen CTA: a plum pill lit from below like a lantern. */
+.lp-lumen {
+  background: linear-gradient(180deg, #2a1247 0%, #4c1d95 24%, #7c3aed 50%, #9b5cf0 70%, #d29bd8 90%, #ffd2a6 100%);
+  border: 1px solid rgba(255, 214, 180, 0.35);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.35),
+    0 10px 30px rgba(147, 51, 234, 0.35),
+    0 0 40px rgba(255, 170, 100, 0.18);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    filter 0.18s ease;
+}
+.lp-lumen:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.35),
+    0 14px 38px rgba(168, 85, 247, 0.5),
+    0 0 56px rgba(255, 170, 100, 0.28);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-rise,
+  .lp-veil {
+    animation: none;
+  }
+}
