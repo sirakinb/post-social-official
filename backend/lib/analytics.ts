@@ -123,7 +123,8 @@ export async function postAnalytics(sql: Sql, caller: Caller, platforms: Platfor
 
 // Asks the worker to fetch fresh numbers now (at most every 30 minutes per post).
 export async function refreshAnalytics(sql: Sql, caller: Caller, platforms: Platform[], input: { workspace_id: string; post_id?: unknown }) {
-  await membership(sql, caller, input.workspace_id, false);
+  // It makes the worker call the platforms, so read-only members (reviewers) can't.
+  await membership(sql, caller, input.workspace_id, true, "Reviewers can view stats but not refresh them.");
   const postId = input.post_id === undefined || input.post_id === "" ? null : requireUuid(input.post_id, "Post");
   const [result] = await sql<{ queued: string; cooling: string }>(
     `WITH candidates AS (

@@ -13,11 +13,17 @@ export const LIMITS = {
   waitlist_ip: { limit: 5, windowSeconds: 3600 },
   oauth_register_ip: { limit: 20, windowSeconds: 3600 },
   oauth_token_ip: { limit: 120, windowSeconds: 60 },
+  // Per email AND address, so a stranger can't use up someone's attempts; the email-only
+  // caps are a high backstop against attacks spread over many addresses.
   signin_ip: { limit: 20, windowSeconds: 600 },
-  signin_email: { limit: 10, windowSeconds: 900 },
+  signin_email_ip: { limit: 10, windowSeconds: 900 },
+  signin_email: { limit: 100, windowSeconds: 3600 },
   reset_request_ip: { limit: 10, windowSeconds: 3600 },
-  reset_request_email: { limit: 3, windowSeconds: 3600 },
-  reset_complete_email: { limit: 10, windowSeconds: 3600 },
+  reset_request_email: { limit: 3, windowSeconds: 3600 }, // over it: same answer, no email sent
+  reset_complete_email_ip: { limit: 10, windowSeconds: 3600 },
+  reset_complete_email: { limit: 30, windowSeconds: 3600 },
+  // Every /v1 and /mcp request per address, checked before the key: stops floods of bad keys.
+  api_ip: { limit: 600, windowSeconds: 60 },
   // Signed in (on top of each plan's daily API limit)
   api_credential: { limit: 120, windowSeconds: 60 },
   person_user: { limit: 120, windowSeconds: 60 },
@@ -34,10 +40,28 @@ export class RateLimitError extends ApiError {
   }
 }
 
-// A short, one-way id for an address or email, so counters never hold the raw value.
-export async function hashId(value: string): Promise<string> {
-  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value.trim().toLowerCase()));
+// A short, one-way id for an address or email, so counters never hold the raw value. Keyed
+// (HMAC) with a server secret, so ids can't be reversed by hashing every address or a list
+// of likely emails.
+export async function hashId(value: string, secret?: string | null): Promise<string> {
+  const data = new TextEncoder().encode(value.trim().toLowerCase());
+  const bytes = secret
+    ? await crypto.subtle.sign("HMAC", await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]), data)
+    : await crypto.subtle.digest("SHA-256", data);
   return Array.from(new Uint8Array(bytes).slice(0, 16), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// One id per network: an IPv6 /64 is what one home or server gets, so counting each
+// address in it separately would give an attacker billions of fresh limits.
+export function networkOf(ip: string): string {
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
+  if (mapped) return mapped[1];
+  if (!ip.includes(":")) return ip;
+  const [head, tail = ""] = ip.split("::");
+  const left = head ? head.split(":") : [];
+  const right = tail ? tail.split(":") : [];
+  const groups = ip.includes("::") ? [...left, ...Array(Math.max(0, 8 - left.length - right.length)).fill("0"), ...right] : left;
+  return `${groups.slice(0, 4).map((g) => (g || "0").toLowerCase().replace(/^0+(?=.)/, "")).join(":")}::/64`;
 }
 
 // Seconds to wait (0 = go ahead). Never throws for infrastructure trouble.
@@ -69,9 +93,9 @@ export function retryHeaders(error: unknown): Record<string, string> {
 // shared secret (X-PS-Proxy-Secret); that header is believed only with the right secret.
 export function clientIp(request: Request, proxySecret?: string | null): string {
   const claimed = request.headers.get("x-ps-client-ip");
-  if (claimed && fromOurWebsite(request, proxySecret)) return claimed.trim();
+  if (claimed && fromOurWebsite(request, proxySecret)) return networkOf(claimed.trim());
   const chain = (request.headers.get("x-forwarded-for") ?? "").split(",").map((part) => part.trim()).filter(Boolean);
-  return chain[chain.length - 1] ?? "unknown";
+  return networkOf(chain[chain.length - 1] ?? "unknown");
 }
 
 // True when the request carries our website's shared secret.

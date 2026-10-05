@@ -214,20 +214,25 @@ type GrantRow = { id: string; workspace_id: string; user_id: string; client_id: 
 
 // rotated: a refresh replaced the old token, so seeing it again later means it leaked.
 // After a fresh sign-in the old token is simply retired (the app replaced it on purpose).
-async function issueTokens(sql: Sql, grantId: string, workspaceId: string, rotated: boolean) {
+// usedRefreshHash: on a refresh, the token being exchanged. The swap only happens if it is
+// still the current one, so two requests racing with the same token can't both succeed.
+async function issueTokens(sql: Sql, grantId: string, workspaceId: string, rotated: boolean, usedRefreshHash: string | null = null) {
   const access = `ps_at_${randomToken(32)}`;
   const refresh = `ps_rt_${randomToken(32)}`;
-  await sql(
+  const issued = await sql(
     `WITH g AS (
        UPDATE public.oauth_grants
        SET previous_refresh_token_hash = CASE WHEN $7 THEN refresh_token_hash END, refresh_token_hash = $3, refresh_rotated_at = now(),
            refresh_expires_at = now() + make_interval(days => $5), last_used_at = now()
-       WHERE id = $1
+       WHERE id = $1 AND ($8::text IS NULL OR refresh_token_hash = $8)
+       RETURNING id
      )
      INSERT INTO public.oauth_access_tokens (token_hash, oauth_grant_id, workspace_id, expires_at)
-     VALUES ($4, $1, $2, now() + make_interval(secs => $6))`,
-    [grantId, workspaceId, await sha256Hex(refresh), await sha256Hex(access), REFRESH_DAYS, ACCESS_SECONDS, rotated],
+     SELECT $4, id, $2, now() + make_interval(secs => $6) FROM g
+     RETURNING token_hash`,
+    [grantId, workspaceId, await sha256Hex(refresh), await sha256Hex(access), REFRESH_DAYS, ACCESS_SECONDS, rotated, usedRefreshHash],
   );
+  if (!issued.length) throw new OAuthError("invalid_grant", "This connection has ended. Connect Post Social again.");
   return { access_token: access, token_type: "Bearer", expires_in: ACCESS_SECONDS, refresh_token: refresh, scope: SCOPE };
 }
 
@@ -326,7 +331,7 @@ async function refreshGrant(sql: Sql, _issuer: string, form: Record<string, stri
   }
   if (grant.expired || grant.client_id !== form.client_id) throw invalid;
   if (!(await stillMember(sql, grant.workspace_id, grant.user_id))) throw invalid;
-  return issueTokens(sql, grant.id, grant.workspace_id, true);
+  return issueTokens(sql, grant.id, grant.workspace_id, true, hash);
 }
 
 // RFC 7009: always answers 200, whether or not the token was known.

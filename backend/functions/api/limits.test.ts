@@ -2,13 +2,14 @@ import { describe, expect, it } from "vitest";
 import type { AgentCaller, Sql } from "../../lib/access";
 import { createApiHandler } from "./handler";
 
-// A database where every rate-limit check answers `wait` (seconds to wait; 0 = allowed).
-function fakeSql(wait: number) {
+// A database where every rate-limit check answers `wait` (seconds to wait; 0 = allowed),
+// except the per-address API check, which passes unless `addressWait` is given.
+function fakeSql(wait: number, addressWait = 0) {
   const keys: string[] = [];
   const sql = (async (query: string, params: unknown[]) => {
     if (query.includes("take_rate_limit")) {
       keys.push(String(params[0]));
-      return [{ wait }];
+      return [{ wait: String(params[0]).startsWith("api_ip:") ? addressWait : wait }];
     }
     return [];
   }) as Sql;
@@ -30,7 +31,8 @@ describe("rate limits on the api function", () => {
     expect(response.status).toBe(429);
     expect(response.headers.get("retry-after")).toBe("17");
     expect((await response.json()).error.message).toMatch(/Wait 17 seconds/);
-    expect(keys).toEqual(["api_credential:key-1"]);
+    expect(keys.map((k) => k.split(":")[0])).toEqual(["api_ip", "api_credential"]);
+    expect(keys[1]).toBe("api_credential:key-1");
   });
 
   it("applies the same limit over MCP", async () => {
@@ -56,7 +58,33 @@ describe("rate limits on the api function", () => {
     expect(keys).toEqual([]);
     const ok = await check({ "x-ps-proxy-secret": "the-secret", "x-ps-client-ip": "203.0.113.9" });
     expect(ok.status).toBe(200);
-    expect(keys.map((k) => k.split(":")[0])).toEqual(["signin_ip", "signin_email"]);
+    // Per address, per email-and-address, then a high email-only backstop.
+    expect(keys.map((k) => k.split(":")[0])).toEqual(["signin_ip", "signin_email_ip", "signin_email"]);
+  });
+
+  it("over the per-email reset cap, answers as usual but says not to send", async () => {
+    // Only the per-email counter is over: the visitor isn't blocked, but no email goes out.
+    const keys: string[] = [];
+    const sql = (async (query: string, params: unknown[]) => {
+      if (!query.includes("take_rate_limit")) return [];
+      keys.push(String(params[0]));
+      return [{ wait: String(params[0]).startsWith("reset_request_email:") ? 900 : 0 }];
+    }) as Sql;
+    const response = await handlerFor(sql)(new Request("https://fn/internal/limits", { method: "POST", headers: { "x-ps-proxy-secret": "the-secret" }, body: JSON.stringify({ check: "reset_request", email: "a@x.com" }) }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true, send: false });
+  });
+
+  it("checks addresses before keys on /v1, so floods of bad keys are cut off", async () => {
+    const keys: string[] = [];
+    const sql = (async (query: string, params: unknown[]) => {
+      if (!query.includes("take_rate_limit")) return [];
+      keys.push(String(params[0]));
+      return [{ wait: String(params[0]).startsWith("api_ip:") ? 12 : 0 }];
+    }) as Sql;
+    const response = await handlerFor(sql)(new Request("https://fn/v1/accounts", { headers: { Authorization: "Bearer junk" } }));
+    expect(response.status).toBe(429);
+    expect(keys.map((k) => k.split(":")[0])).toEqual(["api_ip"]);
   });
 
   it("turns the sign-in check away when over, so the website can say so", async () => {
