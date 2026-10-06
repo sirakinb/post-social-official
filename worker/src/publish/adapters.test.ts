@@ -301,6 +301,13 @@ describe("TikTok", () => {
     });
   });
 
+  it("reports an inbox post as drafted, not live", async () => {
+    const h = harness("tiktok", { kind: "tiktok", delivery_mode: "inbox" }, [
+      (u) => (u.pathname.endsWith("/status/fetch/") ? json({ data: { status: "SEND_TO_USER_INBOX" }, error: { code: "ok" } }) : undefined),
+    ], { media: [video], checkpoint: { uploaded: true, publish_id: "v_inbox_1" } });
+    expect(await publishTikTok(h.ctx)).toMatchObject({ kind: "published", drafted: true, platformId: "v_inbox_1" });
+  });
+
   it("splits large videos into chunks of at most 64 MB", () => {
     const plan = chunkPlan(150 * 1024 * 1024);
     expect(plan.ranges).toHaveLength(3);

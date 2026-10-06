@@ -31,7 +31,8 @@ const VIA: Record<string, string> = { mcp: "via MCP", api: "via the API", ui: ""
 export function statusFor(eventType: string, summary: string): ActivityRow["status"] {
   switch (eventType) {
     case "destination.published":
-      return { label: "Live", tone: "live" };
+      // TikTok inbox posts wait in the person's drafts until they post them in TikTok.
+      return /TikTok drafts/i.test(summary) ? { label: "In drafts", tone: "attention" } : { label: "Live", tone: "live" };
     case "destination.failed":
     case "media.failed":
     case "account.refresh_failed":

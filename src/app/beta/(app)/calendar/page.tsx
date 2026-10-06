@@ -15,11 +15,11 @@ type Row = {
   created_at: string;
   entry_point: string;
   actors: { kind: string; display_name: string } | null;
-  destinations: Array<{ platform: string; status: string; live_url: string | null; connected_accounts: { display_name: string } | null }>;
+  destinations: Array<{ platform: string; status: string; live_url: string | null; options: { delivery_mode?: string } | null; connected_accounts: { display_name: string } | null }>;
   post_media: Array<{ position: number; media_assets: { id: string; media_type: string; status: string } | null }>;
 };
 
-const SELECT = "id, status, caption, scheduled_at, created_at, entry_point, actors(kind, display_name), destinations(platform, status, live_url, connected_accounts(display_name)), post_media(position, media_assets(id, media_type, status))";
+const SELECT = "id, status, caption, scheduled_at, created_at, entry_point, actors(kind, display_name), destinations(platform, status, live_url, options, connected_accounts(display_name)), post_media(position, media_assets(id, media_type, status))";
 
 export default async function CalendarPage({ searchParams }: { searchParams: Promise<{ from?: string }> }) {
   const params = await searchParams;
@@ -51,7 +51,14 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     by: r.actors ? { kind: r.actors.kind, name: r.actors.display_name } : null,
     via: r.entry_point,
     thumb: firstMedia[i] ? { url: (firstMedia[i]!.media_type === "video" ? posters : links)[firstMedia[i]!.id] ?? null, isVideo: firstMedia[i]!.media_type === "video" } : null,
-    destinations: r.destinations.map((d) => ({ platform: d.platform, status: d.status, account: d.connected_accounts?.display_name ?? "", liveUrl: d.live_url })),
+    destinations: r.destinations.map((d) => ({
+      platform: d.platform,
+      status: d.status,
+      account: d.connected_accounts?.display_name ?? "",
+      liveUrl: d.live_url,
+      // TikTok inbox posts wait in the person's TikTok drafts; they aren't live yet.
+      drafted: d.status === "published" && d.options?.delivery_mode === "inbox",
+    })),
   }));
 
   return <CalendarView posts={posts} anchor={new Date(anchor).toISOString()} canEdit={workspace.role !== "reviewer"} />;
