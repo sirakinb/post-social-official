@@ -53,6 +53,9 @@ export type StepContext = {
   renewLease: () => Promise<void>;
   now: () => number;
   sleep: (ms: number) => Promise<void>;
+  // TikTok photo posts: makes each photo's TikTok-ready copy and returns the links TikTok
+  // fetches them from (worker/src/publish/tiktok-photos.ts).
+  tiktokPhotoLinks?: (photos: PublishMedia[], onEach?: () => Promise<void>) => Promise<string[]>;
 };
 
 export type Adapter = (ctx: StepContext) => Promise<StepResult>;

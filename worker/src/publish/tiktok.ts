@@ -1,8 +1,10 @@
-// TikTok Direct Post and inbox drafts, uploading the video from storage in chunks. The
-// creator's options are checked right before each post (TikTok requires a fresh check).
-// Until every chunk is uploaded TikTok publishes nothing, so an interrupted upload simply
-// starts over with a new publish id; once uploaded, the publish id is polled for status.
-import type { TikTokOptions } from "../../../backend/lib/publishing/validate";
+// TikTok Direct Post and inbox drafts. Videos are uploaded from storage in chunks; photo
+// posts (1 to 35 images, a swipeable carousel) are fetched by TikTok from our verified
+// domain (tiktok-photos.ts). The creator's options are checked right before each post
+// (TikTok requires a fresh check). Until a video's chunks are all uploaded TikTok publishes
+// nothing, so an interrupted upload starts over with a new publish id; once a post is
+// handed over, its publish id is polled for status.
+import { tiktokMediaType, type TikTokOptions } from "../../../backend/lib/publishing/validate";
 import { PublishError, platformJson, type Adapter, type StepContext } from "./types";
 
 const API = "https://open.tiktokapis.com/v2";
@@ -23,6 +25,7 @@ const TIKTOK_MESSAGES: Record<string, string> = {
   spam_risk_user_banned_from_posting: "TikTok has blocked this account from posting right now.",
   reached_active_user_cap: "TikTok's daily limit for this app has been reached. Try again tomorrow.",
   privacy_level_option_mismatch: "That audience isn't available for this TikTok account. Choose another.",
+  url_ownership_unverified: "TikTok couldn't fetch the photos because Post Social's photo address isn't verified with TikTok yet.",
 };
 
 async function api(ctx: StepContext, path: string, body: unknown, what: string) {
@@ -42,7 +45,7 @@ async function api(ctx: StepContext, path: string, body: unknown, what: string) 
   }
 }
 
-async function checkCreator(ctx: StepContext, options: TikTokOptions) {
+async function checkCreator(ctx: StepContext, options: TikTokOptions, photo: boolean) {
   const info = (await api(ctx, "/post/publish/creator_info/query/", {}, "Checking the TikTok account")).data ?? {};
   if (options.delivery_mode === "inbox") return;
   if (info.can_post === false) throw new PublishError("tiktok_cannot_post", "TikTok says this account can't post right now (often a daily limit). Try again later.", true, new Date(ctx.now() + 3600_000));
@@ -51,7 +54,7 @@ async function checkCreator(ctx: StepContext, options: TikTokOptions) {
     throw new PublishError("tiktok_privacy_unavailable", `This TikTok account can't post with that audience. Choose one of: ${allowed.join(", ")}.`);
   }
   const max = Number(info.max_video_post_duration_sec);
-  const duration = ctx.bundle.media[0]?.duration_seconds;
+  const duration = photo ? null : ctx.bundle.media[0]?.duration_seconds;
   if (max && duration && duration > max) throw new PublishError("tiktok_video_too_long", `This TikTok account allows videos up to ${max} seconds; this one is ${Math.round(duration)}.`);
   if (options.comments_enabled && info.comment_disabled) throw new PublishError("tiktok_comments_off", "Comments are turned off for this TikTok account; turn them off for this post.");
   if (options.duet_enabled && info.duet_disabled) throw new PublishError("tiktok_duet_off", "Duet is turned off for this TikTok account; turn it off for this post.");
@@ -65,9 +68,12 @@ export const publishTikTok: Adapter = async (ctx) => {
     throw new PublishError("tiktok_reconnect", "Reconnect this TikTok account to allow sending drafts.", false, undefined, true);
   }
 
+  const photo = tiktokMediaType(options, ctx.bundle.media) === "photo";
+  if (!ctx.checkpoint.uploaded && photo) return startPhotoPost(ctx, options);
+
   if (!ctx.checkpoint.uploaded) {
     await ctx.reserve("publish_init", 6, 60);
-    await checkCreator(ctx, options);
+    await checkCreator(ctx, options, false);
     const { chunkSize, ranges } = chunkPlan(video.size_bytes);
     const source_info = { source: "FILE_UPLOAD", video_size: video.size_bytes, chunk_size: chunkSize, total_chunk_count: ranges.length };
     const init = options.delivery_mode === "inbox"
@@ -107,6 +113,7 @@ export const publishTikTok: Adapter = async (ctx) => {
     return { kind: "wait", afterMs: 10_000, message: "TikTok is processing the video." };
   }
 
+  const kind = photo ? "photos" : "video";
   const status = (await api(ctx, "/post/publish/status/fetch/", { publish_id: ctx.checkpoint.publish_id }, "Checking the TikTok post")).data ?? {};
   const state = String(status.status ?? "");
   if (state === "PUBLISH_COMPLETE") {
@@ -116,11 +123,58 @@ export const publishTikTok: Adapter = async (ctx) => {
     return {
       kind: "published",
       platformId: String(postId ?? ctx.checkpoint.publish_id),
-      liveUrl: postId && handle ? `https://www.tiktok.com/@${handle}/video/${postId}` : undefined,
+      liveUrl: postId && handle ? `https://www.tiktok.com/@${handle}/${photo ? "photo" : "video"}/${postId}` : undefined,
       note: postId ? undefined : options.privacy_level === "SELF_ONLY" ? "Posted privately on TikTok, so it has no public link." : undefined,
     };
   }
   if (state === "SEND_TO_USER_INBOX") return { kind: "published", platformId: String(ctx.checkpoint.publish_id), note: "Sent to your TikTok drafts. Open TikTok to finish and post it." };
-  if (state === "FAILED") throw new PublishError(`tiktok_${status.fail_reason ?? "failed"}`, `TikTok could not publish the video${status.fail_reason ? ` (${String(status.fail_reason).replace(/_/g, " ")})` : ""}.`);
-  return { kind: "wait", afterMs: 10_000, message: "TikTok is processing the video." };
+  if (state === "FAILED") {
+    const reason = String(status.fail_reason ?? "");
+    if (TIKTOK_MESSAGES[reason]) throw new PublishError(`tiktok_${reason}`, TIKTOK_MESSAGES[reason]);
+    throw new PublishError(`tiktok_${reason || "failed"}`, `TikTok could not publish the ${kind}${reason ? ` (${reason.replace(/_/g, " ")})` : ""}.`);
+  }
+  return { kind: "wait", afterMs: 10_000, message: `TikTok is processing the ${kind}.` };
 };
+
+// Photo posts: TikTok fetches each image itself, so one call hands the whole post over.
+async function startPhotoPost(ctx: StepContext, options: TikTokOptions) {
+  // The hand-over below may have reached TikTok before this worker stopped: never send twice.
+  if (ctx.checkpoint.photo_post_sent_at) {
+    throw new PublishError("unconfirmed", "The photos may already be on TikTok, but Post Social didn't get TikTok's answer. Check your TikTok profile before posting again.");
+  }
+  if (!ctx.tiktokPhotoLinks) throw new PublishError("tiktok_photos_unavailable", "This worker can't prepare TikTok photos.", true);
+  await ctx.reserve("publish_init", 6, 60);
+  await checkCreator(ctx, options, true);
+  let links: string[];
+  try {
+    links = await ctx.tiktokPhotoLinks(ctx.bundle.media, ctx.renewLease);
+  } catch (error) {
+    throw new PublishError("tiktok_photo_prepare", error instanceof Error ? error.message : "The photos could not be prepared for TikTok.", true);
+  }
+  const inbox = options.delivery_mode === "inbox";
+  const text = { ...(options.title?.trim() ? { title: options.title.trim() } : {}), description: ctx.bundle.caption };
+  await ctx.save({ photo_post_sent_at: new Date(ctx.now()).toISOString() });
+  const init = await api(ctx, "/post/publish/content/init/", {
+    post_info: inbox
+      ? text
+      : {
+          ...text,
+          privacy_level: options.privacy_level,
+          disable_comment: !options.comments_enabled,
+          brand_content_toggle: options.disclose_branded_content ?? false,
+          brand_organic_toggle: options.disclose_your_brand ?? false,
+        },
+    source_info: { source: "PULL_FROM_URL", photo_images: links, photo_cover_index: 0 },
+    post_mode: inbox ? "MEDIA_UPLOAD" : "DIRECT_POST",
+    media_type: "PHOTO",
+    ...(options.ai_generated ? { is_aigc: true } : {}),
+  }, inbox ? "Sending the photos to TikTok drafts" : "Posting the photos to TikTok").catch(async (error) => {
+    // TikTok answered with an error, so nothing was posted: a retry may send again.
+    if (error instanceof PublishError) await ctx.save({ photo_post_sent_at: null });
+    throw error;
+  });
+  const publishId = String(init.data?.publish_id ?? "");
+  if (!publishId) throw new PublishError("tiktok_init_failed", "TikTok did not accept the photo post.", true);
+  await ctx.save({ publish_id: publishId, uploaded: true, publish_started_at: new Date(ctx.now()).toISOString() });
+  return { kind: "wait" as const, afterMs: 10_000, message: "TikTok is processing the photos." };
+}

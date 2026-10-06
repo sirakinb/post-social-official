@@ -26,9 +26,14 @@ export type TikTokChoice = {
   yourBrand: boolean;
   brandedContent: boolean;
   aiGenerated: boolean;
+  title: string; // photo posts only (up to 90 characters)
 };
 
-export const NEW_TIKTOK: TikTokChoice = { mode: "inbox", privacyLevel: "", comments: false, duet: false, stitch: false, disclose: false, yourBrand: false, brandedContent: false, aiGenerated: false };
+export const NEW_TIKTOK: TikTokChoice = { mode: "inbox", privacyLevel: "", comments: false, duet: false, stitch: false, disclose: false, yourBrand: false, brandedContent: false, aiGenerated: false, title: "" };
+
+// Only images make a TikTok photo post (a swipeable carousel of 1 to 35).
+export const isTikTokPhotoPost = (media: ComposerMedia[]) => media.length > 0 && media.every((m) => m.type === "image");
+export const TIKTOK_MAX_PHOTOS = 35;
 
 export const MEDIA_TYPES: Partial<Record<Platform, Array<{ id: string; label: string }>>> = {
   instagram: [{ id: "image", label: "Image" }, { id: "reel", label: "Reel" }, { id: "carousel", label: "Carousel" }],
@@ -77,14 +82,17 @@ export function destinationOptions(account: ComposerAccount, choice: PlatformCho
       return { title: choice.title ?? defaultTitle(shared), privacy_status: choice.privacy ?? "public", ...(choice.caption !== undefined ? { description: choice.caption } : {}) };
     case "tiktok": {
       const t = choice.tiktok ?? NEW_TIKTOK;
+      const photo = isTikTokPhotoPost(media);
+      const kind = { media_type: photo ? "photo" : "video", ...(photo && t.title?.trim() ? { title: t.title.trim() } : {}) };
       return t.mode === "inbox"
-        ? { delivery_mode: "inbox", ai_generated: t.aiGenerated }
+        ? { delivery_mode: "inbox", ...kind, ai_generated: t.aiGenerated }
         : {
             delivery_mode: "direct",
+            ...kind,
             privacy_level: t.privacyLevel || undefined,
             comments_enabled: t.comments,
-            duet_enabled: t.duet,
-            stitch_enabled: t.stitch,
+            duet_enabled: !photo && t.duet,
+            stitch_enabled: !photo && t.stitch,
             disclose_your_brand: t.disclose && t.yourBrand,
             disclose_branded_content: t.disclose && t.brandedContent,
             ai_generated: t.aiGenerated,
@@ -129,6 +137,11 @@ export function tiktokProblems(t: TikTokChoice, info: { privacy_level_options: s
   // (The audience choice itself is checked by the server, with the same wording AIs get.)
   if (t.disclose && !t.yourBrand && !t.brandedContent) problems.push("You turned on content disclosure: choose Your brand, Branded content, or both.");
   if (t.disclose && t.brandedContent && t.privacyLevel === "SELF_ONLY") problems.push("Branded content can't be private on TikTok. Choose a wider audience.");
+  if (isTikTokPhotoPost(media)) {
+    if (media.length > TIKTOK_MAX_PHOTOS) problems.push(`TikTok photo posts can have at most ${TIKTOK_MAX_PHOTOS} images; this one has ${media.length}.`);
+    if ((t.title ?? "").length > 90) problems.push("TikTok photo titles can be at most 90 characters.");
+    return problems;
+  }
   const video = media.find((m) => m.type === "video");
   if (video?.duration && info.max_video_post_duration_sec && video.duration > info.max_video_post_duration_sec) {
     problems.push(`This TikTok account allows videos up to ${info.max_video_post_duration_sec} seconds; this one is ${Math.round(video.duration)}.`);
@@ -137,9 +150,10 @@ export function tiktokProblems(t: TikTokChoice, info: { privacy_level_options: s
 }
 
 // The label TikTok will show, which its guidelines require us to tell the person about.
-export function tiktokLabel(t: TikTokChoice) {
+export function tiktokLabel(t: TikTokChoice, photo = false) {
   if (t.mode !== "direct" || !t.disclose) return null;
-  if (t.brandedContent) return "Your video will be labeled “Paid partnership”.";
-  if (t.yourBrand) return "Your video will be labeled “Promotional content”.";
+  const what = photo ? "photo" : "video";
+  if (t.brandedContent) return `Your ${what} will be labeled “Paid partnership”.`;
+  if (t.yourBrand) return `Your ${what} will be labeled “Promotional content”.`;
   return null;
 }

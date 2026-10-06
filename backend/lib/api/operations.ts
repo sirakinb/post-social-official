@@ -50,7 +50,7 @@ const OPTIONS_HELP = [
   "facebook: media_type text | link | image | reel | video; message (overrides caption); link (for link posts); title (videos).",
   "threads: media_type text | image | video | carousel; text (overrides caption).",
   "youtube (Shorts, one vertical video up to 3 min): title (required, up to 100 characters); description; privacy_status public | unlisted | private (required).",
-  "tiktok: delivery_mode must be inbox for AI posts (it goes to the creator's TikTok inbox, where they tap Post; TikTok requires the creator to confirm); comments_enabled, duet_enabled, stitch_enabled (default off); disclose_your_brand, disclose_branded_content; ai_generated.",
+  "tiktok: delivery_mode must be inbox for AI posts (it goes to the creator's TikTok inbox, where they tap Post; TikTok requires the creator to confirm); media_type video (one video) | photo (1 to 35 images as a swipeable carousel; JPEG, PNG or WebP, resized for TikTok automatically), left out it follows the media; title (photo posts only, up to 90 characters); comments_enabled, duet_enabled, stitch_enabled (default off; Duet and Stitch are video only); disclose_your_brand, disclose_branded_content; ai_generated.",
 ].join(" ");
 
 const destinations: JsonSchema = {

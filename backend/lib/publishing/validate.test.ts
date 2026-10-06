@@ -88,9 +88,26 @@ describe("TikTok", () => {
     expect(check(direct, [media({ duration_seconds: 120 })], "Hi", { video_max_seconds: 60 })).toEqual(["Videos on this TikTok account can be at most 1 minute; clip.mp4 is 2 minutes."]);
   });
 
-  it("does not need an audience for drafts and refuses photo posts for now", () => {
+  it("does not need an audience for drafts", () => {
     expect(check({ kind: "tiktok", delivery_mode: "inbox" }, [media()])).toEqual([]);
-    expect(check(direct, [image()])).toContain("TikTok photo posts are not available yet; post a video, or send it as a draft.");
+  });
+
+  it("makes images a photo post of 1 to 35 JPEG, PNG or WebP images", () => {
+    expect(check(direct, [image(), image({ mime_type: "image/png" }), image({ mime_type: "image/webp" })])).toEqual([]);
+    expect(check({ kind: "tiktok", delivery_mode: "inbox", media_type: "photo", title: "Three looks" }, [image()])).toEqual([]);
+    expect(check(direct, Array.from({ length: 36 }, () => image()))).toEqual(["TikTok photo posts can have at most 35 images; this one has 36."]);
+    expect(check({ ...direct, media_type: "photo" }, [image(), media()])).toEqual(["TikTok photo posts can only contain images; post videos separately."]);
+    expect(check({ ...direct, media_type: "photo" }, [])).toEqual(["A TikTok post with photos needs at least 1 image."]);
+    expect(check(direct, [image({ mime_type: "image/gif" })])).toEqual(["TikTok photos must be JPEG or PNG or WEBP; photo.jpg is image/gif."]);
+    expect(check({ ...direct, title: "x".repeat(91) }, [image()])).toEqual(["TikTok photo titles can be at most 90 characters; this one is 91."]);
+    expect(check({ ...direct, duet_enabled: true }, [image()])).toEqual(["Duet and Stitch aren't available for TikTok photo posts; turn them off."]);
+    expect(check(direct, [image()], "x".repeat(4001))).toEqual(["TikTok photo captions can be at most 4,000 characters; this one is 4,001."]);
+  });
+
+  it("keeps a video post a video post", () => {
+    expect(check({ ...direct, media_type: "video" }, [image()])).toEqual(["A TikTok post needs exactly 1 video; this post has 1 file."]);
+    expect(check({ ...direct, title: "Hi" }, [media()])).toEqual(["TikTok videos don't have a separate title; put it in the caption."]);
+    expect(normalizeOptions("tiktok", { media_type: "gif" }).problems).toEqual(["Choose a TikTok post type: video or photo."]);
   });
 
   it("blocks private branded content", () => {

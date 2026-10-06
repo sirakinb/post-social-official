@@ -9,6 +9,11 @@ export type YouTubeOptions = { kind: "youtube"; title: string; description?: str
 export type TikTokOptions = {
   kind: "tiktok";
   delivery_mode: "direct" | "inbox";
+  // video, or photo (1 to 35 images, shown as a swipeable carousel). Left out, it follows
+  // the media: images make a photo post.
+  media_type?: "video" | "photo";
+  // Photo posts only: an optional title above the caption.
+  title?: string;
   privacy_level?: string;
   comments_enabled?: boolean;
   duet_enabled?: boolean;
@@ -85,10 +90,13 @@ export function normalizeOptions(platform: Platform, raw: unknown): { options?: 
     }
     case "tiktok": {
       const delivery_mode = pick("delivery_mode", ["direct", "inbox"] as const, "direct")!;
+      if (str("media_type") !== undefined && !pick("media_type", ["video", "photo"] as const)) return { problems: ["Choose a TikTok post type: video or photo."] };
       return {
         options: {
           kind: "tiktok",
           delivery_mode,
+          media_type: pick("media_type", ["video", "photo"] as const),
+          title: str("title"),
           privacy_level: str("privacy_level"),
           // Interactions are off unless the person turns them on (TikTok's guidelines).
           comments_enabled: bool("comments_enabled"),
@@ -103,6 +111,14 @@ export function normalizeOptions(platform: Platform, raw: unknown): { options?: 
     }
   }
 }
+
+// A TikTok post's type: as chosen, or from the media (only images means a photo post).
+export function tiktokMediaType(options: TikTokOptions, media: Array<Pick<MediaFacts, "media_type">>): "video" | "photo" {
+  if (options.media_type) return options.media_type;
+  return media.length > 0 && media.every((m) => m.media_type === "image") ? "photo" : "video";
+}
+
+export const TIKTOK_MAX_PHOTOS = 35;
 
 export function captionFor(options: DestinationOptions, postCaption: string) {
   if (options.kind === "instagram") return options.caption ?? postCaption;
@@ -230,13 +246,24 @@ export function destinationProblems(args: {
     }
 
     case "tiktok": {
-      const max = capabilities?.video_max_seconds ?? 600;
-      if (images.length) problems.push("TikTok photo posts are not available yet; post a video, or send it as a draft.");
-      exactly(1, "video", options.delivery_mode === "inbox" ? "A TikTok draft" : "A TikTok post");
-      types(videos, ["video/mp4", "video/quicktime", "video/webm"], "TikTok videos");
-      videos.forEach((v) => videoLength(v, 3, max, "Videos on this TikTok account"));
+      const what = options.delivery_mode === "inbox" ? "A TikTok draft" : "A TikTok post";
+      if (tiktokMediaType(options, media) === "photo") {
+        if (videos.length) problems.push("TikTok photo posts can only contain images; post videos separately.");
+        if (images.length === 0) problems.push(`${what} with photos needs at least 1 image.`);
+        if (images.length > TIKTOK_MAX_PHOTOS) problems.push(`TikTok photo posts can have at most ${TIKTOK_MAX_PHOTOS} images; this one has ${images.length}.`);
+        types(images, ["image/jpeg", "image/png", "image/webp"], "TikTok photos");
+        if ((options.title ?? "").length > 90) problems.push(`TikTok photo titles can be at most 90 characters; this one is ${(options.title ?? "").length}.`);
+        if (caption.length > 4000) problems.push(`TikTok photo captions can be at most 4,000 characters; this one is ${caption.length.toLocaleString("en-US")}.`);
+        if (options.duet_enabled || options.stitch_enabled) problems.push("Duet and Stitch aren't available for TikTok photo posts; turn them off.");
+      } else {
+        const max = capabilities?.video_max_seconds ?? 600;
+        exactly(1, "video", what);
+        types(videos, ["video/mp4", "video/quicktime", "video/webm"], "TikTok videos");
+        videos.forEach((v) => videoLength(v, 3, max, "Videos on this TikTok account"));
+        if (options.title) problems.push("TikTok videos don't have a separate title; put it in the caption.");
+        if (options.delivery_mode === "direct" && caption.length > 2200) problems.push(`TikTok captions can be at most 2,200 characters; this one is ${caption.length.toLocaleString("en-US")}.`);
+      }
       if (options.delivery_mode === "direct") {
-        if (caption.length > 2200) problems.push(`TikTok captions can be at most 2,200 characters; this one is ${caption.length.toLocaleString("en-US")}.`);
         // TikTok requires the person to choose; there is no default.
         if (!options.privacy_level || !TIKTOK_PRIVACY.includes(options.privacy_level)) {
           problems.push("Choose who can see this TikTok: everyone, friends, followers or only you.");
