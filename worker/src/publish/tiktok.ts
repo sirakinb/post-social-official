@@ -10,10 +10,14 @@ import { PublishError, platformJson, type Adapter, type StepContext } from "./ty
 const API = "https://open.tiktokapis.com/v2";
 const MAX_CHUNK = 64 * 1024 * 1024;
 
+// TikTok's rules: chunks of 5 to 64 MB; the count is size / chunk size rounded DOWN, and the
+// last chunk takes the remainder (up to 128 MB); videos over 64 MB need at least 2 chunks;
+// up to 64 MB goes in one piece.
 export function chunkPlan(size: number) {
-  const chunkSize = Math.min(size, MAX_CHUNK);
+  const chunkSize = size <= MAX_CHUNK ? size : size < 2 * MAX_CHUNK ? Math.floor(size / 2) : MAX_CHUNK;
+  const count = Math.max(1, Math.floor(size / chunkSize));
   const ranges: Array<{ start: number; end: number }> = [];
-  for (let start = 0; start < size; start += chunkSize) ranges.push({ start, end: Math.min(start + chunkSize, size) - 1 });
+  for (let i = 0; i < count; i++) ranges.push({ start: i * chunkSize, end: i === count - 1 ? size - 1 : (i + 1) * chunkSize - 1 });
   return { chunkSize, ranges };
 }
 

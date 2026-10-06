@@ -308,9 +308,22 @@ describe("TikTok", () => {
     expect(await publishTikTok(h.ctx)).toMatchObject({ kind: "published", drafted: true, platformId: "v_inbox_1" });
   });
 
-  it("splits large videos into chunks of at most 64 MB", () => {
-    const plan = chunkPlan(150 * 1024 * 1024);
-    expect(plan.ranges).toHaveLength(3);
-    expect(plan.ranges.at(-1)!.end).toBe(150 * 1024 * 1024 - 1);
+  it("splits videos the way TikTok counts chunks (rounded down, remainder in the last)", () => {
+    const MB = 1024 * 1024;
+    for (const size of [3 * MB, 20 * MB, 64 * MB, 64 * MB + 1, 120_110_993, 128 * MB - 1, 128 * MB, 150 * MB, 1000 * MB]) {
+      const { chunkSize, ranges } = chunkPlan(size);
+      // What TikTok checks: the count, sizes, and that the chunks cover the file exactly.
+      expect(ranges).toHaveLength(Math.floor(size / chunkSize));
+      expect(chunkSize).toBeLessThanOrEqual(64 * MB);
+      if (size > 64 * MB) expect(ranges.length).toBeGreaterThanOrEqual(2);
+      if (size > 64 * MB) expect(chunkSize).toBeGreaterThanOrEqual(5 * MB);
+      expect(ranges[0].start).toBe(0);
+      ranges.forEach((r, i) => {
+        if (i > 0) expect(r.start).toBe(ranges[i - 1].end + 1);
+        expect(r.end - r.start + 1).toBeLessThanOrEqual(i === ranges.length - 1 ? 128 * MB : chunkSize);
+      });
+      expect(ranges.at(-1)!.end).toBe(size - 1);
+    }
+    expect(chunkPlan(120_110_993).ranges).toHaveLength(2); // the 101-second video that failed
   });
 });
