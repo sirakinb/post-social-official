@@ -100,6 +100,20 @@ Run it in a Terminal window: it needs typed input, which the `!` prefix in Claud
 cannot give. Use `prod` instead of `dev` for prod (asks you to type `prod`). The new web app runs at
 `/beta` (sign-in at `/beta/login`) until it replaces `/app` at launch.
 
+## TikTok sign-in and photo posts
+
+- **Sign-in address.** TikTok's live app has only approved the old Convex callback
+  (`https://vibrant-donkey-218.convex.site/api/oauth/tiktok/callback`). Until it approves
+  prod's own address, prod sets `TIKTOK_REDIRECT_URI` to that Convex address and Convex
+  (`TIKTOK_FORWARD_URL`) forwards every TikTok sign-in it didn't start to
+  `https://syydd6ck.function2.insforge.app/connections/oauth/tiktok/callback`. Once TikTok
+  approves prod's address, delete `TIKTOK_REDIRECT_URI` on prod.
+- **Photo posts.** TikTok fetches photos itself, only from a verified domain and without
+  following redirects, so it reads them from `https://www.postsocial.xyz/tiktok-media/...`
+  (the website passes a signed storage link through). `postsocial.xyz` is verified in
+  TikTok's portal for both the live app and the sandbox (TXT records on the root domain;
+  `www` is a CNAME and can't hold one). Dev uses the same website address.
+
 ## Media storage, functions and the worker
 
 | | Dev | Prod |
