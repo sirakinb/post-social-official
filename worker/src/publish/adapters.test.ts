@@ -301,6 +301,16 @@ describe("TikTok", () => {
     });
   });
 
+  it("explains TikTok's limit on drafts waiting in the inbox", async () => {
+    const h = harness("tiktok", { kind: "tiktok", delivery_mode: "inbox" }, [
+      (u) => (u.pathname.endsWith("/creator_info/query/") ? json({ data: { can_post: true }, error: { code: "ok" } }) : undefined),
+      (u) => (u.pathname.endsWith("/inbox/video/init/") ? json({ error: { code: "spam_risk_too_many_pending_share", message: "" } }, 403) : undefined),
+    ], { media: [video] });
+    const error = (await publishTikTok(h.ctx).catch((e) => e)) as PublishError;
+    expect(error).toMatchObject({ code: "spam_risk_too_many_pending_share", retryable: false });
+    expect(error.message).toBe("TikTok has several Post Social drafts waiting in this account's inbox. Open TikTok to post or delete them, then try again.");
+  });
+
   it("reports an inbox post as drafted, not live", async () => {
     const h = harness("tiktok", { kind: "tiktok", delivery_mode: "inbox" }, [
       (u) => (u.pathname.endsWith("/status/fetch/") ? json({ data: { status: "SEND_TO_USER_INBOX" }, error: { code: "ok" } }) : undefined),
