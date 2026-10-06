@@ -17,7 +17,7 @@ export type CalendarPost = {
   by: { kind: string; name: string } | null;
   via: string;
   thumb: { url: string | null; isVideo: boolean } | null;
-  destinations: Array<{ platform: string; status: string; account: string; liveUrl: string | null }>;
+  destinations: Array<{ platform: string; status: string; account: string; liveUrl: string | null; drafted?: boolean }>;
 };
 
 const subscribe = () => () => {};
@@ -27,6 +27,7 @@ const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 function statusOf(p: CalendarPost): { tone: Tone; label: string; bar: string } {
   switch (p.status) {
     case "published":
+      if (p.destinations.length && p.destinations.every((d) => d.drafted)) return { tone: "attention", label: "In drafts", bar: "#F5B54A" };
       return { tone: "live", label: "Live", bar: "#3DD68C" };
     case "partially_published":
       return { tone: "attention", label: "Partly live", bar: "#F5B54A" };
@@ -246,7 +247,7 @@ function PostCard({ post, canEdit, onClose }: { post: CalendarPost; canEdit: boo
           <div key={i} className="flex items-center gap-2 text-xs">
             <PlatformMark platform={d.platform} size={18} />
             <span className="min-w-0 flex-1 truncate">{d.account}</span>
-            {d.liveUrl?.startsWith("https://") ? <a href={d.liveUrl} target="_blank" rel="noreferrer" className="text-ps-plum-soft hover:text-ps-text">View live ↗</a> : <span className="text-ps-subtle">{d.status.replace("_", " ")}</span>}
+            {d.liveUrl?.startsWith("https://") ? <a href={d.liveUrl} target="_blank" rel="noreferrer" className="text-ps-plum-soft hover:text-ps-text">View live ↗</a> : <span className="text-ps-subtle">{d.drafted ? "in TikTok drafts" : d.status.replace("_", " ")}</span>}
           </div>
         ))}
         {post.by && (

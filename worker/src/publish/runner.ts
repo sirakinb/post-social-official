@@ -144,7 +144,7 @@ export async function runNextPublishJob(deps: PublishDeps): Promise<boolean> {
        )
        INSERT INTO public.audit_events (workspace_id, entry_point, event_type, entity_type, entity_id, summary, after_values)
        SELECT workspace_id, 'worker', 'destination.published', 'destination', $1, $5, jsonb_build_object('live_url', $2::text) FROM d`,
-      [b.destinationId, result.liveUrl ?? null, result.platformId ?? null, result.note ?? null, `Published to ${b.account.displayName}`],
+      [b.destinationId, result.liveUrl ?? null, result.platformId ?? null, result.note ?? null, result.drafted ? `Sent to ${b.account.displayName}'s TikTok drafts` : `Published to ${b.account.displayName}`],
     );
     if (result.profile) {
       await deps.sql(`UPDATE public.connected_accounts SET display_name = $2, updated_at = now() WHERE id = $1 AND display_name <> $2`, [b.account.id, result.profile.displayName]);

@@ -10,6 +10,7 @@ describe("activity sentences", () => {
 
   it("shows a status only where it helps", () => {
     expect(statusFor("destination.published", "Published to Aki")).toEqual({ label: "Live", tone: "live" });
+    expect(statusFor("destination.published", "Sent to Aki's TikTok drafts")).toEqual({ label: "In drafts", tone: "attention" });
     expect(statusFor("destination.failed", "Failed")).toEqual({ label: "Failed", tone: "failed" });
     expect(statusFor("post.submitted", "Scheduled for 2026-10-06T13:00:00Z")).toEqual({ label: "Scheduled", tone: "scheduled" });
     expect(statusFor("post.submitted", "Sent for publishing now")).toEqual({ label: "Publishing", tone: "scheduled" });

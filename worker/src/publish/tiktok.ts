@@ -127,7 +127,7 @@ export const publishTikTok: Adapter = async (ctx) => {
       note: postId ? undefined : options.privacy_level === "SELF_ONLY" ? "Posted privately on TikTok, so it has no public link." : undefined,
     };
   }
-  if (state === "SEND_TO_USER_INBOX") return { kind: "published", platformId: String(ctx.checkpoint.publish_id), note: "Sent to your TikTok drafts. Open TikTok to finish and post it." };
+  if (state === "SEND_TO_USER_INBOX") return { kind: "published", drafted: true, platformId: String(ctx.checkpoint.publish_id), note: "Sent to your TikTok drafts. Open TikTok to finish and post it." };
   if (state === "FAILED") {
     const reason = String(status.fail_reason ?? "");
     if (TIKTOK_MESSAGES[reason]) throw new PublishError(`tiktok_${reason}`, TIKTOK_MESSAGES[reason]);
