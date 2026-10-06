@@ -61,6 +61,7 @@ export function TikTokOptions({ value, onChange, info, infoError, accountName, p
                 );
               })}
             </select>
+            {value.disclose && value.brandedContent && <span className="text-xs text-ps-subtle">Branded content visibility cannot be set to private.</span>}
           </label>
 
           <fieldset className="m-0 flex flex-wrap gap-x-5 gap-y-2 border-0 p-0">
