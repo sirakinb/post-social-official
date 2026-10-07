@@ -44,11 +44,27 @@ function harness(platform: Bundle["platform"], options: DestinationOptions, rout
     renewLease: async () => undefined,
     now: () => Date.parse("2026-10-05T12:00:00Z"),
     sleep: async () => undefined,
+    notes: [],
   };
   return { ctx, calls, checkpoint };
 }
 
 const method = (init: RequestInit) => init.method ?? "GET";
+
+// Cover helpers that record what was asked for (the real ones read storage and run ffmpeg).
+function withCoverHelpers(h: ReturnType<typeof harness>, opts: { imageFails?: boolean } = {}) {
+  const asked: string[] = [];
+  h.ctx.cover = {
+    image: async () => {
+      asked.push("image");
+      if (opts.imageFails) throw new Error("bad file");
+      return { bytes: new Uint8Array([1, 2, 3]), link: "https://store.example/cover.jpg?sig=1" };
+    },
+    frame: async (ms) => { asked.push(`frame ${ms}`); return new Uint8Array([4, 5]); },
+  };
+  return asked;
+}
+
 
 describe("Instagram", () => {
   it("creates a container, waits for it, publishes once and returns the permalink", async () => {
@@ -65,6 +81,38 @@ describe("Instagram", () => {
     expect(await publishInstagram(h.ctx)).toEqual({ kind: "published", platformId: "ig-post", liveUrl: "https://instagram.com/p/x" });
     expect(h.calls.filter((c) => c.includes("media_publish"))).toHaveLength(1);
     expect(h.calls.filter((c) => c === "POST https://graph.instagram.com/v25.0/acct-1/media")).toHaveLength(1);
+  });
+
+  describe("Reel covers", () => {
+    const reelMedia = { media: [{ media_type: "video" as const, mime_type: "video/mp4", duration_seconds: 10 }] };
+    const creating = (sent: Record<string, string>[]) => (u: URL, i: RequestInit) =>
+      method(i) === "POST" && u.pathname.endsWith("/acct-1/media") ? (sent.push(Object.fromEntries(new URLSearchParams(String(i.body)))), json({ id: "c1" })) : undefined;
+
+    it("sends the cover image's link", async () => {
+      const sent: Record<string, string>[] = [];
+      const h = harness("instagram", { kind: "instagram", media_type: "reel", cover_media_id: "img-1" }, [creating(sent), (u) => (u.pathname.endsWith("/c1") ? json({ status_code: "IN_PROGRESS" }) : undefined)], reelMedia);
+      withCoverHelpers(h);
+      await publishInstagram(h.ctx);
+      expect(sent[0]).toMatchObject({ media_type: "REELS", cover_url: "https://store.example/cover.jpg?sig=1" });
+      expect(sent[0]).not.toHaveProperty("thumb_offset");
+    });
+
+    it("sends a frame as thumb_offset", async () => {
+      const sent: Record<string, string>[] = [];
+      const h = harness("instagram", { kind: "instagram", media_type: "reel", cover_time_ms: 4200 }, [creating(sent), (u) => (u.pathname.endsWith("/c1") ? json({ status_code: "IN_PROGRESS" }) : undefined)], reelMedia);
+      withCoverHelpers(h);
+      await publishInstagram(h.ctx);
+      expect(sent[0]).toMatchObject({ thumb_offset: "4200" });
+    });
+
+    it("still posts with the first frame when the cover image can't be prepared", async () => {
+      const sent: Record<string, string>[] = [];
+      const h = harness("instagram", { kind: "instagram", media_type: "reel", cover_media_id: "img-1" }, [creating(sent), (u) => (u.pathname.endsWith("/c1") ? json({ status_code: "IN_PROGRESS" }) : undefined)], reelMedia);
+      withCoverHelpers(h, { imageFails: true });
+      await publishInstagram(h.ctx);
+      expect(sent[0]).not.toHaveProperty("cover_url");
+      expect(h.ctx.notes).toEqual(["The cover image couldn't be prepared (bad file), so Instagram used the first frame."]);
+    });
   });
 
   it("after a crash right after publishing, finds the post instead of publishing again", async () => {
@@ -186,6 +234,42 @@ describe("YouTube", () => {
     expect(h.calls).toEqual(["PUT https://up.example/s1"]);
   });
 
+  describe("thumbnails", () => {
+    const done = (u: URL) => (u.host === "up.example" ? json({ id: "yt-3" }, 200) : undefined);
+    const resumed = { media: [video], checkpoint: { upload_url: "https://up.example/s1", publish_started_at: "x" } };
+
+    it("sets the cover image as the thumbnail once the video exists", async () => {
+      let body: Uint8Array | null = null;
+      const h = harness("youtube", { kind: "youtube", title: "Launch", privacy_status: "private", cover_media_id: "img-1" }, [
+        done,
+        (u, i) => (u.pathname === "/upload/youtube/v3/thumbnails/set" && u.searchParams.get("videoId") === "yt-3" ? ((body = i.body as Uint8Array), json({ items: [] })) : undefined),
+      ], resumed);
+      const asked = withCoverHelpers(h);
+      expect(await publishYouTube(h.ctx)).toMatchObject({ kind: "published", platformId: "yt-3" });
+      expect(asked).toEqual(["image"]);
+      expect([...body!]).toEqual([1, 2, 3]);
+      expect(h.ctx.notes).toEqual([]);
+    });
+
+    it("uses the chosen frame, and keeps the post when YouTube refuses custom thumbnails", async () => {
+      const h = harness("youtube", { kind: "youtube", title: "Launch", privacy_status: "private", cover_time_ms: 2500 }, [
+        done,
+        (u) => (u.pathname === "/upload/youtube/v3/thumbnails/set" ? json({ error: { message: "forbidden" } }, 403) : undefined),
+      ], resumed);
+      const asked = withCoverHelpers(h);
+      expect(await publishYouTube(h.ctx)).toMatchObject({ kind: "published", platformId: "yt-3" });
+      expect(asked).toEqual(["frame 2500"]);
+      expect(h.ctx.notes[0]).toMatch(/can't use custom thumbnails yet/);
+    });
+
+    it("leaves the thumbnail alone when no cover was chosen", async () => {
+      const h = harness("youtube", { kind: "youtube", title: "Launch", privacy_status: "private" }, [done], resumed);
+      withCoverHelpers(h);
+      await publishYouTube(h.ctx);
+      expect(h.calls.some((c) => c.includes("thumbnails"))).toBe(false);
+    });
+  });
+
   it("waits until the daily quota resets", async () => {
     const h = harness("youtube", { kind: "youtube", title: "Launch", privacy_status: "private" }, [
       () => new Response('{"error":{"errors":[{"reason":"quotaExceeded"}]}}', { status: 403 }),
@@ -214,6 +298,18 @@ describe("TikTok", () => {
     status = "PUBLISH_COMPLETE";
     expect(await publishTikTok(h.ctx)).toEqual({ kind: "published", platformId: "777", liveUrl: "https://www.tiktok.com/@aki/video/777", note: undefined });
     expect(h.calls.filter((c) => c.includes("/video/init/"))).toHaveLength(1);
+  });
+
+  it("sends the chosen cover frame with a direct video post", async () => {
+    let postInfo: Record<string, unknown> = {};
+    const h = harness("tiktok", { ...direct, cover_time_ms: 3300 }, [
+      (u) => (u.pathname.endsWith("/creator_info/query/") ? json({ data: { can_post: true, privacy_level_options: ["SELF_ONLY"], max_video_post_duration_sec: 600 }, error: { code: "ok" } }) : undefined),
+      (u, i) => (u.pathname.endsWith("/video/init/") ? ((postInfo = JSON.parse(String(i.body)).post_info), json({ data: { publish_id: "p", upload_url: "https://upload.tiktok.example/u" }, error: { code: "ok" } })) : undefined),
+      (u) => (u.host === "r2.example" ? new Response(new Uint8Array(3000), { status: 206 }) : undefined),
+      (u) => (u.host === "upload.tiktok.example" ? new Response(null, { status: 201 }) : undefined),
+    ], { media: [video] });
+    await publishTikTok(h.ctx);
+    expect(postInfo.video_cover_timestamp_ms).toBe(3300);
   });
 
   it("refuses an audience the account does not allow", async () => {

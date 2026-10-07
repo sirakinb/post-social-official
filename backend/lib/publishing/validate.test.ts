@@ -120,3 +120,42 @@ describe("TikTok", () => {
 it("refuses media that is not ready", () => {
   expect(check({ kind: "instagram", media_type: "image" }, [image({ status: "processing" })])).toEqual(["photo.jpg is still being checked; only ready media can be posted."]);
 });
+
+describe("video covers", () => {
+  const coverImg = image({ id: "c1", name: "cover.jpg", height: 1920 });
+  const withCover = (options: DestinationOptions, files: MediaFacts[], cover?: MediaFacts) => destinationProblems({ options, caption: "Hi", media: files, cover });
+  const reel = { kind: "instagram", media_type: "reel" } as const;
+  const tiktokDirect = { kind: "tiktok", delivery_mode: "direct", privacy_level: "SELF_ONLY" } as const;
+
+  it("reads cover_media_id and cover_time_ms, and refuses bad values", () => {
+    expect(normalizeOptions("youtube", { privacy_status: "public", cover_time_ms: 4200 }).options).toMatchObject({ kind: "youtube", cover_time_ms: 4200 });
+    expect(normalizeOptions("instagram", { media_type: "reel", cover_media_id: "11111111-2222-4333-8444-555555555555" }).options).toMatchObject({ cover_media_id: "11111111-2222-4333-8444-555555555555" });
+    expect(normalizeOptions("instagram", { media_type: "reel", cover_media_id: "nope", cover_time_ms: -1 }).problems).toEqual([
+      "cover_media_id must be the id of an image in your media library.",
+      "cover_time_ms must be a whole number of milliseconds from the start of the video, 0 or more.",
+    ]);
+  });
+
+  it("lets Instagram Reels and YouTube use an image or a frame", () => {
+    expect(withCover({ ...reel, cover_media_id: "c1" }, [media()], coverImg)).toEqual([]);
+    expect(withCover({ ...reel, cover_time_ms: 2000 }, [media()])).toEqual([]);
+    expect(withCover({ kind: "youtube", title: "T", privacy_status: "public", cover_media_id: "c1" }, [media()], coverImg)).toEqual([]);
+    expect(withCover({ kind: "youtube", title: "T", privacy_status: "public", cover_time_ms: 0 }, [media()])).toEqual([]);
+  });
+
+  it("explains what each other destination can't do", () => {
+    expect(withCover({ ...tiktokDirect, cover_media_id: "c1" }, [media()], coverImg)).toEqual(["TikTok doesn't accept a cover image; pick a frame of the video instead."]);
+    expect(withCover({ ...tiktokDirect, cover_time_ms: 1000 }, [media()])).toEqual([]);
+    expect(withCover({ kind: "tiktok", delivery_mode: "inbox", cover_time_ms: 1000 }, [media()])).toEqual(["Post Social can't set the cover of a TikTok draft; choose it in TikTok before posting."]);
+    expect(withCover({ kind: "facebook", media_type: "reel", cover_time_ms: 1000 }, [media()])).toEqual(["Post Social can't set a Facebook video cover yet; Facebook uses its own thumbnail."]);
+    expect(withCover({ kind: "threads", media_type: "video", cover_time_ms: 1000 }, [media()])).toEqual(["Threads doesn't support custom covers."]);
+    expect(withCover({ kind: "instagram", media_type: "image", cover_time_ms: 0 }, [image()])).toEqual(["Covers apply to Instagram Reels only."]);
+  });
+
+  it("checks the image and the frame time", () => {
+    expect(withCover({ ...reel, cover_media_id: "c1", cover_time_ms: 0 }, [media()], coverImg)).toEqual(["Choose a cover image or a cover frame, not both."]);
+    expect(withCover({ ...reel, cover_media_id: "c1" }, [media()], media({ id: "c1", name: "other.mp4" }))).toEqual(["The cover must be an image; other.mp4 is a video."]);
+    expect(withCover({ ...reel, cover_media_id: "c1" }, [media()], image({ name: "anim.gif", mime_type: "image/gif" }))).toEqual(["The cover image must be JPEG, PNG or WebP; anim.gif is image/gif."]);
+    expect(withCover({ ...reel, cover_time_ms: 31_000 }, [media({ duration_seconds: 30 })])).toEqual(["The cover frame is at 31.0s, but the video is 30.0s long."]);
+  });
+});

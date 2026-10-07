@@ -32,6 +32,10 @@ export type Bundle = {
   caption: string;
   account: { id: string; externalId: string; handle: string; displayName: string; scopes: string[]; capabilities: Record<string, unknown> };
   media: PublishMedia[];
+  // The library image chosen as the video cover (options.cover_media_id), when it still exists.
+  cover?: PublishMedia;
+  // Notes found while loading (e.g. the cover image was removed).
+  notes?: string[];
 };
 
 export type StepResult =
@@ -57,6 +61,11 @@ export type StepContext = {
   // TikTok photo posts: makes each photo's TikTok-ready copy and returns the links TikTok
   // fetches them from (worker/src/publish/tiktok-photos.ts).
   tiktokPhotoLinks?: (photos: PublishMedia[], onEach?: () => Promise<void>) => Promise<string[]>;
+  // Video covers (covers.ts): the cover image as a JPEG (bytes + signed link), and a still of
+  // the video at a moment. Absent when not applicable.
+  cover?: { image?: () => Promise<{ bytes: Uint8Array<ArrayBuffer>; link: string }>; frame: (ms: number) => Promise<Uint8Array<ArrayBuffer>> };
+  // Plain-language notes added to the result (e.g. a cover the platform didn't accept).
+  notes: string[];
 };
 
 export type Adapter = (ctx: StepContext) => Promise<StepResult>;

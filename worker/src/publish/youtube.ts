@@ -3,7 +3,7 @@
 // YouTube how many bytes it has and continues; if the upload already finished, YouTube
 // returns the video instead, so it is never uploaded twice.
 import { captionFor, type YouTubeOptions } from "../../../backend/lib/publishing/validate";
-import { PublishError, type Adapter, type StepContext } from "./types";
+import { PublishError, type Adapter, type StepContext, type StepResult } from "./types";
 
 const CHUNK = 32 * 256 * 1024 * 4; // 32 MiB, a multiple of 256 KiB as YouTube requires
 const UPLOADS_PER_DAY = 6; // videos.insert costs 1,600 of the default 10,000 daily units
@@ -59,7 +59,36 @@ async function uploadStatus(ctx: StepContext, uploadUrl: string, size: number) {
   return failure(response, "Checking the YouTube upload", ctx.now());
 }
 
-export const publishYouTube: Adapter = async (ctx) => {
+// A custom thumbnail (cover image, or a frame of the video). The video is already up, so a
+// refusal never fails the post; it becomes a note. YouTube only allows custom thumbnails on
+// channels that have unlocked them (usually by phone verification).
+async function setThumbnail(ctx: StepContext, result: StepResult): Promise<StepResult> {
+  if (result.kind !== "published" || !result.platformId || !ctx.cover) return result;
+  const options = ctx.bundle.options;
+  if (!options.cover_media_id && options.cover_time_ms === undefined) return result;
+  try {
+    const jpeg = options.cover_media_id && ctx.cover.image ? (await ctx.cover.image()).bytes : await ctx.cover.frame(options.cover_time_ms ?? 0);
+    const r = await ctx.http(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${encodeURIComponent(result.platformId)}&uploadType=media`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${await ctx.token()}`, "Content-Type": "image/jpeg", "Content-Length": String(jpeg.byteLength) },
+      body: jpeg,
+    });
+    if (!r.ok) {
+      const text = await r.text();
+      const message = text.match(/"message":\s*"([^"]+)"/)?.[1];
+      ctx.notes.push(r.status === 403
+        ? "Posted, but YouTube didn't accept the custom thumbnail: this channel can't use custom thumbnails yet (YouTube unlocks them after phone verification)."
+        : `Posted, but YouTube didn't accept the custom thumbnail${message ? `: ${message}` : ""}.`);
+    }
+  } catch (error) {
+    ctx.notes.push(`Posted, but the custom thumbnail couldn't be prepared: ${error instanceof Error ? error.message : "unknown error"}.`);
+  }
+  return result;
+}
+
+export const publishYouTube: Adapter = async (ctx) => setThumbnail(ctx, await upload(ctx));
+
+const upload: Adapter = async (ctx) => {
   const options = ctx.bundle.options as YouTubeOptions;
   const video = ctx.bundle.media[0];
   const size = video.size_bytes;

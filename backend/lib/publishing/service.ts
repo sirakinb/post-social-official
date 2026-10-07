@@ -73,6 +73,13 @@ async function loadMedia(deps: PostsDeps, workspaceId: string, ids: string[]): P
   return ids.map((id) => byId.get(id)!);
 }
 
+// The library images chosen as covers, by id. Throws if one isn't in this workspace.
+async function loadCovers(deps: PostsDeps, workspaceId: string, destinations: Array<{ options: DestinationOptions }>): Promise<Map<string, MediaFacts>> {
+  const ids = [...new Set(destinations.map((d) => d.options.cover_media_id).filter((id): id is string => Boolean(id)))];
+  const facts = await loadMedia(deps, workspaceId, ids);
+  return new Map(facts.map((f) => [f.id, f]));
+}
+
 function parseDestinations(raw: unknown, accounts: Map<string, AccountRow>): { destinations: DestinationInput[]; problems: string[] } {
   if (!Array.isArray(raw) || raw.length === 0) throw new ApiError(400, "Choose at least one account to post to.");
   if (raw.length > MAX_DESTINATIONS) throw new ApiError(400, `A post can go to at most ${MAX_DESTINATIONS} accounts.`);
@@ -117,14 +124,14 @@ function parseMediaIds(value: unknown) {
 
 export type CheckResult = { ok: boolean; problems: string[]; destinations: Array<{ account_id: string; account: string; platform: Platform; problems: string[] }> };
 
-function check(caption: string, media: MediaFacts[], destinations: DestinationInput[], accounts: Map<string, AccountRow>, shapeProblems: string[]): CheckResult {
+function check(caption: string, media: MediaFacts[], destinations: DestinationInput[], accounts: Map<string, AccountRow>, shapeProblems: string[], covers: Map<string, MediaFacts>): CheckResult {
   const per = destinations.map((d) => {
     const account = accounts.get(d.account_id)!;
     return {
       account_id: d.account_id,
       account: account.display_name,
       platform: account.platform,
-      problems: destinationProblems({ options: d.options, caption, media, capabilities: account.capabilities as { video_max_seconds?: number } }).map(
+      problems: destinationProblems({ options: d.options, caption, media, capabilities: account.capabilities as { video_max_seconds?: number }, cover: d.options.cover_media_id ? covers.get(d.options.cover_media_id) : undefined }).map(
         (p) => `${DISPLAY_NAMES[account.platform]} (${account.display_name}): ${p}`,
       ),
     };
@@ -196,7 +203,8 @@ export async function validatePost(deps: PostsDeps, caller: Caller, input: Recor
     const { post, mediaIds, destinations } = await loadPost(deps, caller, requireUuid(input.post_id, "Post"), false);
     const accounts = await loadAccounts(deps, post.workspace_id, destinations.map((d) => d.connected_account_id));
     const media = await loadMedia(deps, post.workspace_id, mediaIds);
-    return check(post.caption, media, destinations.map((d) => ({ account_id: d.connected_account_id, options: d.options })), accounts, []);
+    const list = destinations.map((d) => ({ account_id: d.connected_account_id, options: d.options }));
+    return check(post.caption, media, list, accounts, [], await loadCovers(deps, post.workspace_id, list));
   }
   const workspaceId = requireUuid(input.workspace_id, "Workspace");
   await membership(deps.sql, caller, workspaceId, false);
@@ -205,7 +213,7 @@ export async function validatePost(deps: PostsDeps, caller: Caller, input: Recor
   const accounts = await loadAccounts(deps, workspaceId, raw.map((d) => String(d?.account_id ?? "")).filter((id) => /^[0-9a-f-]{36}$/i.test(id)));
   const { destinations, problems } = parseDestinations(input.destinations, accounts);
   const media = await loadMedia(deps, workspaceId, parseMediaIds(input.media_ids));
-  return check(caption, media, destinations, accounts, problems);
+  return check(caption, media, destinations, accounts, problems, await loadCovers(deps, workspaceId, destinations));
 }
 
 export async function createPost(deps: PostsDeps, caller: Caller, input: Record<string, unknown>) {
@@ -218,6 +226,7 @@ export async function createPost(deps: PostsDeps, caller: Caller, input: Record<
   const { destinations, problems } = parseDestinations(input.destinations, accounts);
   if (problems.length) throw new ApiError(400, problems.join(" "));
   await loadMedia(deps, workspaceId, mediaIds);
+  await loadCovers(deps, workspaceId, destinations);
   const scheduledAt = parseSchedule(input.scheduled_at);
   const strictest = destinations.map((d) => accounts.get(d.account_id)!.policy).sort((a, b) => ["autonomous", "approve_after_draft", "confirm_each"].indexOf(b) - ["autonomous", "approve_after_draft", "confirm_each"].indexOf(a))[0];
 
@@ -267,6 +276,7 @@ export async function updatePost(deps: PostsDeps, caller: Caller, input: Record<
     const accounts = await loadAccounts(deps, post.workspace_id, raw.map((d) => String(d?.account_id ?? "")).filter((id) => /^[0-9a-f-]{36}$/i.test(id)));
     const parsed = parseDestinations(input.destinations, accounts);
     if (parsed.problems.length) throw new ApiError(400, parsed.problems.join(" "));
+    await loadCovers(deps, post.workspace_id, parsed.destinations);
     newDestinations = parsed.destinations;
   }
 

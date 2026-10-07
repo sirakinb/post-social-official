@@ -22,7 +22,10 @@ export type TikTokOptions = {
   disclose_branded_content?: boolean;
   ai_generated?: boolean;
 };
-export type DestinationOptions = InstagramOptions | FacebookOptions | ThreadsOptions | YouTubeOptions | TikTokOptions;
+// A video's cover, on any platform's options: an image from the library, or a frame of the
+// video (milliseconds from the start). Which platforms can use which: coverSupport().
+export type CoverOptions = { cover_media_id?: string; cover_time_ms?: number };
+export type DestinationOptions = (InstagramOptions | FacebookOptions | ThreadsOptions | YouTubeOptions | TikTokOptions) & CoverOptions;
 
 export type MediaFacts = {
   id: string;
@@ -59,6 +62,46 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 // Fills defaults and drops unknown fields. Returns problems for anything unusable.
 export function normalizeOptions(platform: Platform, raw: unknown): { options?: DestinationOptions; problems: string[] } {
+  const result = normalizeKind(platform, raw);
+  if (!result.options) return result;
+  const input = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const problems = [...result.problems];
+  const cover: CoverOptions = {};
+  if (input.cover_media_id !== undefined && input.cover_media_id !== null) {
+    if (typeof input.cover_media_id === "string" && UUID.test(input.cover_media_id)) cover.cover_media_id = input.cover_media_id.toLowerCase();
+    else problems.push("cover_media_id must be the id of an image in your media library.");
+  }
+  if (input.cover_time_ms !== undefined && input.cover_time_ms !== null) {
+    if (Number.isInteger(input.cover_time_ms) && (input.cover_time_ms as number) >= 0) cover.cover_time_ms = input.cover_time_ms as number;
+    else problems.push("cover_time_ms must be a whole number of milliseconds from the start of the video, 0 or more.");
+  }
+  return { options: { ...result.options, ...cover }, problems };
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// What each destination can do with a cover. "image": a library image; "frame": a moment of
+// the video. Facebook would need extra Page permissions; Threads and TikTok drafts have no
+// cover option; TikTok only takes a frame.
+export function coverSupport(options: DestinationOptions, media: Array<Pick<MediaFacts, "media_type">>): { image: boolean; frame: boolean; why?: string } {
+  const isVideo = media.some((m) => m.media_type === "video");
+  switch (options.kind) {
+    case "instagram":
+      return options.media_type === "reel" ? { image: true, frame: true } : { image: false, frame: false, why: "Covers apply to Instagram Reels only." };
+    case "youtube":
+      return { image: true, frame: true };
+    case "tiktok":
+      if (tiktokMediaType(options, media) === "photo") return { image: false, frame: false, why: "TikTok photo posts use their first photo as the cover; put the one you want first." };
+      if (options.delivery_mode === "inbox") return { image: false, frame: false, why: "Post Social can't set the cover of a TikTok draft; choose it in TikTok before posting." };
+      return { image: false, frame: true, why: "TikTok doesn't accept a cover image; pick a frame of the video instead." };
+    case "facebook":
+      return { image: false, frame: false, why: isVideo ? "Post Social can't set a Facebook video cover yet; Facebook uses its own thumbnail." : "Covers apply to videos only." };
+    case "threads":
+      return { image: false, frame: false, why: "Threads doesn't support custom covers." };
+  }
+}
+
+function normalizeKind(platform: Platform, raw: unknown): { options?: DestinationOptions; problems: string[] } {
   const input = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const str = (key: string) => (typeof input[key] === "string" ? (input[key] as string) : undefined);
   const bool = (key: string) => input[key] === true;
@@ -120,6 +163,27 @@ export function tiktokMediaType(options: TikTokOptions, media: Array<Pick<MediaF
 
 export const TIKTOK_MAX_PHOTOS = 35;
 
+function coverProblems(options: DestinationOptions, media: MediaFacts[], cover?: MediaFacts): string[] {
+  const wantsImage = options.cover_media_id !== undefined;
+  const wantsFrame = options.cover_time_ms !== undefined;
+  if (!wantsImage && !wantsFrame) return [];
+  if (wantsImage && wantsFrame) return ["Choose a cover image or a cover frame, not both."];
+  const support = coverSupport(options, media);
+  if (wantsImage && !support.image) return [support.why ?? "This post can't use a cover image."];
+  if (wantsFrame && !support.frame) return [support.why ?? "This post can't use a cover frame."];
+  const problems: string[] = [];
+  if (wantsImage && cover) {
+    if (cover.media_type !== "image") problems.push(`The cover must be an image; ${cover.name} is a video.`);
+    else if (cover.status !== "ready") problems.push(`The cover image ${cover.name} is ${cover.status === "processing" ? "still being checked" : cover.status}.`);
+    else if (!["image/jpeg", "image/png", "image/webp"].includes(cover.mime_type)) problems.push(`The cover image must be JPEG, PNG or WebP; ${cover.name} is ${cover.mime_type}.`);
+  }
+  if (wantsFrame) {
+    const seconds = media.find((m) => m.media_type === "video")?.duration_seconds;
+    if (seconds && options.cover_time_ms! > seconds * 1000) problems.push(`The cover frame is at ${(options.cover_time_ms! / 1000).toFixed(1)}s, but the video is ${seconds.toFixed(1)}s long.`);
+  }
+  return problems;
+}
+
 export function captionFor(options: DestinationOptions, postCaption: string) {
   if (options.kind === "instagram") return options.caption ?? postCaption;
   if (options.kind === "facebook") return options.message ?? postCaption;
@@ -134,12 +198,15 @@ export function destinationProblems(args: {
   caption: string;
   media: MediaFacts[];
   capabilities?: Capabilities;
+  // The cover image's facts when options.cover_media_id is set (omit if it can't be loaded).
+  cover?: MediaFacts;
 }): string[] {
   const { options, media, capabilities } = args;
   const caption = captionFor(options, args.caption).trim();
   const problems: string[] = [];
   const videos = media.filter((m) => m.media_type === "video");
   const images = media.filter((m) => m.media_type === "image");
+  problems.push(...coverProblems(options, media, args.cover));
 
   for (const item of media) {
     if (item.status !== "ready") problems.push(`${item.name} is ${item.status === "processing" ? "still being checked" : item.status}; only ready media can be posted.`);

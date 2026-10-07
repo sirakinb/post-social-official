@@ -17,9 +17,11 @@ export function tiktokPhotoLink(site: string, signedUrl: string) {
   return `${site.replace(/\/$/, "")}/tiktok-media/${Buffer.from(signedUrl).toString("base64url")}.jpg`;
 }
 
+export const toTikTokJpeg = (input: Uint8Array) => fitJpeg(input, MAX_BYTES);
+
 // Upright JPEG inside 1080×1920 (portrait) or 1920×1080 (landscape), never enlarged,
-// lowering the quality until it fits the size limit.
-export async function toTikTokJpeg(input: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
+// lowering the quality until it fits `maxBytes`.
+export async function fitJpeg(input: Uint8Array, maxBytes: number): Promise<Uint8Array<ArrayBuffer>> {
   const meta = await sharp(input, { limitInputPixels: 120_000_000 }).metadata();
   const sideways = (meta.orientation ?? 1) >= 5;
   const width = (sideways ? meta.height : meta.width) ?? 0;
@@ -32,9 +34,9 @@ export async function toTikTokJpeg(input: Uint8Array): Promise<Uint8Array<ArrayB
       .flatten({ background: "#ffffff" }) // transparent PNGs: white, not black
       .jpeg({ quality, mozjpeg: true })
       .toBuffer();
-    if (out.length <= MAX_BYTES) return new Uint8Array(out);
+    if (out.length <= maxBytes) return new Uint8Array(out);
   }
-  throw new Error("This photo is too detailed to fit TikTok's size limit; export it smaller and try again.");
+  throw new Error("This photo is too detailed to fit the size limit; export it smaller and try again.");
 }
 
 // Makes (or reuses) each photo's TikTok copy and returns the links TikTok will fetch.
