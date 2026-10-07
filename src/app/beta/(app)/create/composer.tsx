@@ -15,6 +15,9 @@ import {
   NAMES,
   NEW_TIKTOK,
   isTikTokPhotoPost,
+  coverNotes,
+  DEFAULT_COVER,
+  type Cover,
   tiktokProblems,
   type ComposerAccount,
   type ComposerMedia,
@@ -25,8 +28,9 @@ import type { CreatorInfo } from "../../../../../backend/lib/connections/tiktok-
 import { callPosts, getCreatorInfo, getMediaLinks } from "./actions";
 import { Preview } from "./preview";
 import { TikTokConsent, TikTokOptions } from "./tiktok-options";
+import { CoverPicker } from "./cover-picker";
 
-export type EditingPost = { id: string; status: string; caption: string; scheduledAt: string | null; mediaIds: string[]; accounts: Array<{ accountId: string; choice: PlatformChoice }> };
+export type EditingPost = { id: string; status: string; caption: string; scheduledAt: string | null; mediaIds: string[]; accounts: Array<{ accountId: string; choice: PlatformChoice }>; cover?: Cover };
 type Check = { ok: boolean; problems: string[] };
 type Done = { status: string; scheduledAt: string | null; tiktokDirect: boolean };
 
@@ -42,6 +46,7 @@ export function Composer({ workspaceId, accounts, library: initialLibrary, editi
   const [choices, setChoices] = useState<Record<string, PlatformChoice>>(() => Object.fromEntries((editing?.accounts ?? []).map((a) => [a.accountId, a.choice])));
   const [caption, setCaption] = useState(editing?.caption ?? "");
   const [mediaIds, setMediaIds] = useState<string[]>(editing?.mediaIds ?? initialMedia);
+  const [cover, setCover] = useState<Cover>(editing?.cover ?? DEFAULT_COVER);
   const [tab, setTab] = useState<string>("all");
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [when, setWhen] = useState<"now" | "later">(editing?.scheduledAt ? "later" : "now");
@@ -65,6 +70,13 @@ export function Composer({ workspaceId, accounts, library: initialLibrary, editi
     setMediaIds((ids) => [...ids, m.id]);
   });
 
+  // Cover images are uploaded to the library but not added to the post.
+  const coverUpload = useUpload(workspaceId, async (m: ReadyMedia) => {
+    const { links } = await getMediaLinks(workspaceId, [m.id]);
+    setLibrary((all) => [{ id: m.id, name: m.name ?? "Upload", type: m.media_type, width: m.width, height: m.height, duration: null, url: links[m.id] ?? null, poster: null }, ...all]);
+    if (m.media_type === "image") setCover({ kind: "image", mediaId: m.id });
+  });
+
   // TikTok's guidelines: read the creator's latest settings when the post page opens.
   const requested = useRef(new Set<string>());
   useEffect(() => {
@@ -86,9 +98,9 @@ export function Composer({ workspaceId, accounts, library: initialLibrary, editi
   }, []);
 
   const destinations = useMemo(
-    () => chosen.map((a) => ({ account_id: a.id, options: destinationOptions(a, a.platform === "tiktok" ? { ...choiceFor(a.id), tiktok: choiceFor(a.id).tiktok ?? NEW_TIKTOK } : choiceFor(a.id), caption, media) })),
+    () => chosen.map((a) => ({ account_id: a.id, options: destinationOptions(a, a.platform === "tiktok" ? { ...choiceFor(a.id), tiktok: choiceFor(a.id).tiktok ?? NEW_TIKTOK } : choiceFor(a.id), caption, media, cover) })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [chosen, choices, caption, media],
+    [chosen, choices, caption, media, cover],
   );
 
   // Checks against every platform's rules as the post changes (same check as AIs get).
@@ -274,6 +286,18 @@ export function Composer({ workspaceId, accounts, library: initialLibrary, editi
             </button>
           </div>
         </div>
+
+        {chosen.length > 0 && media.some((m) => m.type === "video") && (
+          <CoverPicker
+            video={media.find((m) => m.type === "video")!}
+            images={library.filter((m) => m.type === "image")}
+            cover={cover}
+            onChange={setCover}
+            notes={coverNotes(chosen, choiceFor, caption, media, cover)}
+            onUpload={(f) => void coverUpload.upload(f)}
+            uploads={coverUpload.uploads}
+          />
+        )}
 
         {chosen.length > 0 && (
           <div className="flex flex-col gap-3">

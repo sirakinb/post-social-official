@@ -4,7 +4,7 @@
 // (TikTok requires a fresh check). Until a video's chunks are all uploaded TikTok publishes
 // nothing, so an interrupted upload starts over with a new publish id; once a post is
 // handed over, its publish id is polled for status.
-import { tiktokMediaType, type TikTokOptions } from "../../../backend/lib/publishing/validate";
+import { tiktokMediaType, type CoverOptions, type TikTokOptions } from "../../../backend/lib/publishing/validate";
 import { PublishError, platformJson, type Adapter, type StepContext } from "./types";
 
 const API = "https://open.tiktokapis.com/v2";
@@ -67,7 +67,7 @@ async function checkCreator(ctx: StepContext, options: TikTokOptions, photo: boo
 }
 
 export const publishTikTok: Adapter = async (ctx) => {
-  const options = ctx.bundle.options as TikTokOptions;
+  const options = ctx.bundle.options as TikTokOptions & CoverOptions;
   const video = ctx.bundle.media[0];
   if (options.delivery_mode === "inbox" && !ctx.bundle.account.scopes.includes("video.upload")) {
     throw new PublishError("tiktok_reconnect", "Reconnect this TikTok account to allow sending drafts.", false, undefined, true);
@@ -93,6 +93,7 @@ export const publishTikTok: Adapter = async (ctx) => {
             brand_content_toggle: options.disclose_branded_content ?? false,
             brand_organic_toggle: options.disclose_your_brand ?? false,
             is_aigc: options.ai_generated ?? false,
+            ...(options.cover_time_ms !== undefined ? { video_cover_timestamp_ms: options.cover_time_ms } : {}),
           },
           source_info,
         }, "Starting the TikTok upload");

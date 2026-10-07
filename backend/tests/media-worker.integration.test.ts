@@ -208,4 +208,32 @@ describe.skipIf(!enabled)("media worker on the dev backend", () => {
     const [row] = await deps.sql<{ storage_key: string }>(`SELECT storage_key FROM public.media_assets WHERE id = $1`, [id]);
     expect(await r2.head(row.storage_key)).toBeNull();
   }, 120_000);
+
+  it("keeps an old image while a scheduled post uses it as a video cover", async () => {
+    const id = await upload("cover.png", "image/png", makePng(9, 16));
+    await settled(id);
+    await deps.sql(`UPDATE public.media_assets SET last_used_at = now() - interval '31 days' WHERE id = $1`, [id]);
+    const [account] = await deps.sql<{ id: string }>(
+      `INSERT INTO public.connected_accounts (workspace_id, platform, external_account_id, handle, display_name, capabilities, health)
+       VALUES ($1, 'youtube', $2, 'cover-test', 'Cover Test', '{}', 'connected') RETURNING id`,
+      [owner.workspaceId, `cover-${suffix}`],
+    );
+    const [actor] = await deps.sql<{ id: string }>(`SELECT id FROM public.actors WHERE workspace_id = $1 AND kind = 'user' LIMIT 1`, [owner.workspaceId]);
+    const [post] = await deps.sql<{ id: string }>(
+      `INSERT INTO public.posts (workspace_id, actor_id, entry_point, caption, status, scheduled_at, effective_approval_policy)
+       VALUES ($1, $2, 'ui', 'Cover test', 'scheduled', now() + interval '40 days', 'autonomous') RETURNING id`,
+      [owner.workspaceId, actor.id],
+    );
+    await deps.sql(
+      `INSERT INTO public.destinations (workspace_id, post_id, connected_account_id, platform, actor_id, status, effective_approval_policy, options)
+       VALUES ($1, $2, $3, 'youtube', $4, 'scheduled', 'autonomous', $5::jsonb)`,
+      [owner.workspaceId, post.id, account.id, actor.id, JSON.stringify({ kind: "youtube", title: "T", privacy_status: "private", cover_media_id: id })],
+    );
+    const due = await deps.sql<{ id: string }>(`SELECT id FROM public.media_due_for_cleanup(interval '30 days', 1000)`, []);
+    expect(due.map((d) => d.id)).not.toContain(id);
+    // Once the post is done, the cover can expire like anything else.
+    await deps.sql(`UPDATE public.posts SET status = 'cancelled' WHERE id = $1`, [post.id]);
+    const later = await deps.sql<{ id: string }>(`SELECT id FROM public.media_due_for_cleanup(interval '30 days', 1000)`, []);
+    expect(later.map((d) => d.id)).toContain(id);
+  }, 120_000);
 });

@@ -170,8 +170,10 @@ describe.skipIf(!enabled)("media function on the dev backend (US-013, US-014, US
       "GET",
       `/api/database/records/audit_events?entity_id=eq.${uploadedId}&select=event_type,actors(display_name)&order=occurred_at.asc`,
     );
-    expect(audit.body.map((a) => a.event_type)).toEqual(["media.uploaded", "media.renamed", "media.hidden"]);
-    expect(new Set(audit.body.map((a) => a.actors.display_name))).toEqual(new Set(["Media Owner"]));
+    // The dev worker may also have checked the file (media.ready / media.failed, no person).
+    const byPeople = audit.body.filter((a) => a.actors);
+    expect(byPeople.map((a) => a.event_type)).toEqual(["media.uploaded", "media.renamed", "media.hidden"]);
+    expect(new Set(byPeople.map((a) => a.actors.display_name))).toEqual(new Set(["Media Owner"]));
   });
 
   it("lets reviewers look but not change anything", async () => {

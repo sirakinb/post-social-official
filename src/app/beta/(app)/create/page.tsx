@@ -1,5 +1,5 @@
 import { loadViewer } from "@/lib/beta/workspace";
-import type { ComposerAccount, ComposerMedia, Platform, PlatformChoice } from "@/lib/beta/composer-model";
+import type { ComposerAccount, ComposerMedia, Cover, Platform, PlatformChoice } from "@/lib/beta/composer-model";
 import { getMediaLinks } from "./actions";
 import { Composer, type EditingPost } from "./composer";
 
@@ -59,12 +59,14 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
         scheduledAt: row.scheduled_at,
         mediaIds: [...row.post_media].sort((a, b) => a.position - b.position).map((m) => m.media_asset_id),
         accounts: row.destinations.map((d) => ({ accountId: d.connected_account_id, choice: choiceFromOptions(d.platform, d.options) })),
+        cover: coverFromOptions(row.destinations.map((d) => d.options)),
       };
     }
   }
 
   const library = ((mediaRows ?? []) as MediaRow[]).map(toComposerMedia);
-  const missing = editing ? editing.mediaIds.filter((id) => !library.some((m) => m.id === id)) : [];
+  const coverId = editing?.cover?.kind === "image" ? editing.cover.mediaId : null;
+  const missing = editing ? [...editing.mediaIds, ...(coverId ? [coverId] : [])].filter((id) => !library.some((m) => m.id === id)) : [];
   if (missing.length) {
     const { data } = await client.database.from("media_assets").select("id, display_name, file_name, media_type, width, height, duration_seconds").in("id", missing);
     library.push(...((data ?? []) as MediaRow[]).map(toComposerMedia));
@@ -110,4 +112,14 @@ function choiceFromOptions(platform: Platform, o: Record<string, unknown>): Plat
         },
       };
   }
+}
+
+// The post's cover, from whichever destination carries it (the composer sets the same cover
+// on every destination that supports it).
+function coverFromOptions(all: Array<Record<string, unknown>>): Cover {
+  for (const o of all) {
+    if (typeof o.cover_media_id === "string") return { kind: "image", mediaId: o.cover_media_id };
+    if (typeof o.cover_time_ms === "number") return { kind: "frame", ms: o.cover_time_ms };
+  }
+  return { kind: "default" };
 }

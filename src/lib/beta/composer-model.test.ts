@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { captionLimits, defaultMediaType, defaultTitle, destinationOptions, NEW_TIKTOK, tiktokLabel, tiktokProblems, type ComposerAccount, type ComposerMedia } from "./composer-model";
+import { captionLimits, coverNotes, defaultMediaType, defaultTitle, destinationOptions, NEW_TIKTOK, tiktokLabel, tiktokProblems, type ComposerAccount, type ComposerMedia } from "./composer-model";
 
 const video: ComposerMedia = { id: "v", name: "clip.mp4", type: "video", width: 1080, height: 1920, duration: 42, url: null };
 const image: ComposerMedia = { id: "i", name: "a.jpg", type: "image", width: 1080, height: 1350, duration: null, url: null };
@@ -63,5 +63,37 @@ describe("TikTok guideline rules", () => {
     expect(tiktokLabel({ ...d, yourBrand: true })).toBe("Your video will be labeled “Promotional content”.");
     expect(tiktokLabel({ ...d, yourBrand: true, brandedContent: true })).toBe("Your video will be labeled “Paid partnership”.");
     expect(tiktokLabel(NEW_TIKTOK)).toBeNull();
+  });
+});
+
+describe("covers", () => {
+  const image: ComposerMedia = { ...video, id: "img", type: "image", duration: null };
+  const ig = { ...account("instagram") };
+  const tt = { ...account("tiktok"), id: "tt" };
+  const yt = { ...account("youtube"), id: "yt" };
+  const fb = { ...account("facebook"), id: "fb" };
+
+  it("adds the cover only where the platform supports it", () => {
+    const pick = { kind: "image", mediaId: "img" } as const;
+    expect(destinationOptions(ig, { mediaType: "reel" }, "Hi", [video], pick)).toMatchObject({ cover_media_id: "img" });
+    expect(destinationOptions(yt, {}, "Hi", [video], pick)).toMatchObject({ cover_media_id: "img" });
+    expect(destinationOptions(tt, { tiktok: { ...NEW_TIKTOK, mode: "direct" } }, "Hi", [video], pick)).not.toHaveProperty("cover_media_id");
+    expect(destinationOptions(tt, { tiktok: { ...NEW_TIKTOK, mode: "direct" } }, "Hi", [video], { kind: "frame", ms: 3000 })).toMatchObject({ cover_time_ms: 3000 });
+    expect(destinationOptions(tt, { tiktok: NEW_TIKTOK }, "Hi", [video], { kind: "frame", ms: 3000 })).not.toHaveProperty("cover_time_ms");
+    expect(destinationOptions(fb, { mediaType: "reel" }, "Hi", [video], { kind: "frame", ms: 3000 })).not.toHaveProperty("cover_time_ms");
+    expect(destinationOptions(ig, { mediaType: "image" }, "Hi", [image], pick)).not.toHaveProperty("cover_media_id");
+  });
+
+  it("says what each account will get", () => {
+    const choices: Record<string, object> = { [ig.id]: { mediaType: "reel" }, tt: { tiktok: { ...NEW_TIKTOK, mode: "direct" } }, fb: { mediaType: "reel" } };
+    const notes = coverNotes([ig, tt, yt, fb], (id) => choices[id] ?? {}, "Hi", [video], { kind: "image", mediaId: "img" });
+    expect(notes.map((n) => n.text)).toEqual([
+      "Your cover image",
+      "A frame, not an image: the first frame. TikTok doesn't accept a cover image; pick a frame of the video instead.",
+      "Your cover image",
+      "Its own default. Post Social can't set a Facebook video cover yet; Facebook uses its own thumbnail.",
+    ]);
+    expect(coverNotes([yt], () => ({}), "Hi", [video], { kind: "default" })[0].text).toBe("YouTube's automatic thumbnail");
+    expect(coverNotes([ig], () => ({ mediaType: "reel" }), "Hi", [video], { kind: "frame", ms: 65_000 })[0].text).toBe("The frame at 1:05");
   });
 });

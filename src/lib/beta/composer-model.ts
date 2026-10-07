@@ -1,3 +1,5 @@
+import { coverSupport, type DestinationOptions } from "../../../backend/lib/publishing/validate";
+
 // The composer's rules, kept free of React so they can be tested: per-platform defaults
 // from the attached media, which caption each platform gets, character limits, and the
 // TikTok requirements from its content sharing guidelines.
@@ -63,8 +65,40 @@ export function effectiveCaption(shared: string, choice: PlatformChoice | undefi
 
 const URL_RE = /https?:\/\/\S+/;
 
-// What a destination sends to the posts API for one account.
-export function destinationOptions(account: ComposerAccount, choice: PlatformChoice, shared: string, media: ComposerMedia[]) {
+// The post's video cover, as the person chose it. Each platform gets what it supports
+// (server rule: coverSupport in backend/lib/publishing/validate.ts).
+export type Cover = { kind: "default" } | { kind: "frame"; ms: number } | { kind: "image"; mediaId: string };
+export const DEFAULT_COVER: Cover = { kind: "default" };
+
+const asFacts = (media: ComposerMedia[]) => media.map((m) => ({ media_type: m.type }));
+
+// What a destination sends to the posts API for one account, cover included where supported.
+export function destinationOptions(account: ComposerAccount, choice: PlatformChoice, shared: string, media: ComposerMedia[], cover: Cover = DEFAULT_COVER) {
+  const base = baseOptions(account, choice, shared, media);
+  if (cover.kind === "default" || !media.some((m) => m.type === "video")) return base;
+  const support = coverSupport({ kind: account.platform, ...base } as unknown as DestinationOptions, asFacts(media));
+  if (cover.kind === "image" && support.image) return { ...base, cover_media_id: cover.mediaId };
+  if (cover.kind === "frame" && support.frame) return { ...base, cover_time_ms: cover.ms };
+  return base;
+}
+
+// One line per chosen account saying which cover it will get.
+export function coverNotes(accounts: ComposerAccount[], choiceFor: (id: string) => PlatformChoice, shared: string, media: ComposerMedia[], cover: Cover) {
+  const time = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
+  return accounts.map((a) => {
+    const base = baseOptions(a, a.platform === "tiktok" ? { ...choiceFor(a.id), tiktok: choiceFor(a.id).tiktok ?? NEW_TIKTOK } : choiceFor(a.id), shared, media);
+    const support = coverSupport({ kind: a.platform, ...base } as unknown as DestinationOptions, asFacts(media));
+    const fallback = a.platform === "youtube" ? "YouTube's automatic thumbnail" : "the first frame";
+    let text: string;
+    if (!support.image && !support.frame) text = `Its own default. ${support.why ?? ""}`.trim();
+    else if (cover.kind === "image") text = support.image ? "Your cover image" : `A frame, not an image: ${fallback}. ${support.why ?? ""}`.trim();
+    else if (cover.kind === "frame") text = `The frame at ${time(cover.ms)}`;
+    else text = fallback[0].toUpperCase() + fallback.slice(1);
+    return { accountId: a.id, label: `${NAMES[a.platform]} ${a.platform === "youtube" || a.platform === "facebook" ? a.name : `@${a.handle}`}`, text };
+  });
+}
+
+function baseOptions(account: ComposerAccount, choice: PlatformChoice, shared: string, media: ComposerMedia[]) {
   const mediaType = choice.mediaType ?? defaultMediaType(account.platform, media);
   switch (account.platform) {
     case "instagram":

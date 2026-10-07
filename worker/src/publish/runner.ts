@@ -11,7 +11,8 @@ import { publishFacebook } from "./facebook";
 import { publishInstagram, publishThreads } from "./meta";
 import { publishTikTok } from "./tiktok";
 import { tiktokPhotoLinks } from "./tiktok-photos";
-import { PublishError, type Adapter, type Bundle, type Checkpoint, type StepContext, type StepResult } from "./types";
+import { coverImage, videoFrame } from "./covers";
+import { PublishError, type Adapter, type Bundle, type Checkpoint, type PublishMedia, type StepContext, type StepResult } from "./types";
 import { publishYouTube } from "./youtube";
 
 export const ADAPTERS: Record<Platform, Adapter> = {
@@ -78,7 +79,7 @@ export async function runNextPublishJob(deps: PublishDeps): Promise<boolean> {
 
     // The same checks as at submit time, unless the post is already part-way through.
     if (!Object.keys(job.checkpoint ?? {}).length) {
-      const problems = destinationProblems({ options: b.options, caption: b.caption, media: b.media, capabilities: b.account.capabilities as { video_max_seconds?: number } });
+      const problems = destinationProblems({ options: b.options, caption: b.caption, media: b.media, capabilities: b.account.capabilities as { video_max_seconds?: number }, cover: b.cover });
       if (problems.length) throw new PublishError("invalid", problems.join(" "));
     }
 
@@ -107,6 +108,10 @@ export async function runNextPublishJob(deps: PublishDeps): Promise<boolean> {
         await deps.sql(`UPDATE public.publish_jobs SET lease_expires_at = now() + make_interval(secs => $2) WHERE ${fence}`, [job.id, LEASE_SECONDS]);
       },
       tiktokPhotoLinks: b.platform === "tiktok" ? tiktokPhotoLinks({ r2: deps.r2, site: tiktokMediaSite(deps.setting), http: deps.http }) : undefined,
+      cover: b.media.some((m) => m.media_type === "video")
+        ? { image: b.cover ? coverImage({ r2: deps.r2, http: deps.http }, b.cover) : undefined, frame: videoFrame(b.media.find((m) => m.media_type === "video")!.url) }
+        : undefined,
+      notes: [...(b.notes ?? [])],
       reserve: async (operation, limit, windowSeconds) => {
         const [{ reserve_platform_call: retryAt }] = await deps.sql<{ reserve_platform_call: string | null }>(
           `SELECT public.reserve_platform_call($1, $2, $3, $4)`,
@@ -144,7 +149,7 @@ export async function runNextPublishJob(deps: PublishDeps): Promise<boolean> {
        )
        INSERT INTO public.audit_events (workspace_id, entry_point, event_type, entity_type, entity_id, summary, after_values)
        SELECT workspace_id, 'worker', 'destination.published', 'destination', $1, $5, jsonb_build_object('live_url', $2::text) FROM d`,
-      [b.destinationId, result.liveUrl ?? null, result.platformId ?? null, result.note ?? null, result.drafted ? `Sent to ${b.account.displayName}'s TikTok drafts` : `Published to ${b.account.displayName}`],
+      [b.destinationId, result.liveUrl ?? null, result.platformId ?? null, [result.note, ...ctx.notes].filter(Boolean).join(" ") || null, result.drafted ? `Sent to ${b.account.displayName}'s TikTok drafts` : `Published to ${b.account.displayName}`],
     );
     if (result.profile) {
       await deps.sql(`UPDATE public.connected_accounts SET display_name = $2, updated_at = now() WHERE id = $1 AND display_name <> $2`, [b.account.id, result.profile.displayName]);
@@ -214,16 +219,35 @@ async function loadBundle(deps: PublishDeps, job: Job): Promise<Bundle | null> {
   );
   // Platforms fetch media by URL; signed links stay valid long enough for slow processing.
   const withUrls = await Promise.all(media.map(async (m) => ({ ...m, size_bytes: Number(m.size_bytes), url: await deps.r2.presignGet(m.storage_key, 12 * 3600) })));
+  // The cover image, if one was chosen. If it's gone, the post still goes out with the
+  // platform's default cover, and says so.
+  let options = row.options;
+  let cover: PublishMedia | undefined;
+  const notes: string[] = [];
+  if (options.cover_media_id) {
+    const [c] = await deps.sql<{ id: string; name: string; status: string; media_type: "image" | "video"; mime_type: string; size_bytes: string; width: number | null; height: number | null; duration_seconds: number | null; storage_key: string }>(
+      `SELECT id, coalesce(display_name, file_name) AS name, status, media_type, mime_type, size_bytes, width, height, duration_seconds::float8 AS duration_seconds, storage_key
+       FROM public.media_assets WHERE id = $1 AND workspace_id = $2 AND status = 'ready'`,
+      [options.cover_media_id, job.workspace_id],
+    );
+    if (c) cover = { ...c, size_bytes: Number(c.size_bytes), url: await deps.r2.presignGet(c.storage_key, 3600) };
+    else {
+      options = { ...options, cover_media_id: undefined };
+      notes.push("The chosen cover image was no longer available, so the default cover was used.");
+    }
+  }
   return {
     jobId: job.id,
     workspaceId: job.workspace_id,
     postId: job.post_id,
     destinationId: job.destination_id,
     platform: row.platform,
-    options: row.options,
+    options,
     caption: row.caption,
     account: { id: row.account_id, externalId: row.external_account_id, handle: row.handle, displayName: row.display_name, scopes: row.scopes ?? [], capabilities: row.capabilities ?? {} },
     media: withUrls,
+    cover,
+    notes,
   };
 }
 

@@ -59,6 +59,21 @@ function mediaParams(flavor: Flavor, item: PublishMedia, child: boolean): Record
   return child ? { ...base, is_carousel_item: "true" } : base;
 }
 
+// A Reel's cover: a library image (Instagram fetches it by link; JPEG, ≤ 8 MB) or a frame of
+// the video. If the image can't be prepared, the Reel still goes out with its first frame.
+async function reelCover(ctx: StepContext): Promise<Record<string, string>> {
+  const { options } = ctx.bundle;
+  if (options.cover_media_id && ctx.cover?.image) {
+    try {
+      return { cover_url: (await ctx.cover.image()).link };
+    } catch (error) {
+      ctx.notes.push(`The cover image couldn't be prepared (${error instanceof Error ? error.message : "unknown error"}), so Instagram used the first frame.`);
+      return {};
+    }
+  }
+  return options.cover_time_ms !== undefined ? { thumb_offset: String(options.cover_time_ms) } : {};
+}
+
 async function createContainer(ctx: StepContext, flavor: Flavor) {
   const { bundle } = ctx;
   const userId = bundle.account.externalId;
@@ -86,6 +101,7 @@ async function createContainer(ctx: StepContext, flavor: Flavor) {
 
   const params: Record<string, string> = kind === "text" ? { media_type: "TEXT" } : mediaParams(flavor, bundle.media[0], false);
   if (caption) params[textKey] = caption;
+  if (flavor.name === "Instagram" && kind === "reel") Object.assign(params, await reelCover(ctx));
   const container = await call(ctx, flavor, "POST", flavor.containerPath(userId), params, `Uploading to ${flavor.name}`);
   await ctx.save({ container_id: String(container.id) });
   return true;
