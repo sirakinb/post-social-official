@@ -21,7 +21,7 @@ export function ApiView(props: { workspaceId: string; role: string; apps: AiApp[
   const [busy, setBusy] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [openApp, setOpenApp] = useState<string | null>(null);
-  const [client, setClient] = useState<"claude" | "chatgpt" | "code" | "cli">("claude");
+  const [client, setClient] = useState<"claude" | "chatgpt" | "code" | "codex" | "cursor" | "grok" | "muse" | "hermes" | "openclaw" | "cli">("claude");
   const [keyForm, setKeyForm] = useState(false);
   const [newKey, setNewKey] = useState<{ name: string; key: string } | null>(null);
   const [copied, setCopied] = useState(false);
@@ -49,10 +49,17 @@ export function ApiView(props: { workspaceId: string; role: string; apps: AiApp[
     router.refresh();
   }
 
+  // One tab per AI app. Most sign in with OAuth (no key); Muse takes an API key from below.
   const snippets = {
-    claude: { label: "Claude", help: "In Claude, open Settings → Connectors → Add custom connector and paste this address. Claude sends you here to approve it.", code: props.mcpUrl },
-    chatgpt: { label: "ChatGPT", help: "In ChatGPT, turn on Developer mode (Settings → Apps & Connectors → Advanced), create a connector with this address, and sign in.", code: props.mcpUrl },
-    code: { label: "Claude Code", help: "Run this, then type /mcp in Claude Code and choose Authenticate.", code: `claude mcp add --transport http ${props.serverName} ${props.mcpUrl}` },
+    claude: { label: "Claude", help: "In Claude (web or desktop), open Settings → Connectors → Add custom connector and paste this address. Claude sends you here to approve it. A connector added in Claude also works in Claude Code when Claude Code is signed in with the same Claude plan.", code: props.mcpUrl },
+    chatgpt: { label: "ChatGPT", help: "In ChatGPT, turn on Developer mode (Settings → Apps & Connectors → Advanced), create a connector with this address, and sign in. ChatGPT connectors don't carry over to Codex, so set Codex up separately.", code: props.mcpUrl },
+    code: { label: "Claude Code", help: "Only needed if Claude Code isn't signed in with your Claude plan (for example with an API key). Run this, then type /mcp and choose Authenticate.", code: `claude mcp add --transport http ${props.serverName} ${props.mcpUrl}` },
+    codex: { label: "Codex", help: "For the Codex CLI, IDE extension and ChatGPT desktop app. Run both lines; the second opens your browser to approve.", code: `codex mcp add ${props.serverName} --url ${props.mcpUrl}\ncodex mcp login ${props.serverName}` },
+    cursor: { label: "Cursor", help: "Add this to ~/.cursor/mcp.json (or .cursor/mcp.json in a project), then press Connect next to Post Social in Cursor's MCP settings.", code: JSON.stringify({ mcpServers: { [props.serverName]: { url: props.mcpUrl } } }, null, 2) },
+    grok: { label: "Grok", help: "On grok.com, open grok.com/connectors → New Connector → Custom and paste the address, then sign in. For the Grok CLI, run this and press i in /mcps to sign in.", code: `grok mcp add --transport http ${props.serverName} ${props.mcpUrl}` },
+    muse: { label: "Muse", help: "Meta Muse has no connector form: create an API key below, then send Muse this message and paste the key when it asks.", code: `Connect a custom MCP server called Post Social at ${props.mcpUrl}. It uses HTTP with a bearer token. Save it as a skill.` },
+    hermes: { label: "Hermes", help: "Add this to ~/.hermes/config.yaml, then run /reload-mcp. Hermes prints a link to approve Post Social the first time.", code: `mcp_servers:\n  ${props.serverName}:\n    url: "${props.mcpUrl}"\n    auth: oauth` },
+    openclaw: { label: "OpenClaw", help: "Run both lines; the second opens your browser to approve.", code: `openclaw mcp add ${props.serverName} --url ${props.mcpUrl} --transport streamable-http --auth oauth\nopenclaw mcp login ${props.serverName}` },
     cli: { label: "CLI", help: "For scripts and terminals. JSON in, JSON out.", code: "npx postsocial login\nnpx postsocial list-social-accounts --pretty" },
   } as const;
 
@@ -60,7 +67,7 @@ export function ApiView(props: { workspaceId: string; role: string; apps: AiApp[
     <div className="flex w-full max-w-[1100px] flex-col gap-7 px-8 pb-14 pt-5">
       <div>
         <h1 className="m-0 text-lg font-medium">API/MCP</h1>
-        <p className="mt-1 text-ps-muted">Connect Claude, ChatGPT or your own code, and see who has access.</p>
+        <p className="mt-1 text-ps-muted">Connect Claude, ChatGPT, Codex, Grok and other AI apps, or your own code, and see who has access.</p>
       </div>
 
       {message && <p role={message.kind === "error" ? "alert" : "status"} className={cn("m-0 rounded-[10px] border px-3.5 py-2.5", message.kind === "error" ? "border-ps-failed/30 bg-ps-failed/[0.08] text-[#FF8A8E]" : "border-ps-line bg-ps-surface text-ps-muted")}>{message.text}</p>}
@@ -157,7 +164,7 @@ export function ApiView(props: { workspaceId: string; role: string; apps: AiApp[
         <section id="connect-ai" aria-labelledby="connect-h">
           <h2 id="connect-h" className="m-0 mb-2.5 text-sm font-medium">Connect an AI</h2>
           <div className="overflow-hidden rounded-xl border border-ps-line bg-ps-surface">
-            <div role="tablist" aria-label="AI app" className="flex gap-0.5 border-b border-white/[0.06] px-2 pt-1.5">
+            <div role="tablist" aria-label="AI app" className="flex flex-wrap gap-0.5 border-b border-white/[0.06] px-2 pt-1.5">
               {(Object.keys(snippets) as Array<keyof typeof snippets>).map((id) => (
                 <button key={id} type="button" role="tab" aria-selected={client === id} onClick={() => setClient(id)} className={cn("h-[34px] px-3 text-xs", client === id ? "text-ps-text shadow-[inset_0_-2px_0_#9B6CFF]" : "text-ps-muted hover:text-ps-text")}>{snippets[id].label}</button>
               ))}
