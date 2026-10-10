@@ -118,7 +118,8 @@ export async function dpopFetch(
     const headers = new Headers(init.headers);
     headers.set("DPoP", await dpopProof(jwk, init.method, url, nonce, options.accessToken));
     if (options.accessToken) headers.set("Authorization", `DPoP ${options.accessToken}`);
-    const response = await http(url, { ...init, headers });
+    // Never follow redirects: every address is checked before it is called.
+    const response = await http(url, { ...init, headers, redirect: "error" });
     const fresh = response.headers.get("DPoP-Nonce") ?? undefined;
     if (attempt === 0 && fresh && fresh !== nonce && (response.status === 400 || response.status === 401) && (await asksForNonce(response.clone()))) {
       nonce = fresh;
@@ -145,6 +146,9 @@ async function readJson(response: Response, what: string) {
 }
 
 // ---------- Identity and server discovery ----------
+
+// Addresses that come from outside are checked first, so a redirect could point anywhere.
+const NO_REDIRECTS: RequestInit = { redirect: "error" };
 
 // Only plain public https addresses are fetched: handles, DID documents and server metadata
 // come from outside, and must not point us at internal hosts.
@@ -185,7 +189,7 @@ export async function resolveDid(http: typeof fetch, did: string) {
   if (/^did:plc:[a-z2-7]{24}$/.test(did)) docUrl = `https://plc.directory/${did}`;
   else if (/^did:web:[a-z0-9.-]+$/i.test(did)) docUrl = `${safeHttpsUrl(`https://${did.slice(8)}`, "The account's server").origin}/.well-known/did.json`;
   else throw new AtprotoError("Bluesky returned an account id we can't use.");
-  const doc = await readJson(await http(docUrl), "Reading the Bluesky account");
+  const doc = await readJson(await http(docUrl, NO_REDIRECTS), "Reading the Bluesky account");
   const service = (doc.service as Array<{ id?: string; type?: string; serviceEndpoint?: string }> | undefined)?.find((s) => s.id?.endsWith("#atproto_pds"));
   if (!service?.serviceEndpoint) throw new AtprotoError("This Bluesky account has no server listed.");
   const pds = safeHttpsUrl(service.serviceEndpoint, "The account's server").origin;
@@ -198,10 +202,10 @@ export type AuthServer = { issuer: string; par: string; authorization: string; t
 async function authServerFor(http: typeof fetch, origin: string): Promise<AuthServer> {
   // A PDS points at its authorization server; an entryway like bsky.social is one itself.
   let issuer = origin;
-  const resource = await http(`${origin}/.well-known/oauth-protected-resource`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  const resource = await http(`${origin}/.well-known/oauth-protected-resource`, NO_REDIRECTS).then((r) => (r.ok ? r.json() : null)).catch(() => null);
   const listed = (resource as { authorization_servers?: string[] } | null)?.authorization_servers?.[0];
   if (listed) issuer = safeHttpsUrl(listed, "The Bluesky sign-in server").origin;
-  const meta = await readJson(await http(`${issuer}/.well-known/oauth-authorization-server`), "Reading the Bluesky sign-in server");
+  const meta = await readJson(await http(`${issuer}/.well-known/oauth-authorization-server`, NO_REDIRECTS), "Reading the Bluesky sign-in server");
   if (meta.issuer !== issuer) throw new AtprotoError("The Bluesky sign-in server did not identify itself correctly.");
   const endpoint = (name: string) => safeHttpsUrl(meta[name], "A Bluesky sign-in address").toString();
   return {
