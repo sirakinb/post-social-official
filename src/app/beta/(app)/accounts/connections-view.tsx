@@ -20,8 +20,9 @@ const PLATFORMS = [
   { id: "youtube", name: "YouTube", note: "Shorts" },
   { id: "tiktok", name: "TikTok", note: "Your account" },
   { id: "linkedin", name: "LinkedIn", note: "Your profile" },
+  { id: "bluesky", name: "Bluesky", note: "Your account" },
 ];
-const KIND: Record<string, string> = { instagram: "Instagram", facebook: "Facebook Page", threads: "Threads", youtube: "YouTube channel", tiktok: "TikTok", linkedin: "LinkedIn" };
+const KIND: Record<string, string> = { instagram: "Instagram", facebook: "Facebook Page", threads: "Threads", youtube: "YouTube channel", tiktok: "TikTok", linkedin: "LinkedIn", bluesky: "Bluesky" };
 
 // "12 min ago" in the browser; plain dates on the server (it doesn't know the clock here).
 const ago = (iso: string | null, now: number) => {
@@ -67,14 +68,18 @@ export function ConnectionsView(props: {
   const [newKey, setNewKey] = useState<{ name: string; key: string } | null>(null);
   const [copied, setCopied] = useState(false);
 
+  const [askHandle, setAskHandle] = useState(false);
+  const [blueskyHandle, setBlueskyHandle] = useState("");
   const active = props.accounts.filter((a) => a.health !== "disconnected");
   const past = props.accounts.filter((a) => a.health === "disconnected");
   const attention = active.filter((a) => a.health === "needs_attention");
 
-  async function connect(platform: string) {
+  async function connect(platform: string, handle?: string) {
+    // Bluesky asks which account first: its sign-in starts on the account's own server.
+    if (platform === "bluesky" && handle === undefined) return setAskHandle(true);
     setBusy(platform);
     setMessage(null);
-    const r = await startConnection(props.workspaceId, props.workspaceSlug, platform);
+    const r = await startConnection(props.workspaceId, props.workspaceSlug, platform, handle);
     if (!r.ok) {
       setBusy(null);
       return setMessage({ kind: "error", text: r.error });
@@ -124,7 +129,7 @@ export function ConnectionsView(props: {
         <div key={a.id} role="status" className="flex flex-wrap items-center gap-2.5 rounded-[10px] border border-ps-attention/30 bg-ps-attention/[0.07] px-3.5 py-2.5 text-[#F5D49A]">
           <span className="h-1.5 w-1.5 rounded-full bg-ps-attention" />
           <span className="flex-1">{a.name} on {KIND[a.platform]} needs to be reconnected{a.reason ? `: ${a.reason}` : "."}</span>
-          {canEdit && <button type="button" disabled={busy !== null} onClick={() => connect(a.platform)} className={btn}>Reconnect</button>}
+          {canEdit && <button type="button" disabled={busy !== null} onClick={() => connect(a.platform, a.platform === "bluesky" ? a.handle : undefined)} className={btn}>Reconnect</button>}
         </div>
       ))}
 
@@ -142,7 +147,7 @@ export function ConnectionsView(props: {
                 <AccountMark platform={a.platform} avatarUrl={a.avatarUrl} size={32} badge={16} />
               </span>
               <span className="min-w-[180px] flex-1">
-                <span className="block">{a.name} <span className="text-ps-subtle">{a.platform === "youtube" || a.platform === "facebook" ? KIND[a.platform] : `@${a.handle} · ${KIND[a.platform]}`}</span></span>
+                <span className="block">{a.name} <span className="text-ps-subtle">{a.platform === "youtube" || a.platform === "facebook" || a.platform === "linkedin" ? KIND[a.platform] : `@${a.handle} · ${KIND[a.platform]}`}</span></span>
                 <span className="mt-0.5 block text-xs text-ps-subtle">{a.lastPostedAt ? `Last post ${ago(a.lastPostedAt, now)}` : `Connected ${ago(a.connectedAt, now)}`}{a.platform === "tiktok" ? " · AI posts go to your TikTok inbox" : ""}</span>
               </span>
               {a.health === "needs_attention" ? <Status tone="attention" label="Needs attention" /> : <Status tone="live" label="Connected" />}
@@ -154,7 +159,7 @@ export function ConnectionsView(props: {
                   </span>
                 ) : (
                   <span className="flex gap-1.5">
-                    {a.health === "needs_attention" && <button type="button" disabled={busy !== null} onClick={() => connect(a.platform)} className={btn}>Reconnect</button>}
+                    {a.health === "needs_attention" && <button type="button" disabled={busy !== null} onClick={() => connect(a.platform, a.platform === "bluesky" ? a.handle : undefined)} className={btn}>Reconnect</button>}
                     <button type="button" onClick={() => setConfirming(a.id)} className="h-[30px] rounded-lg px-2.5 text-xs text-ps-subtle hover:text-ps-text">Disconnect</button>
                   </span>
                 ))}
@@ -169,8 +174,31 @@ export function ConnectionsView(props: {
                   {busy === p.id ? "Opening…" : p.name}
                 </button>
               ))}
-              <span className="ml-auto text-xs text-ps-subtle">X and Bluesky are coming soon</span>
+              <span className="ml-auto text-xs text-ps-subtle">X is coming soon</span>
             </div>
+          )}
+          {canEdit && askHandle && (
+            <form
+              className="flex flex-wrap items-center gap-2 border-t border-ps-line px-4 py-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void connect("bluesky", blueskyHandle);
+              }}
+            >
+              <label htmlFor="bluesky-handle" className="text-ps-subtle">Bluesky handle</label>
+              <input
+                id="bluesky-handle"
+                value={blueskyHandle}
+                onChange={(e) => setBlueskyHandle(e.target.value)}
+                placeholder="name.bsky.social"
+                autoComplete="off"
+                spellCheck={false}
+                className="h-[30px] min-w-[200px] flex-1 rounded-lg border border-ps-line bg-transparent px-2.5 text-sm text-ps-text placeholder:text-ps-subtle"
+              />
+              <button type="submit" disabled={busy !== null} className={btn}>{busy === "bluesky" ? "Opening…" : "Continue to Bluesky"}</button>
+              <button type="button" onClick={() => setAskHandle(false)} className="h-[30px] rounded-lg px-2.5 text-xs text-ps-subtle hover:text-ps-text">Cancel</button>
+              <p className="m-0 w-full text-xs text-ps-subtle">You&apos;ll sign in on Bluesky&apos;s own page. Leave it empty if your account is on bsky.social and you&apos;d rather pick it there.</p>
+            </form>
           )}
         </div>
         {past.length > 0 && <p className="mt-2 text-xs text-ps-subtle">Disconnected: {past.map((a) => a.name).join(", ")}. Connect again any time.</p>}

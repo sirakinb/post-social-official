@@ -4,14 +4,14 @@ import { coverSupport, type DestinationOptions } from "../../../backend/lib/publ
 // from the attached media, which caption each platform gets, character limits, and the
 // TikTok requirements from its content sharing guidelines.
 
-export type Platform = "instagram" | "facebook" | "threads" | "youtube" | "tiktok" | "linkedin";
+export type Platform = "instagram" | "facebook" | "threads" | "youtube" | "tiktok" | "linkedin" | "bluesky";
 export type ComposerAccount = { id: string; platform: Platform; name: string; handle: string; avatarUrl: string | null; captionMax: number | null; videoMaxSeconds: number | null };
 export type ComposerMedia = { id: string; name: string; type: "image" | "video"; width: number | null; height: number | null; duration: number | null; url: string | null; poster?: string | null };
 
 // Per-account settings as the person chose them. `caption` overrides the shared caption.
 export type PlatformChoice = {
   mediaType?: string; // instagram, facebook, threads
-  caption?: string; // override (instagram.caption, facebook.message, threads.text, youtube.description, linkedin.text)
+  caption?: string; // override (instagram.caption, facebook.message, threads.text, youtube.description, linkedin.text, bluesky.text)
   link?: string; // facebook link posts
   title?: string; // youtube (required), facebook and linkedin video
   privacy?: "public" | "unlisted" | "private"; // youtube
@@ -115,6 +115,8 @@ function baseOptions(account: ComposerAccount, choice: PlatformChoice, shared: s
     case "linkedin":
       // The post type follows the media (server: linkedinMediaType).
       return { ...(choice.caption !== undefined ? { text: choice.caption } : {}), ...(choice.title ? { title: choice.title } : {}) };
+    case "bluesky":
+      return choice.caption !== undefined ? { text: choice.caption } : {};
     case "youtube":
       return { title: choice.title ?? defaultTitle(shared), privacy_status: choice.privacy ?? "public", ...(choice.caption !== undefined ? { description: choice.caption } : {}) };
     case "tiktok": {
@@ -155,8 +157,8 @@ export function captionLimits(accounts: ComposerAccount[], choices: Record<strin
     });
 }
 
-export const SHORT: Record<Platform, string> = { instagram: "IG", facebook: "FB", threads: "Threads", youtube: "YT", tiktok: "TikTok", linkedin: "LinkedIn" };
-export const NAMES: Record<Platform, string> = { instagram: "Instagram", facebook: "Facebook", threads: "Threads", youtube: "YouTube", tiktok: "TikTok", linkedin: "LinkedIn" };
+export const SHORT: Record<Platform, string> = { instagram: "IG", facebook: "FB", threads: "Threads", youtube: "YT", tiktok: "TikTok", linkedin: "LinkedIn", bluesky: "Bluesky" };
+export const NAMES: Record<Platform, string> = { instagram: "Instagram", facebook: "Facebook", threads: "Threads", youtube: "YouTube", tiktok: "TikTok", linkedin: "LinkedIn", bluesky: "Bluesky" };
 
 export const TIKTOK_PRIVACY_LABELS: Record<string, string> = {
   PUBLIC_TO_EVERYONE: "Everyone",

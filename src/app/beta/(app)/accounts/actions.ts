@@ -22,11 +22,11 @@ async function callConnections<T>(path: "/start" | "/disconnect", body: Record<s
   return { ok: true, data: data as T };
 }
 
-export async function startConnection(workspaceId: string, workspaceSlug: string, platform: string) {
+export async function startConnection(workspaceId: string, workspaceSlug: string, platform: string, handle?: string) {
   const host = (await headers()).get("host");
   const protocol = host?.startsWith("localhost") ? "http" : "https";
   const returnTo = `${protocol}://${host}/beta/accounts?workspace=${encodeURIComponent(workspaceSlug)}`;
-  return callConnections<{ url: string }>("/start", { workspace_id: workspaceId, platform, return_to: returnTo });
+  return callConnections<{ url: string }>("/start", { workspace_id: workspaceId, platform, return_to: returnTo, ...(handle?.trim() ? { handle: handle.trim() } : {}) });
 }
 
 export async function disconnect(accountId: string) {

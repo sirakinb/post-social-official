@@ -25,10 +25,13 @@ export type TikTokOptions = {
 // LinkedIn member posts. media_type left out follows the media: none is text, a video is
 // a video post, images are an image post (2 to 20 show as a gallery).
 export type LinkedInOptions = { kind: "linkedin"; media_type?: "text" | "image" | "video"; text?: string; title?: string; visibility?: "PUBLIC" | "CONNECTIONS" };
+// Bluesky posts. media_type left out follows the media, as for LinkedIn. alt_text is one
+// description per image, in order.
+export type BlueskyOptions = { kind: "bluesky"; media_type?: "text" | "image" | "video"; text?: string; alt_text?: string[] };
 // A video's cover, on any platform's options: an image from the library, or a frame of the
 // video (milliseconds from the start). Which platforms can use which: coverSupport().
 export type CoverOptions = { cover_media_id?: string; cover_time_ms?: number };
-export type DestinationOptions = (InstagramOptions | FacebookOptions | ThreadsOptions | YouTubeOptions | TikTokOptions | LinkedInOptions) & CoverOptions;
+export type DestinationOptions = (InstagramOptions | FacebookOptions | ThreadsOptions | YouTubeOptions | TikTokOptions | LinkedInOptions | BlueskyOptions) & CoverOptions;
 
 export type MediaFacts = {
   id: string;
@@ -51,6 +54,7 @@ export const POST_TYPES: Record<Platform, string[]> = {
   youtube: ["short"],
   tiktok: ["direct", "inbox"],
   linkedin: ["text", "image", "video"],
+  bluesky: ["text", "image", "video"],
 };
 
 const TIKTOK_PRIVACY = ["PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR", "SELF_ONLY"];
@@ -104,6 +108,8 @@ export function coverSupport(options: DestinationOptions, media: Array<Pick<Medi
       return { image: false, frame: false, why: "Threads doesn't support custom covers." };
     case "linkedin":
       return linkedinMediaType(options, media) === "video" ? { image: true, frame: true } : { image: false, frame: false, why: "Covers apply to videos only." };
+    case "bluesky":
+      return { image: false, frame: false, why: "Bluesky makes its own video thumbnail." };
   }
 }
 
@@ -172,7 +178,28 @@ function normalizeKind(platform: Platform, raw: unknown): { options?: Destinatio
         problems: [],
       };
     }
+    case "bluesky": {
+      if (str("media_type") !== undefined && !pick("media_type", ["text", "image", "video"] as const)) return { problems: ["Choose a Bluesky post type: text, image or video."] };
+      const alt = Array.isArray(input.alt_text) ? input.alt_text : undefined;
+      if (alt && (alt.length > BLUESKY_MAX_IMAGES || alt.some((a) => typeof a !== "string"))) return { problems: [`Bluesky alt_text is a list of up to ${BLUESKY_MAX_IMAGES} descriptions, one per image.`] };
+      return {
+        options: { kind: "bluesky", media_type: pick("media_type", ["text", "image", "video"] as const), text: str("text"), alt_text: alt as string[] | undefined },
+        problems: [],
+      };
+    }
   }
+}
+
+export const BLUESKY_MAX_IMAGES = 4;
+export const BLUESKY_MAX_CHARS = 300;
+
+// Bluesky counts characters as people see them (grapheme clusters), so an emoji is one.
+export function graphemeCount(text: string) {
+  const Segmenter = (Intl as { Segmenter?: new (locale?: string, options?: { granularity: string }) => { segment(input: string): Iterable<unknown> } }).Segmenter;
+  if (!Segmenter) return [...text].length;
+  let count = 0;
+  for (const _ of new Segmenter(undefined, { granularity: "grapheme" }).segment(text)) count++;
+  return count;
 }
 
 // A LinkedIn post's type: as chosen, or from the media.
@@ -219,6 +246,7 @@ export function captionFor(options: DestinationOptions, postCaption: string) {
   if (options.kind === "threads") return options.text ?? postCaption;
   if (options.kind === "youtube") return options.description ?? postCaption;
   if (options.kind === "linkedin") return options.text ?? postCaption;
+  if (options.kind === "bluesky") return options.text ?? postCaption;
   return postCaption;
 }
 
@@ -392,6 +420,29 @@ export function destinationProblems(args: {
           videoLength(v, 3, 1800, "LinkedIn videos");
           if (v.size_bytes > 500 * 1024 * 1024) problems.push(`LinkedIn videos can be at most 500 MB; ${v.name} is ${Math.round(v.size_bytes / 1024 / 1024)} MB.`);
           if (v.size_bytes < 75 * 1024) problems.push(`LinkedIn videos must be at least 75 KB; ${v.name} is smaller.`);
+        });
+      }
+      break;
+    }
+    case "bluesky": {
+      const length = graphemeCount(caption);
+      if (length > BLUESKY_MAX_CHARS) problems.push(`Bluesky posts can be at most ${BLUESKY_MAX_CHARS} characters; this one is ${length.toLocaleString("en-US")}.`);
+      const type = linkedinMediaType(options as unknown as LinkedInOptions, media);
+      if (type === "text") {
+        if (!caption) problems.push("Write the text for this Bluesky post.");
+        if (media.length) problems.push("A Bluesky text post cannot include media; choose image or video instead.");
+      } else if (type === "image") {
+        if (videos.length) problems.push("Bluesky image posts can only contain images; post the video separately.");
+        if (images.length === 0) problems.push("A Bluesky image post needs at least 1 image.");
+        if (images.length > BLUESKY_MAX_IMAGES) problems.push(`Bluesky posts can have at most ${BLUESKY_MAX_IMAGES} images; this one has ${images.length}.`);
+        types(images, ["image/jpeg", "image/png", "image/webp", "image/gif"], "Bluesky images");
+        for (const [i, alt] of (options.alt_text ?? []).entries()) if (alt.length > 2000) problems.push(`Bluesky image descriptions can be at most 2,000 characters; number ${i + 1} is longer.`);
+      } else {
+        exactly(1, "video", "A Bluesky video post");
+        types(videos, ["video/mp4"], "Bluesky videos");
+        videos.forEach((v) => {
+          videoLength(v, null, 180, "Bluesky videos");
+          if (v.size_bytes > 100 * 1024 * 1024) problems.push(`Bluesky videos can be at most 100 MB; ${v.name} is ${Math.round(v.size_bytes / 1024 / 1024)} MB.`);
         });
       }
       break;

@@ -1,5 +1,5 @@
 // Small building blocks of the redesigned app (Phase 6 design direction).
-import { FacebookLogo, InstagramLogo, LinkedInLogo, ThreadsLogo, TikTokLogo, YouTubeLogo } from "@/components/platform-logos";
+import { BlueskyLogo, FacebookLogo, InstagramLogo, LinkedInLogo, ThreadsLogo, TikTokLogo, YouTubeLogo } from "@/components/platform-logos";
 import { cn } from "@/lib/utils";
 
 export type Tone = "live" | "scheduled" | "failed" | "attention" | "quiet";
@@ -25,8 +25,8 @@ export function Status({ tone, label, className }: { tone: Tone; label: string; 
   );
 }
 
-const LOGOS = { instagram: InstagramLogo, facebook: FacebookLogo, threads: ThreadsLogo, youtube: YouTubeLogo, tiktok: TikTokLogo, linkedin: LinkedInLogo } as const;
-export const PLATFORM_NAMES: Record<string, string> = { instagram: "Instagram", facebook: "Facebook", threads: "Threads", youtube: "YouTube", tiktok: "TikTok", linkedin: "LinkedIn" };
+const LOGOS = { instagram: InstagramLogo, facebook: FacebookLogo, threads: ThreadsLogo, youtube: YouTubeLogo, tiktok: TikTokLogo, linkedin: LinkedInLogo, bluesky: BlueskyLogo } as const;
+export const PLATFORM_NAMES: Record<string, string> = { instagram: "Instagram", facebook: "Facebook", threads: "Threads", youtube: "YouTube", tiktok: "TikTok", linkedin: "LinkedIn", bluesky: "Bluesky" };
 
 // The platform's real logo in a small rounded square.
 export function PlatformMark({ platform, size = 20, className }: { platform: string; size?: number; className?: string }) {

@@ -4,10 +4,11 @@
 import type { Telemetry } from "../../../backend/lib/telemetry";
 import type { Sql } from "../../../backend/lib/access";
 import { type Platform, type Settings } from "../../../backend/lib/connections/platforms";
-import { accountToken } from "../credentials";
+import { accountSession, accountToken } from "../credentials";
 import type { R2 } from "../../../backend/lib/media/r2";
 import { destinationProblems, type DestinationOptions } from "../../../backend/lib/publishing/validate";
 import { publishFacebook } from "./facebook";
+import { publishBluesky } from "./bluesky";
 import { publishLinkedIn } from "./linkedin";
 import { publishInstagram, publishThreads } from "./meta";
 import { publishTikTok } from "./tiktok";
@@ -23,6 +24,7 @@ export const ADAPTERS: Record<Platform, Adapter> = {
   youtube: publishYouTube,
   tiktok: publishTikTok,
   linkedin: publishLinkedIn,
+  bluesky: publishBluesky,
 };
 
 export type PublishDeps = {
@@ -122,6 +124,7 @@ export async function runNextPublishJob(deps: PublishDeps): Promise<boolean> {
         if (retryAt) throw new PublishError("rate_limited", "This account reached its safe posting limit for now; it will go out when the limit resets.", true, new Date(retryAt));
       },
       token: () => accountToken(deps, { id: b.account.id, platform: b.platform, displayName: b.account.displayName }, now),
+      session: () => accountSession(deps, { id: b.account.id, platform: b.platform, displayName: b.account.displayName }, now),
     };
 
     const adapter = deps.adapters?.[b.platform] ?? ADAPTERS[b.platform];

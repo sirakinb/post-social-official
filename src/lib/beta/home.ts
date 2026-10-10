@@ -5,7 +5,7 @@ import { callServer, type Workspace } from "./workspace";
 
 type Client = Awaited<ReturnType<typeof import("@/lib/insforge/server").insforgeServerClient>>;
 
-export type PlatformId = "instagram" | "facebook" | "threads" | "youtube" | "tiktok" | "linkedin";
+export type PlatformId = "instagram" | "facebook" | "threads" | "youtube" | "tiktok" | "linkedin" | "bluesky";
 export type UpcomingPost = {
   id: string;
   caption: string;

@@ -145,6 +145,31 @@ describe("LinkedIn", () => {
   });
 });
 
+describe("Bluesky", () => {
+  const bluesky = { kind: "bluesky" } as const;
+  it("follows the media: text, up to 4 images or one video", () => {
+    expect(check(bluesky, [])).toEqual([]);
+    expect(check(bluesky, [], " ")).toEqual(["Write the text for this Bluesky post."]);
+    expect(check(bluesky, [image(), image({ mime_type: "image/webp" }), image({ mime_type: "image/png" }), image({ mime_type: "image/gif" })])).toEqual([]);
+    expect(check(bluesky, Array.from({ length: 5 }, () => image()))).toEqual(["Bluesky posts can have at most 4 images; this one has 5."]);
+    expect(check(bluesky, [media()])).toEqual([]);
+    expect(check(bluesky, [media({ duration_seconds: 200 })])).toEqual(["Bluesky videos can be at most 3 minutes; clip.mp4 is 3 min 20 s."]);
+    expect(check(bluesky, [media({ size_bytes: 150 * 1024 * 1024 })])).toEqual(["Bluesky videos can be at most 100 MB; clip.mp4 is 150 MB."]);
+    expect(check({ ...bluesky, cover_time_ms: 0 }, [media()])).toEqual(["Bluesky makes its own video thumbnail."]);
+  });
+
+  it("counts characters the way people see them", () => {
+    expect(check(bluesky, [], "👩‍👩‍👧".repeat(300))).toEqual([]);
+    expect(check(bluesky, [], "x".repeat(301))).toEqual(["Bluesky posts can be at most 300 characters; this one is 301."]);
+  });
+
+  it("takes its own text and one description per image", () => {
+    expect(normalizeOptions("bluesky", { text: "hi", alt_text: ["a", "b"] }).options).toEqual({ kind: "bluesky", media_type: undefined, text: "hi", alt_text: ["a", "b"] });
+    expect(normalizeOptions("bluesky", { alt_text: [1] }).problems[0]).toMatch(/alt_text is a list/);
+    expect(normalizeOptions("bluesky", { media_type: "reel" }).problems).toEqual(["Choose a Bluesky post type: text, image or video."]);
+  });
+});
+
 it("refuses media that is not ready", () => {
   expect(check({ kind: "instagram", media_type: "image" }, [image({ status: "processing" })])).toEqual(["photo.jpg is still being checked; only ready media can be posted."]);
 });

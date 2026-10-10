@@ -51,6 +51,8 @@ export type StepContext = {
   // Saves progress; merged into the checkpoint. Throws if this worker lost the job.
   save: (patch: Checkpoint) => Promise<void>;
   token: () => Promise<string>;
+  // Everything saved for the account, renewed if needed (Bluesky needs its DPoP key and server).
+  session?: () => Promise<Record<string, unknown> & { accessToken: string }>;
   http: typeof fetch;
   // Counts one call against a platform limit; throws a retryable PublishError when full.
   reserve: (operation: string, limit: number, windowSeconds: number) => Promise<void>;
