@@ -15,6 +15,7 @@ import { publishInstagram, publishThreads } from "./meta";
 import { publishTikTok } from "./tiktok";
 import { tiktokPhotoLinks } from "./tiktok-photos";
 import { coverImage, videoFrame } from "./covers";
+import { failureMessage } from "./support";
 import { PublishError, type Adapter, type Bundle, type Checkpoint, type PublishMedia, type StepContext, type StepResult } from "./types";
 import { publishYouTube } from "./youtube";
 
@@ -187,7 +188,9 @@ export async function runNextPublishJob(deps: PublishDeps): Promise<boolean> {
       return true;
     }
 
-    await finish("failed", error.message.slice(0, 500));
+    // What the person sees: problems only we can solve point them to support.
+    const message = failureMessage(error).slice(0, 500);
+    await finish("failed", message);
     // A post that finally failed: counted so a spike can alert; crashes also get a stack trace.
     await deps.telemetry?.capture("publish_failed", { platform: bundle?.platform ?? null, workspace_id: job.workspace_id, code: error.code, attempt: job.attempt_count });
     // Crashes, and problems only we can fix (our X credits ran out), page us with the details.
@@ -198,7 +201,7 @@ export async function runNextPublishJob(deps: PublishDeps): Promise<boolean> {
        )
        INSERT INTO public.audit_events (workspace_id, entry_point, event_type, entity_type, entity_id, summary, after_values)
        SELECT workspace_id, 'worker', 'destination.failed', 'destination', $1, $4, jsonb_build_object('code', $2::text, 'message', $3::text) FROM d`,
-      [job.destination_id, error.code, error.message.slice(0, 500), `Could not publish${bundle ? ` to ${bundle.account.displayName}` : ""}`],
+      [job.destination_id, error.code, message, `Could not publish${bundle ? ` to ${bundle.account.displayName}` : ""}`],
     );
     await deps.sql(`SELECT public.finalize_post($1)`, [job.post_id]);
     return true;

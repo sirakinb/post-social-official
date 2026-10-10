@@ -2,6 +2,7 @@
 
 import { cookies } from "next/headers";
 import { getAccessTokenCookieName } from "@insforge/sdk/ssr";
+import { UNREACHABLE, requestError } from "../../../../../backend/lib/support";
 
 // The web app uses the same `media` function an AI client will, with the person's own
 // session, so it gets exactly the same checks, limits and audit trail.
@@ -20,9 +21,9 @@ export async function callMedia<T = Record<string, unknown>>(payload: { action: 
     body: JSON.stringify(payload),
     cache: "no-store",
   }).catch(() => null);
-  if (!response) return { ok: false, error: "The media service could not be reached. Try again." };
+  if (!response) return { ok: false, error: UNREACHABLE };
 
   const body = (await response.json().catch(() => null)) as (T & { error?: string }) | null;
-  if (!response.ok) return { ok: false, error: body?.error ?? "Something went wrong. Try again." };
+  if (!response.ok) return { ok: false, error: requestError(response.status, body?.error) };
   return { ok: true, data: body as T };
 }

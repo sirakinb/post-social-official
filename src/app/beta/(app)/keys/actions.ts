@@ -2,6 +2,7 @@
 
 import { cookies } from "next/headers";
 import { getAccessTokenCookieName } from "@insforge/sdk/ssr";
+import { OUR_SIDE, UNREACHABLE, requestError } from "../../../../../backend/lib/support";
 
 export type KeySummary = { id: string; name: string; prefix: string; mode: "live" | "test"; last_used_at: string | null; revoked_at: string | null; created_at: string };
 
@@ -9,7 +10,7 @@ export type KeySummary = { id: string; name: string; prefix: string; mode: "live
 // so the same checks (owners and admins only) and audit trail apply.
 async function callKeys<T>(body: Record<string, unknown>): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
   const base = process.env.API_BASE_URL;
-  if (!base) return { ok: false, error: "The API is not configured." };
+  if (!base) return { ok: false, error: OUR_SIDE };
   const token = (await cookies()).get(getAccessTokenCookieName())?.value;
   if (!token) return { ok: false, error: "Your session ended. Sign in again." };
   const response = await fetch(`${base}/keys`, {
@@ -18,9 +19,9 @@ async function callKeys<T>(body: Record<string, unknown>): Promise<{ ok: true; d
     body: JSON.stringify(body),
     cache: "no-store",
   }).catch(() => null);
-  if (!response) return { ok: false, error: "The API could not be reached. Try again." };
+  if (!response) return { ok: false, error: UNREACHABLE };
   const data = (await response.json().catch(() => null)) as (T & { error?: { message?: string } }) | null;
-  if (!response.ok) return { ok: false, error: data?.error?.message ?? "Something went wrong. Try again." };
+  if (!response.ok) return { ok: false, error: requestError(response.status, data?.error?.message) };
   return { ok: true, data: data as T };
 }
 

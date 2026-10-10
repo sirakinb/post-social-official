@@ -7,10 +7,10 @@
 // Every post is billed to Post Social's X developer account (about 1.5 cents, or 20 cents
 // when the text has a link).
 import { captionFor, linkedinMediaType, type LinkedInOptions, type XOptions } from "../../../backend/lib/publishing/validate";
+import { SUPPORT_EMAIL } from "../../../backend/lib/support";
 import { PublishError, type Adapter, type PublishMedia, type StepContext } from "./types";
 
 const API = "https://api.x.com/2";
-const SUPPORT_EMAIL = "aki.b@pentridgemedia.com";
 const PART_BYTES = 4 * 1024 * 1024;
 // X's per-user posting limit is generous; this guards against runaway loops.
 const POSTS_PER_DAY = 300;

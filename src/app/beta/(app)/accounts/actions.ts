@@ -2,13 +2,14 @@
 
 import { cookies, headers } from "next/headers";
 import { getAccessTokenCookieName } from "@insforge/sdk/ssr";
+import { OUR_SIDE, UNREACHABLE, requestError } from "../../../../../backend/lib/support";
 
 // The web app uses the same `connections` function an AI client will, with the person's
 // own session, so connecting and disconnecting get the same checks and audit trail.
 type Path = "/start" | "/disconnect" | "/profiles/create" | "/profiles/update" | "/profiles/delete" | "/accounts/move";
 async function callConnections<T>(path: Path, body: Record<string, unknown>): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
   const base = process.env.CONNECTIONS_BASE_URL;
-  if (!base) return { ok: false, error: "Connections are not configured." };
+  if (!base) return { ok: false, error: OUR_SIDE };
   const token = (await cookies()).get(getAccessTokenCookieName())?.value;
   if (!token) return { ok: false, error: "Your session ended. Sign in again." };
   const response = await fetch(`${base}${path}`, {
@@ -17,9 +18,9 @@ async function callConnections<T>(path: Path, body: Record<string, unknown>): Pr
     body: JSON.stringify(body),
     cache: "no-store",
   }).catch(() => null);
-  if (!response) return { ok: false, error: "The connection service could not be reached. Try again." };
+  if (!response) return { ok: false, error: UNREACHABLE };
   const data = (await response.json().catch(() => null)) as (T & { error?: string }) | null;
-  if (!response.ok) return { ok: false, error: data?.error ?? "Something went wrong. Try again." };
+  if (!response.ok) return { ok: false, error: requestError(response.status, data?.error) };
   return { ok: true, data: data as T };
 }
 
