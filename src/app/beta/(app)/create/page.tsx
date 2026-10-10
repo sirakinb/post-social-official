@@ -5,7 +5,7 @@ import { Composer, type EditingPost } from "./composer";
 
 export const metadata = { title: "Create · Post Social" };
 
-const PLATFORMS: Platform[] = ["instagram", "facebook", "threads", "youtube", "tiktok", "linkedin", "bluesky"];
+const PLATFORMS: Platform[] = ["instagram", "facebook", "threads", "youtube", "tiktok", "linkedin", "bluesky", "x"];
 const EDITABLE = ["draft", "awaiting_approval", "approved", "scheduled"];
 
 type MediaRow = { id: string; display_name: string | null; file_name: string; media_type: "image" | "video"; width: number | null; height: number | null; duration_seconds: number | null };
@@ -97,6 +97,7 @@ function choiceFromOptions(platform: Platform, o: Record<string, unknown>): Plat
     case "linkedin":
       return { caption: str("text"), title: str("title") };
     case "bluesky":
+    case "x":
       return { caption: str("text") };
     case "youtube":
       return { title: str("title"), caption: str("description"), privacy: (str("privacy_status") as PlatformChoice["privacy"]) ?? "public" };

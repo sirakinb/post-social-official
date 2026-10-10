@@ -170,6 +170,23 @@ describe("Bluesky", () => {
   });
 });
 
+describe("X", () => {
+  const x = { kind: "x" } as const;
+  it("follows the media and checks X's limits", () => {
+    expect(check(x, [])).toEqual([]);
+    expect(check(x, Array.from({ length: 4 }, () => image()))).toEqual([]);
+    expect(check(x, Array.from({ length: 5 }, () => image()))).toEqual(["X posts can have at most 4 images; this one has 5."]);
+    expect(check(x, [image({ mime_type: "image/gif" }), image()])).toEqual(["An X post with a GIF can have only that one GIF."]);
+    expect(check(x, [image({ size_bytes: 6 * 1024 * 1024 })])).toEqual(["X images can be at most 5 MB; photo.jpg is 6.0 MB."]);
+    expect(check(x, [media({ duration_seconds: 150 })])).toEqual(["X videos can be at most 2 min 20 s; clip.mp4 is 2 min 30 s."]);
+  });
+
+  it("counts links as 23 characters", () => {
+    expect(check(x, [], `${"a".repeat(256)} https://example.com/${"p".repeat(100)}`)).toEqual([]);
+    expect(check(x, [], "a".repeat(281))).toEqual(["X posts can be at most 280 characters (links count as 23, emoji as 2); this one counts as 281."]);
+  });
+});
+
 it("refuses media that is not ready", () => {
   expect(check({ kind: "instagram", media_type: "image" }, [image({ status: "processing" })])).toEqual(["photo.jpg is still being checked; only ready media can be posted."]);
 });

@@ -21,8 +21,9 @@ const PLATFORMS = [
   { id: "tiktok", name: "TikTok", note: "Your account" },
   { id: "linkedin", name: "LinkedIn", note: "Your profile" },
   { id: "bluesky", name: "Bluesky", note: "Your account" },
+  { id: "x", name: "X", note: "Your account" },
 ];
-const KIND: Record<string, string> = { instagram: "Instagram", facebook: "Facebook Page", threads: "Threads", youtube: "YouTube channel", tiktok: "TikTok", linkedin: "LinkedIn", bluesky: "Bluesky" };
+const KIND: Record<string, string> = { instagram: "Instagram", facebook: "Facebook Page", threads: "Threads", youtube: "YouTube channel", tiktok: "TikTok", linkedin: "LinkedIn", bluesky: "Bluesky", x: "X" };
 
 // "12 min ago" in the browser; plain dates on the server (it doesn't know the clock here).
 const ago = (iso: string | null, now: number) => {
@@ -174,7 +175,6 @@ export function ConnectionsView(props: {
                   {busy === p.id ? "Opening…" : p.name}
                 </button>
               ))}
-              <span className="ml-auto text-xs text-ps-subtle">X is coming soon</span>
             </div>
           )}
           {canEdit && askHandle && (

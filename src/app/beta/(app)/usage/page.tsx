@@ -25,7 +25,7 @@ const PERIODS = [
   { id: "last_month", label: "Last month" },
 ];
 
-const PLATFORM_NAMES: Record<string, string> = { instagram: "Instagram", facebook: "Facebook", threads: "Threads", youtube: "YouTube", tiktok: "TikTok", linkedin: "LinkedIn", bluesky: "Bluesky" };
+const PLATFORM_NAMES: Record<string, string> = { instagram: "Instagram", facebook: "Facebook", threads: "Threads", youtube: "YouTube", tiktok: "TikTok", linkedin: "LinkedIn", bluesky: "Bluesky", x: "X" };
 const count = (n: number) => n.toLocaleString("en-US");
 function bytes(n: number) {
   if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(1)} GB`;
