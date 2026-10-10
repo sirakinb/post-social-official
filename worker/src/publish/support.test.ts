@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { SUPPORT_EMAIL } from "../../../backend/lib/support";
 import { failureMessage, personCanFix } from "./support";
 import { PublishError } from "./types";
 
@@ -23,13 +22,13 @@ describe("failureMessage", () => {
     ]) {
       const message = failureMessage(error);
       expect(message.startsWith(error.message.replace(/\.$/, ""))).toBe(true);
-      expect(message).toContain(`Contact support at ${SUPPORT_EMAIL}`);
+      expect(message).toContain(`Contact support`);
     }
   });
 
   it("says a crash is on our side and adds support once", () => {
-    expect(failureMessage(new PublishError("unexpected", "fetch failed", true))).toMatch(/^Something went wrong on Post Social's side while publishing \(fetch failed\)\. Contact support/);
-    const credits = new PublishError("x_no_credits", `X posting is unavailable. Contact support at ${SUPPORT_EMAIL} and we'll get it posted.`);
+    expect(failureMessage(new PublishError("unexpected", "fetch failed", true))).toBe("Something went wrong on Post Social's side while publishing. Contact support and we'll get it posted.");
+    const credits = new PublishError("x_no_credits", `X posting is unavailable. Contact support and we'll get it posted.`);
     expect(failureMessage(credits)).toBe(credits.message);
   });
 });

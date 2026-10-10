@@ -1,7 +1,7 @@
 // Which publishing failures the person can fix themselves (reconnect, change the post, wait
 // for a platform limit, check the platform) and which need us. The ones that need us get a
 // line pointing to support when the post finally fails.
-import { SUPPORT_EMAIL, withSupport } from "../../../backend/lib/support";
+import { withSupport } from "../../../backend/lib/support";
 import type { PublishError } from "./types";
 
 const PERSON_CAN_FIX = new Set([
@@ -39,7 +39,7 @@ export function personCanFix(error: PublishError) {
 export function failureMessage(error: PublishError) {
   if (personCanFix(error)) return error.message;
   if (error.code === "unexpected") {
-    return `Something went wrong on Post Social's side while publishing (${error.message.slice(0, 200)}). Contact support at ${SUPPORT_EMAIL} and we'll get it posted.`;
+    return `Something went wrong on Post Social's side while publishing. Contact support and we'll get it posted.`;
   }
-  return withSupport(error.message, `This isn't something you can fix from your side. Contact support at ${SUPPORT_EMAIL} and we'll look into it.`);
+  return withSupport(error.message, `This isn't something you can fix from your side. Contact support and we'll look into it.`);
 }

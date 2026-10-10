@@ -3,7 +3,6 @@ import type { R2 } from "../../backend/lib/media/r2";
 import type { Sql } from "../../backend/lib/media/service";
 import type { ProbeOutcome } from "../../backend/lib/media/probe-result";
 import { MAX_MEDIA_BYTES, mediaTypeFor, normalizeMimeType, type MediaType } from "../../backend/lib/media/rules";
-import { SUPPORT_EMAIL } from "../../backend/lib/support";
 import { ImportError, type Download } from "./safe-fetch";
 
 export type WorkerDeps = {
@@ -18,7 +17,7 @@ type Job = { id: string; workspace_id: string; media_asset_id: string; kind: "pr
 type Asset = { id: string; storage_key: string; size_bytes: string | number; media_type: MediaType; mime_type: string; source_url: string | null; file_name: string };
 
 // Retries ran out on our side, not because of the file.
-const KEPT_FAILING = `Processing kept failing. Try uploading the file again, and if it fails again, contact support at ${SUPPORT_EMAIL}.`;
+const KEPT_FAILING = `Processing kept failing. Try uploading the file again, and if it fails again, contact support.`;
 const IMPORT_TIMEOUT_MS = 30 * 60 * 1000;
 const PART_BYTES = 16 * 1024 * 1024;
 

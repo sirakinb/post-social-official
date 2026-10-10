@@ -7,7 +7,6 @@
 // Every post is billed to Post Social's X developer account (about 1.5 cents, or 20 cents
 // when the text has a link).
 import { captionFor, linkedinMediaType, type LinkedInOptions, type XOptions } from "../../../backend/lib/publishing/validate";
-import { SUPPORT_EMAIL } from "../../../backend/lib/support";
 import { PublishError, type Adapter, type PublishMedia, type StepContext } from "./types";
 
 const API = "https://api.x.com/2";
@@ -22,7 +21,7 @@ async function failure(response: Response, what: string): Promise<never> {
   if (response.status === 402 || /credits|payment|spend/i.test(detail ?? "")) {
     // Our X account's balance, not the customer's: tell them it's on us and where to get help.
     // The publisher also alerts us (see runner.ts), so the balance gets topped up.
-    throw new PublishError("x_no_credits", `X posting is temporarily unavailable on Post Social's side, so this post didn't go out. Nothing is wrong with your account. Contact support at ${SUPPORT_EMAIL} and we'll get it posted.`, false);
+    throw new PublishError("x_no_credits", `X posting is temporarily unavailable on Post Social's side, so this post didn't go out. Nothing is wrong with your account. Contact support and we'll get it posted.`, false);
   }
   if (response.status === 429) throw new PublishError("x_rate_limited", "X's posting limit for this account is used up for now. Post Social will try again later.", true);
   if (response.status === 403) throw new PublishError("x_forbidden", `${what} was refused by X${detail ? `: ${detail}` : ""}.`, false);
