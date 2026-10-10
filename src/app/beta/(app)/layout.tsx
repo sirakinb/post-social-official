@@ -25,6 +25,7 @@ export default async function BetaAppLayout({ children }: { children: React.Reac
     <div data-ph-mask className="flex min-h-screen flex-col bg-ps-ground font-sans text-[13px] text-ps-text md:flex-row">
       <IdentifyViewer userId={viewer.id} role={workspace?.role ?? "member"} />
       <Sidebar
+        workspaceId={workspace?.id ?? null}
         workspaceName={workspace?.name ?? "Post Social"}
         viewer={{ name: viewer.name, avatarUrl: viewer.avatarUrl, role: workspace?.role ?? "member" }}
         plan={plan}

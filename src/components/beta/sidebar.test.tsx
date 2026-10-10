@@ -6,7 +6,7 @@ const path = vi.hoisted(() => ({ current: "/beta/api" }));
 vi.mock("next/navigation", () => ({ usePathname: () => path.current }));
 vi.mock("@/components/analytics/identify", () => ({ forgetViewer: () => {} }));
 
-const props = { workspaceName: "Pentridge", viewer: { name: "Aki", avatarUrl: null, role: "owner" }, plan: null, signOut: async () => {} };
+const props = { workspaceId: "ws-1", workspaceName: "Pentridge", viewer: { name: "Aki", avatarUrl: null, role: "owner" }, plan: null, signOut: async () => {} };
 
 describe("Sidebar", () => {
   it("lists every page in one flat list, with Accounts and API/MCP as separate tabs", () => {

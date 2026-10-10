@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { forgetViewer } from "@/components/analytics/identify";
 import { ActorMark } from "./marks";
+import { SymbolMark } from "./symbol-mark";
 
 type Item = { href: string; label: string; icon: React.ReactNode; match: (path: string) => boolean };
 
@@ -46,6 +47,7 @@ function NavLink({ item, path }: { item: Item; path: string }) {
 }
 
 export function Sidebar(props: {
+  workspaceId: string | null;
   workspaceName: string;
   viewer: { name: string; avatarUrl: string | null; role: string };
   plan: { name: string; used: number; limit: number; resets: string } | null;
@@ -56,7 +58,7 @@ export function Sidebar(props: {
   return (
     <nav aria-label="Main" className="flex w-full flex-col gap-5 border-b border-ps-line bg-ps-sidebar px-3 py-3.5 md:sticky md:top-0 md:h-screen md:w-60 md:flex-none md:border-b-0 md:border-r">
       <div className="flex items-center gap-2.5 px-2 py-1.5">
-        <span className="flex h-6 w-6 items-center justify-center rounded-[7px] bg-ps-plum text-xs font-semibold text-ps-ground">{props.workspaceName.slice(0, 1).toUpperCase()}</span>
+        <SymbolMark seed={props.workspaceId ?? props.workspaceName} size={24} />
         <span className="flex-1 truncate text-[13px] font-medium text-ps-text">{props.workspaceName}</span>
       </div>
 
