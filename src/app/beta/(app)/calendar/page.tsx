@@ -1,6 +1,6 @@
 import { loadViewer } from "@/lib/beta/workspace";
 import { getMediaLinks } from "../create/actions";
-import { CalendarView, type CalendarPost } from "./calendar-view";
+import { CalendarView, type CalendarMode, type CalendarPost } from "./calendar-view";
 
 export const metadata = { title: "Calendar · Post Social" };
 
@@ -21,7 +21,7 @@ type Row = {
 
 const SELECT = "id, status, caption, scheduled_at, created_at, entry_point, actors(kind, display_name), destinations(platform, status, live_url, options, connected_accounts(display_name)), post_media(position, media_assets(id, media_type, status))";
 
-export default async function CalendarPage({ searchParams }: { searchParams: Promise<{ from?: string }> }) {
+export default async function CalendarPage({ searchParams }: { searchParams: Promise<{ from?: string; view?: string }> }) {
   const params = await searchParams;
   const { workspace, client } = await loadViewer("/beta/calendar");
   if (!workspace) return <p className="p-8 text-ps-muted">You are not a member of any workspace yet.</p>;
@@ -29,12 +29,14 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   // A generous window around the dates shown; the view itself is drawn in the viewer's
   // time zone in the browser.
   const anchor = params.from && /^\d{4}-\d{2}-\d{2}$/.test(params.from) ? Date.parse(`${params.from}T12:00:00Z`) : now();
-  const from = new Date(anchor - 10 * DAY).toISOString();
-  const to = new Date(anchor + 45 * DAY).toISOString();
+  // Matches LOADED_BEFORE / LOADED_AFTER in the view, with a day of slack for time zones.
+  const from = new Date(anchor - 41 * DAY).toISOString();
+  const to = new Date(anchor + 71 * DAY).toISOString();
+  const view: CalendarMode = params.view === "week" || params.view === "list" ? params.view : "month";
 
   const [scheduled, immediate] = await Promise.all([
-    client.database.from("posts").select(SELECT).eq("workspace_id", workspace.id).gte("scheduled_at", from).lt("scheduled_at", to).neq("status", "draft").limit(400),
-    client.database.from("posts").select(SELECT).eq("workspace_id", workspace.id).is("scheduled_at", null).gte("created_at", from).lt("created_at", to).neq("status", "draft").limit(400),
+    client.database.from("posts").select(SELECT).eq("workspace_id", workspace.id).gte("scheduled_at", from).lt("scheduled_at", to).neq("status", "draft").limit(800),
+    client.database.from("posts").select(SELECT).eq("workspace_id", workspace.id).is("scheduled_at", null).gte("created_at", from).lt("created_at", to).neq("status", "draft").limit(800),
   ]);
   const rows = [...((scheduled.data ?? []) as unknown as Row[]), ...((immediate.data ?? []) as unknown as Row[])];
 
@@ -61,5 +63,6 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     })),
   }));
 
-  return <CalendarView posts={posts} anchor={new Date(anchor).toISOString()} canEdit={workspace.role !== "reviewer"} />;
+  // Keyed by the anchor so moving to new dates starts the view fresh.
+  return <CalendarView key={`${anchor}-${view}`} posts={posts} anchor={new Date(anchor).toISOString()} initialView={view} canEdit={workspace.role !== "reviewer"} />;
 }

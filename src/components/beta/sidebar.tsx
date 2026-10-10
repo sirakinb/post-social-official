@@ -12,16 +12,13 @@ const icon = (d: React.ReactNode) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d}</svg>
 );
 
-const MAIN: Item[] = [
-  { href: "/beta", label: "Home", match: (p) => p === "/beta", icon: icon(<><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h14V9.5" /></>) },
-  { href: "/beta/create", label: "Create", match: (p) => p.startsWith("/beta/create"), icon: icon(<><path d="M12 5v14" /><path d="M5 12h14" /></>) },
+// One flat list, in the order people use it. Media lives inside Create's picker; Stats
+// returns once the platforms approve analytics.
+const ITEMS: Item[] = [
+  { href: "/beta/accounts", label: "Accounts", match: (p) => p === "/beta" || p.startsWith("/beta/accounts"), icon: icon(<><path d="M9 7H7a5 5 0 0 0 0 10h2" /><path d="M15 7h2a5 5 0 0 1 0 10h-2" /><path d="M8 12h8" /></>) },
+  { href: "/beta/create", label: "Create", match: (p) => p.startsWith("/beta/create") || p.startsWith("/beta/media"), icon: icon(<><path d="M12 5v14" /><path d="M5 12h14" /></>) },
   { href: "/beta/calendar", label: "Calendar", match: (p) => p.startsWith("/beta/calendar"), icon: icon(<><rect x="3" y="4.5" width="18" height="16" rx="2" /><path d="M3 9.5h18M8 2.5v4M16 2.5v4" /></>) },
-  { href: "/beta/media", label: "Media", match: (p) => p.startsWith("/beta/media"), icon: icon(<><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="1.6" /><path d="m21 15-5-5L5 21" /></>) },
   { href: "/beta/activity", label: "Activity", match: (p) => p.startsWith("/beta/activity"), icon: icon(<path d="M3 12h4l3-8 4 16 3-8h4" />) },
-];
-const STATS: Item = { href: "/beta/stats", label: "Stats", match: (p) => p.startsWith("/beta/stats"), icon: icon(<path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />) };
-const CONNECT: Item[] = [
-  { href: "/beta/accounts", label: "Accounts", match: (p) => p.startsWith("/beta/accounts"), icon: icon(<><path d="M9 7H7a5 5 0 0 0 0 10h2" /><path d="M15 7h2a5 5 0 0 1 0 10h-2" /><path d="M8 12h8" /></>) },
   { href: "/beta/api", label: "API/MCP", match: (p) => p.startsWith("/beta/api") || p.startsWith("/beta/keys"), icon: icon(<><path d="m8 8-5 4 5 4" /><path d="m16 8 5 4-5 4" /><path d="m13.5 5-3 14" /></>) },
   { href: "/beta/usage", label: "Usage", match: (p) => p.startsWith("/beta/usage"), icon: icon(<><path d="M21 12a9 9 0 1 1-9-9" /><path d="M21 12h-9V3" /></>) },
 ];
@@ -52,12 +49,9 @@ export function Sidebar(props: {
   workspaceName: string;
   viewer: { name: string; avatarUrl: string | null; role: string };
   plan: { name: string; used: number; limit: number; resets: string } | null;
-  statsEnabled: boolean;
   signOut: () => Promise<void>;
 }) {
   const path = usePathname() ?? "/beta";
-  // One flat list, in the order people use it.
-  const items = [...MAIN, ...(props.statsEnabled ? [STATS] : []), ...CONNECT];
   const percent = props.plan && props.plan.limit > 0 ? Math.min(100, (props.plan.used / props.plan.limit) * 100) : 0;
   return (
     <nav aria-label="Main" className="flex w-full flex-col gap-5 border-b border-ps-line bg-ps-sidebar px-3 py-3.5 md:sticky md:top-0 md:h-screen md:w-60 md:flex-none md:border-b-0 md:border-r">
@@ -67,7 +61,7 @@ export function Sidebar(props: {
       </div>
 
       <div className="flex flex-col gap-0.5">
-        {items.map((item) => <NavLink key={item.href} item={item} path={path} />)}
+        {ITEMS.map((item) => <NavLink key={item.href} item={item} path={path} />)}
       </div>
 
       <div className="hidden flex-1 md:block" />

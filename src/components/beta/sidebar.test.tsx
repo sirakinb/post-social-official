@@ -6,7 +6,7 @@ const path = vi.hoisted(() => ({ current: "/beta/api" }));
 vi.mock("next/navigation", () => ({ usePathname: () => path.current }));
 vi.mock("@/components/analytics/identify", () => ({ forgetViewer: () => {} }));
 
-const props = { workspaceName: "Pentridge", viewer: { name: "Aki", avatarUrl: null, role: "owner" }, plan: null, statsEnabled: false, signOut: async () => {} };
+const props = { workspaceName: "Pentridge", viewer: { name: "Aki", avatarUrl: null, role: "owner" }, plan: null, signOut: async () => {} };
 
 describe("Sidebar", () => {
   it("lists every page in one flat list, with Accounts and API/MCP as separate tabs", () => {
@@ -17,6 +17,13 @@ describe("Sidebar", () => {
     expect(screen.getByRole("link", { name: "Accounts" })).toHaveAttribute("href", "/beta/accounts");
     expect(screen.getByRole("link", { name: "API/MCP" })).toHaveAttribute("href", "/beta/api");
     expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/beta/settings");
+  });
+
+  it("starts with Accounts then Create, with no Home, Media or Stats", () => {
+    render(<Sidebar {...props} />);
+    const labels = screen.getAllByRole("link").map((l) => l.textContent);
+    expect(labels.slice(0, 2)).toEqual(["Accounts", "Create"]);
+    for (const gone of ["Home", "Media", "Stats"]) expect(screen.queryByRole("link", { name: gone })).toBeNull();
   });
 
   it("opens the docs in a new tab", () => {

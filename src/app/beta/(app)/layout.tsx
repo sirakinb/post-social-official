@@ -2,7 +2,6 @@ import { IdentifyViewer } from "@/components/analytics/identify";
 import { Sidebar } from "@/components/beta/sidebar";
 import { loadViewer } from "@/lib/beta/workspace";
 import { signOut } from "../actions";
-import { analyticsEnabled } from "./stats-switch";
 
 // The signed-in app: the sidebar on every page, the page beside it.
 export default async function BetaAppLayout({ children }: { children: React.ReactNode }) {
@@ -29,7 +28,6 @@ export default async function BetaAppLayout({ children }: { children: React.Reac
         workspaceName={workspace?.name ?? "Post Social"}
         viewer={{ name: viewer.name, avatarUrl: viewer.avatarUrl, role: workspace?.role ?? "member" }}
         plan={plan}
-        statsEnabled={analyticsEnabled()}
         signOut={signOut}
       />
       <div className="min-w-0 flex-1">{children}</div>

@@ -479,7 +479,8 @@ function MediaPicker({ library, selected, onClose, onToggle, onFiles }: { librar
       <div className="flex max-h-[80vh] w-full max-w-3xl flex-col rounded-2xl border border-white/10 bg-[#161126] shadow-[0_24px_60px_rgba(0,0,0,0.55)]" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-3.5">
           <h2 className="m-0 text-sm font-medium">Add media</h2>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            <Link href="/beta/media" className="px-2 text-xs text-ps-subtle hover:text-ps-text">Manage library</Link>
             <input ref={input} type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime" multiple className="sr-only" onChange={(e) => onFiles(Array.from(e.target.files ?? []))} />
             <button type="button" onClick={() => input.current?.click()} className="h-8 rounded-lg bg-ps-plum px-3.5 font-medium text-ps-ground hover:bg-[#AD86FF]">Upload from computer</button>
             <button type="button" onClick={onClose} className="h-8 rounded-lg border border-white/[0.12] px-3">Done</button>
