@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { forgetViewer } from "@/components/analytics/identify";
 import { ActorMark } from "./marks";
-import { SymbolMark } from "./symbol-mark";
 
 type Item = { href: string; label: string; icon: React.ReactNode; match: (path: string) => boolean };
 
@@ -47,9 +46,7 @@ function NavLink({ item, path }: { item: Item; path: string }) {
 }
 
 export function Sidebar(props: {
-  workspaceId: string | null;
-  workspaceName: string;
-  viewer: { name: string; avatarUrl: string | null; role: string };
+  viewer: { name: string; email: string; avatarUrl: string | null };
   plan: { name: string; used: number; limit: number; resets: string } | null;
   signOut: () => Promise<void>;
 }) {
@@ -57,9 +54,13 @@ export function Sidebar(props: {
   const percent = props.plan && props.plan.limit > 0 ? Math.min(100, (props.plan.used / props.plan.limit) * 100) : 0;
   return (
     <nav aria-label="Main" className="flex w-full flex-col gap-5 border-b border-ps-line bg-ps-sidebar px-3 py-3.5 md:sticky md:top-0 md:h-screen md:w-60 md:flex-none md:border-b-0 md:border-r">
+      {/* Who is signed in: their photo (or a symbol), name and email. */}
       <div className="flex items-center gap-2.5 px-2 py-1.5">
-        <SymbolMark seed={props.workspaceId ?? props.workspaceName} size={24} />
-        <span className="flex-1 truncate text-[13px] font-medium text-ps-text">{props.workspaceName}</span>
+        <ActorMark kind="user" name={props.viewer.name} avatarUrl={props.viewer.avatarUrl} size={30} />
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate text-[13px] font-medium text-ps-text">{props.viewer.name}</span>
+          <span className="truncate text-[11px] text-ps-subtle">{props.viewer.email}</span>
+        </span>
       </div>
 
       <div className="flex flex-col gap-0.5">
@@ -91,16 +92,12 @@ export function Sidebar(props: {
         </Link>
       )}
 
-      <div className="flex items-center gap-2.5 rounded-lg p-2">
-        <ActorMark kind="user" name={props.viewer.name} avatarUrl={props.viewer.avatarUrl} size={26} />
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-[13px] text-ps-text">{props.viewer.name}</span>
-          <span className="text-[11px] capitalize text-ps-subtle">{props.viewer.role}</span>
-        </span>
-        <form action={props.signOut} onSubmit={forgetViewer}>
-          <button type="submit" className="rounded-md px-2 py-1 text-[11px] text-ps-subtle hover:bg-white/[0.04] hover:text-ps-text">Sign out</button>
-        </form>
-      </div>
+      <form action={props.signOut} onSubmit={forgetViewer}>
+        <button type="submit" className={cn(linkClass, "w-full text-ps-muted hover:bg-white/[0.03] hover:text-ps-text")}>
+          {icon(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /></>)}
+          <span>Sign out</span>
+        </button>
+      </form>
     </nav>
   );
 }

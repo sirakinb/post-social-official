@@ -6,7 +6,7 @@ const path = vi.hoisted(() => ({ current: "/beta/api" }));
 vi.mock("next/navigation", () => ({ usePathname: () => path.current }));
 vi.mock("@/components/analytics/identify", () => ({ forgetViewer: () => {} }));
 
-const props = { workspaceId: "ws-1", workspaceName: "Pentridge", viewer: { name: "Aki", avatarUrl: null, role: "owner" }, plan: null, signOut: async () => {} };
+const props = { viewer: { name: "Aki", email: "aki@example.com", avatarUrl: null }, plan: null, signOut: async () => {} };
 
 describe("Sidebar", () => {
   it("lists every page in one flat list, with Accounts and API/MCP as separate tabs", () => {
@@ -38,5 +38,14 @@ describe("Sidebar", () => {
     render(<Sidebar {...props} />);
     expect(screen.getByRole("link", { name: "API/MCP" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "Accounts" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("shows who is signed in at the top instead of the workspace, and only Sign out at the bottom", () => {
+    render(<Sidebar {...props} />);
+    const nav = screen.getByRole("navigation", { name: "Main" });
+    expect(within(nav).getByText("Aki")).toBeTruthy();
+    expect(within(nav).getByText("aki@example.com")).toBeTruthy();
+    expect(within(nav).queryByText("owner")).toBeNull();
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
   });
 });
