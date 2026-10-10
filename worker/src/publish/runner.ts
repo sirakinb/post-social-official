@@ -190,7 +190,8 @@ export async function runNextPublishJob(deps: PublishDeps): Promise<boolean> {
     await finish("failed", error.message.slice(0, 500));
     // A post that finally failed: counted so a spike can alert; crashes also get a stack trace.
     await deps.telemetry?.capture("publish_failed", { platform: bundle?.platform ?? null, workspace_id: job.workspace_id, code: error.code, attempt: job.attempt_count });
-    if (error.code === "unexpected") await deps.telemetry?.captureException(cause, { job: job.id, platform: bundle?.platform ?? null, area: "publish" });
+    // Crashes, and problems only we can fix (our X credits ran out), page us with the details.
+    if (error.code === "unexpected" || error.code === "x_no_credits") await deps.telemetry?.captureException(cause, { job: job.id, platform: bundle?.platform ?? null, area: "publish" });
     await deps.sql(
       `WITH d AS (
          UPDATE public.destinations SET status = 'failed', error_code = $2, error_message = $3 WHERE id = $1 AND status <> 'published' RETURNING workspace_id

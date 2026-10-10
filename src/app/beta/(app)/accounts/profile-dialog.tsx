@@ -81,7 +81,7 @@ export function ProfileDialog(props: {
           </label>
           <label className="flex flex-col gap-1.5">
             <span className="text-xs text-ps-muted">Description <span className="text-ps-subtle">(optional)</span></span>
-            <textarea maxLength={280} rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Weekly meetups for builders in Philadelphia" className={cn(field, "h-auto resize-none py-2")} />
+            <textarea maxLength={280} rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Meetups for builders in Philadelphia" className={cn(field, "h-auto resize-none py-2")} />
           </label>
           <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
             <legend className="mb-1.5 text-xs text-ps-muted">Colour</legend>

@@ -10,6 +10,7 @@ import { captionFor, linkedinMediaType, type LinkedInOptions, type XOptions } fr
 import { PublishError, type Adapter, type PublishMedia, type StepContext } from "./types";
 
 const API = "https://api.x.com/2";
+const SUPPORT_EMAIL = "aki.b@pentridgemedia.com";
 const PART_BYTES = 4 * 1024 * 1024;
 // X's per-user posting limit is generous; this guards against runaway loops.
 const POSTS_PER_DAY = 300;
@@ -19,7 +20,9 @@ async function failure(response: Response, what: string): Promise<never> {
   const detail = body.detail ?? body.errors?.[0]?.message ?? body.title;
   if (response.status === 401) throw new PublishError("access_expired", `${what} was refused because the X access expired. Reconnect X and try again.`, false, undefined, true);
   if (response.status === 402 || /credits|payment|spend/i.test(detail ?? "")) {
-    throw new PublishError("x_no_credits", `X refused the post because Post Social's X credits ran out${detail ? ` (X said: ${detail})` : ""}. Add credits in the X Developer Console, then retry.`, false);
+    // Our X account's balance, not the customer's: tell them it's on us and where to get help.
+    // The publisher also alerts us (see runner.ts), so the balance gets topped up.
+    throw new PublishError("x_no_credits", `X posting is temporarily unavailable on Post Social's side, so this post didn't go out. Nothing is wrong with your account. Contact support at ${SUPPORT_EMAIL} and we'll get it posted.`, false);
   }
   if (response.status === 429) throw new PublishError("x_rate_limited", "X's posting limit for this account is used up for now. Post Social will try again later.", true);
   if (response.status === 403) throw new PublishError("x_forbidden", `${what} was refused by X${detail ? `: ${detail}` : ""}.`, false);
