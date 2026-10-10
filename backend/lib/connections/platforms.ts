@@ -4,9 +4,10 @@
 // (pushed requests and DPoP-bound tokens) and lives in atproto.ts.
 import { BLUESKY_SCOPE, publicProfile, refreshSession, revokeSession, type BlueskySession } from "./atproto";
 import type { TokenSet } from "./crypto";
+import { X_SCOPES, refreshX, revokeX } from "./x";
 
-export type Platform = "instagram" | "facebook" | "threads" | "youtube" | "tiktok" | "linkedin" | "bluesky";
-export const PLATFORMS: Platform[] = ["instagram", "facebook", "threads", "youtube", "tiktok", "linkedin", "bluesky"];
+export type Platform = "instagram" | "facebook" | "threads" | "youtube" | "tiktok" | "linkedin" | "bluesky" | "x";
+export const PLATFORMS: Platform[] = ["instagram", "facebook", "threads", "youtube", "tiktok", "linkedin", "bluesky", "x"];
 
 export type Settings = (name: string) => string;
 
@@ -50,6 +51,7 @@ export const SCOPES: Record<Platform, string[]> = {
   // Sign In with LinkedIn (name and photo) + Share on LinkedIn (posting as the member).
   linkedin: ["openid", "profile", "w_member_social"],
   bluesky: BLUESKY_SCOPE.split(" "),
+  x: X_SCOPES,
 };
 
 // Read permissions for post stats (Phase 5D). They are requested only where analytics is
@@ -63,6 +65,7 @@ export const ANALYTICS_SCOPES: Record<Platform, string[]> = {
   youtube: ["https://www.googleapis.com/auth/youtube.readonly"],
   linkedin: [],
   bluesky: [],
+  x: [],
 };
 
 export function analyticsPlatforms(setting: Settings): Platform[] {
@@ -87,6 +90,7 @@ export const DISPLAY_NAMES: Record<Platform, string> = {
   tiktok: "TikTok",
   linkedin: "LinkedIn",
   bluesky: "Bluesky",
+  x: "X",
 };
 
 // What each platform accepts through its API (2026 documentation). Stored on each account
@@ -132,6 +136,14 @@ export const CAPABILITIES: Record<Platform, Capabilities> = {
     carousel_max_items: 4,
     image_types: ["image/jpeg", "image/png", "image/webp", "image/gif"],
     notes: "Up to 300 characters. Up to 4 images (larger ones are resized to Bluesky's 1 MB limit), or one MP4 video of up to 3 minutes and 100 MB. Links, mentions and hashtags become clickable.",
+  },
+  x: {
+    post_types: ["text", "image", "video"],
+    caption_max_chars: 280,
+    video_max_seconds: 140,
+    carousel_max_items: 4,
+    image_types: ["image/jpeg", "image/png", "image/webp", "image/gif"],
+    notes: "Up to 280 characters (links count as 23). Up to 4 images of up to 5 MB, or one MP4 video of up to 2 min 20 s. X charges per post: about 1.5 cents, or 20 cents if the post has a link.",
   },
 };
 
@@ -196,6 +208,9 @@ export function authorizeUrl(platform: Platform, state: string, redirectUri: str
     case "bluesky":
       // Bluesky's sign-in starts with a pushed request (atproto.ts startSignIn).
       throw new PlatformError("Bluesky sign-in is started with startSignIn.");
+    case "x":
+      // X needs a PKCE verifier kept with the state (x.ts startXSignIn).
+      throw new PlatformError("X sign-in is started with startXSignIn.");
   }
   url.searchParams.set("redirect_uri", redirectUri);
   url.searchParams.set("response_type", "code");
@@ -205,6 +220,7 @@ export function authorizeUrl(platform: Platform, state: string, redirectUri: str
 
 export async function exchangeCode(platform: Platform, code: string, redirectUri: string, setting: Settings, http: typeof fetch = fetch): Promise<Identity[]> {
   if (platform === "bluesky") throw new PlatformError("Bluesky sign-in is finished with finishSignIn.");
+  if (platform === "x") throw new PlatformError("X sign-in is finished with finishXSignIn.");
   const form = (fields: Record<string, string>) => ({
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -400,6 +416,8 @@ export async function exchangeCode(platform: Platform, code: string, redirectUri
 // platform shares no picture with our permissions (YouTube upload-only access).
 export async function currentAvatarUrl(platform: Platform, externalAccountId: string, accessToken: string, http: typeof fetch = fetch): Promise<string | null> {
   if (platform === "bluesky") return (await publicProfile(http, externalAccountId)).avatar;
+  // X picture links don't expire, and reading the profile costs money: the saved one is used.
+  if (platform === "x") return null;
   const text = (value: unknown) => (typeof value === "string" && value ? value : null);
   if (platform === "instagram" || platform === "threads") {
     const url = platform === "instagram" ? new URL(`https://graph.instagram.com/${META_VERSION}/me`) : new URL("https://graph.threads.net/v1.0/me");
@@ -436,6 +454,14 @@ export async function currentAvatarUrl(platform: Platform, externalAccountId: st
 export type Refreshed = { tokens: TokenSet; accessTokenExpiresAt?: Date; refreshTokenExpiresAt?: Date };
 
 export async function refreshTokens(platform: Platform, current: TokenSet, setting: Settings, http: typeof fetch = fetch): Promise<Refreshed | null> {
+  if (platform === "x") {
+    // As for Bluesky, the expiry is kept with the tokens and renewed when used.
+    try {
+      return { tokens: await refreshX(setting, http, current) };
+    } catch (error) {
+      throw new PlatformError(error instanceof Error ? error.message : "Renewing X access failed.", (error as { code?: string }).code ?? "platform_error");
+    }
+  }
   if (platform === "bluesky") {
     // The access expiry lives in the session, not in credentials.access_token_expires_at,
     // so the refresh sweep leaves Bluesky alone; accounts are renewed when used.
@@ -505,6 +531,7 @@ export async function refreshTokens(platform: Platform, current: TokenSet, setti
 export async function revokeTokens(platform: Platform, tokens: TokenSet, setting: Settings, http: typeof fetch = fetch): Promise<string> {
   try {
     if (platform === "bluesky") return await revokeSession(setting, http, tokens as unknown as BlueskySession);
+    if (platform === "x") return await revokeX(setting, http, tokens);
     let response: Response;
     if (platform === "youtube") {
       // Revoking the refresh token ends the whole Google grant, as the privacy policy says.

@@ -462,6 +462,11 @@ function PlatformOptions({ account, choice, media, caption, onChange, creator, c
           Posts to Bluesky as {media.some((m) => m.type === "video") ? "a video" : media.length ? `${media.length === 1 ? "an image" : `${media.length} images`}` : "a text post"}. Links, @mentions and #hashtags become clickable.
         </p>
       )}
+      {account.platform === "x" && (
+        <p className="m-0 text-xs text-ps-muted">
+          Posts to X as {media.some((m) => m.type === "video") ? "a video" : media.length ? `${media.length === 1 ? "an image" : `${media.length} images`}` : "a text post"}. Links count as 23 characters.
+        </p>
+      )}
       {account.platform === "tiktok" && <TikTokOptions value={choice.tiktok ?? NEW_TIKTOK} onChange={(t) => onChange({ tiktok: t })} info={creator} infoError={creatorError} accountName={account.name} photo={isTikTokPhotoPost(media)} />}
     </div>
   );

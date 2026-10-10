@@ -146,6 +146,24 @@ DPoP-bound tokens, `private_key_jwt`), so nobody types a password into Post Soci
 - **Accounts.** Connecting asks for the handle, which finds the account's own server;
   left empty, sign-in starts at bsky.social.
 
+## X sign-in
+
+- **App** (console.x.com, the project's app → User authentication settings): app
+  permissions **Read and write**, type **Web App, Automated App or Bot** (a confidential
+  client), callback URLs `{CONNECTIONS_BASE_URL}/oauth/x/callback` for dev and prod
+  (`https://syydd6ck-zqc.function2.insforge.app/connections/oauth/x/callback` and
+  `https://syydd6ck.function2.insforge.app/connections/oauth/x/callback`), website
+  `https://www.postsocial.xyz`.
+- **Secrets.** The OAuth 2.0 `X_CLIENT_ID` and `X_CLIENT_SECRET` (not the API key and
+  secret), on the `connections` function and the worker, in each environment.
+- **Permissions.** `tweet.read tweet.write users.read media.write offline.access`. Access
+  lasts two hours and is renewed when used; each refresh token works once (lease, as for
+  Bluesky).
+- **Cost.** X bills the app's prepaid credits per request: about $0.015 per post and $0.20
+  for a post with a link, $0.01 for the profile read at each connection, $0.005 per image
+  description. No stats are read (reads are billed too). Set a spending cap in the
+  console. When credits run out, posts fail with a plain "X credits ran out" message.
+
 ## Media storage, functions and the worker
 
 | | Dev | Prod |

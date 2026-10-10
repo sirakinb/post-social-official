@@ -1,6 +1,7 @@
 // What each platform accepts, checked before a post is submitted and again right before
 // it is sent. Problems are plain sentences an AI or a person can act on. Pure functions.
 import type { Platform } from "../connections/platforms";
+import { xWeightedLength } from "../connections/x";
 
 export type InstagramOptions = { kind: "instagram"; media_type: "image" | "reel" | "carousel"; caption?: string };
 export type FacebookOptions = { kind: "facebook"; media_type: "text" | "link" | "image" | "reel" | "video"; message?: string; link?: string; title?: string };
@@ -28,10 +29,12 @@ export type LinkedInOptions = { kind: "linkedin"; media_type?: "text" | "image" 
 // Bluesky posts. media_type left out follows the media, as for LinkedIn. alt_text is one
 // description per image, in order.
 export type BlueskyOptions = { kind: "bluesky"; media_type?: "text" | "image" | "video"; text?: string; alt_text?: string[] };
+// X posts. media_type left out follows the media. alt_text is one description per image.
+export type XOptions = { kind: "x"; media_type?: "text" | "image" | "video"; text?: string; alt_text?: string[] };
 // A video's cover, on any platform's options: an image from the library, or a frame of the
 // video (milliseconds from the start). Which platforms can use which: coverSupport().
 export type CoverOptions = { cover_media_id?: string; cover_time_ms?: number };
-export type DestinationOptions = (InstagramOptions | FacebookOptions | ThreadsOptions | YouTubeOptions | TikTokOptions | LinkedInOptions | BlueskyOptions) & CoverOptions;
+export type DestinationOptions = (InstagramOptions | FacebookOptions | ThreadsOptions | YouTubeOptions | TikTokOptions | LinkedInOptions | BlueskyOptions | XOptions) & CoverOptions;
 
 export type MediaFacts = {
   id: string;
@@ -55,6 +58,7 @@ export const POST_TYPES: Record<Platform, string[]> = {
   tiktok: ["direct", "inbox"],
   linkedin: ["text", "image", "video"],
   bluesky: ["text", "image", "video"],
+  x: ["text", "image", "video"],
 };
 
 const TIKTOK_PRIVACY = ["PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR", "SELF_ONLY"];
@@ -110,6 +114,8 @@ export function coverSupport(options: DestinationOptions, media: Array<Pick<Medi
       return linkedinMediaType(options, media) === "video" ? { image: true, frame: true } : { image: false, frame: false, why: "Covers apply to videos only." };
     case "bluesky":
       return { image: false, frame: false, why: "Bluesky makes its own video thumbnail." };
+    case "x":
+      return { image: false, frame: false, why: "Post Social can't set an X video cover yet; X uses its own thumbnail." };
   }
 }
 
@@ -187,10 +193,18 @@ function normalizeKind(platform: Platform, raw: unknown): { options?: Destinatio
         problems: [],
       };
     }
+    case "x": {
+      if (str("media_type") !== undefined && !pick("media_type", ["text", "image", "video"] as const)) return { problems: ["Choose an X post type: text, image or video."] };
+      const alt = Array.isArray(input.alt_text) ? input.alt_text : undefined;
+      if (alt && (alt.length > X_MAX_IMAGES || alt.some((a) => typeof a !== "string"))) return { problems: [`X alt_text is a list of up to ${X_MAX_IMAGES} descriptions, one per image.`] };
+      return { options: { kind: "x", media_type: pick("media_type", ["text", "image", "video"] as const), text: str("text"), alt_text: alt as string[] | undefined }, problems: [] };
+    }
   }
 }
 
 export const BLUESKY_MAX_IMAGES = 4;
+export const X_MAX_IMAGES = 4;
+export const X_MAX_WEIGHT = 280;
 export const BLUESKY_MAX_CHARS = 300;
 
 // Bluesky counts characters as people see them (grapheme clusters), so an emoji is one.
@@ -247,6 +261,7 @@ export function captionFor(options: DestinationOptions, postCaption: string) {
   if (options.kind === "youtube") return options.description ?? postCaption;
   if (options.kind === "linkedin") return options.text ?? postCaption;
   if (options.kind === "bluesky") return options.text ?? postCaption;
+  if (options.kind === "x") return options.text ?? postCaption;
   return postCaption;
 }
 
@@ -443,6 +458,34 @@ export function destinationProblems(args: {
         videos.forEach((v) => {
           videoLength(v, null, 180, "Bluesky videos");
           if (v.size_bytes > 100 * 1024 * 1024) problems.push(`Bluesky videos can be at most 100 MB; ${v.name} is ${Math.round(v.size_bytes / 1024 / 1024)} MB.`);
+        });
+      }
+      break;
+    }
+    case "x": {
+      const weight = xWeightedLength(caption);
+      if (weight > X_MAX_WEIGHT) problems.push(`X posts can be at most ${X_MAX_WEIGHT} characters (links count as 23, emoji as 2); this one counts as ${weight}.`);
+      const type = linkedinMediaType(options as unknown as LinkedInOptions, media);
+      if (type === "text") {
+        if (!caption) problems.push("Write the text for this X post.");
+        if (media.length) problems.push("An X text post cannot include media; choose image or video instead.");
+      } else if (type === "image") {
+        if (videos.length) problems.push("X image posts can only contain images; post the video separately.");
+        if (images.length === 0) problems.push("An X image post needs at least 1 image.");
+        if (images.length > X_MAX_IMAGES) problems.push(`X posts can have at most ${X_MAX_IMAGES} images; this one has ${images.length}.`);
+        types(images, ["image/jpeg", "image/png", "image/webp", "image/gif"], "X images");
+        if (images.some((i) => i.mime_type === "image/gif") && images.length > 1) problems.push("An X post with a GIF can have only that one GIF.");
+        for (const i of images) {
+          const max = i.mime_type === "image/gif" ? 15 : 5;
+          if (i.size_bytes > max * 1024 * 1024) problems.push(`X ${i.mime_type === "image/gif" ? "GIFs" : "images"} can be at most ${max} MB; ${i.name} is ${(i.size_bytes / 1024 / 1024).toFixed(1)} MB.`);
+        }
+        for (const [i, alt] of (options.alt_text ?? []).entries()) if (alt.length > 1000) problems.push(`X image descriptions can be at most 1,000 characters; number ${i + 1} is longer.`);
+      } else {
+        exactly(1, "video", "An X video post");
+        types(videos, ["video/mp4", "video/quicktime"], "X videos");
+        videos.forEach((v) => {
+          videoLength(v, null, capabilities?.video_max_seconds ?? 140, "X videos");
+          if (v.size_bytes > 512 * 1024 * 1024) problems.push(`X videos can be at most 512 MB; ${v.name} is ${Math.round(v.size_bytes / 1024 / 1024)} MB.`);
         });
       }
       break;

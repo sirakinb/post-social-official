@@ -3,6 +3,7 @@
 import { ApiError, isAgentCaller, membership, requireUuid, type Caller, type Sql } from "../access";
 import { importKey, open, randomToken, seal, sha256Hex } from "./crypto";
 import { AtprotoError, finishSignIn, publicProfile, startSignIn, type PendingSignIn } from "./atproto";
+import { XError, finishXSignIn, startXSignIn, type PendingX } from "./x";
 import { CAPABILITIES, DISPLAY_NAMES, PLATFORMS, PlatformError, authorizeUrl, exchangeCode, revokeTokens, type Identity, type Platform, type Settings } from "./platforms";
 
 export type ConnectionDeps = {
@@ -77,6 +78,10 @@ export async function startConnection(deps: ConnectionDeps, caller: Caller, inpu
     url = started.url;
     const sealed = await seal(started.pending, await importKey(deps.setting("CREDENTIAL_ENCRYPTION_KEY")));
     pending = JSON.stringify(sealed);
+  } else if (input.platform === "x") {
+    const started = await startXSignIn(deps.setting, state, redirectUri);
+    url = started.url;
+    pending = JSON.stringify(await seal(started.pending, await importKey(deps.setting("CREDENTIAL_ENCRYPTION_KEY"))));
   } else {
     url = authorizeUrl(input.platform, state, redirectUri, deps.setting);
   }
@@ -86,6 +91,23 @@ export async function startConnection(deps: ConnectionDeps, caller: Caller, inpu
     [workspaceId, caller.userId, input.platform, await sha256Hex(state), STATE_MINUTES, returnTo || null, pending],
   );
   return { url, expires_in_seconds: STATE_MINUTES * 60 };
+}
+
+async function xIdentity(deps: ConnectionDeps, pendingSealed: string | null, code: string, redirectUri: string): Promise<Identity[]> {
+  if (!pendingSealed) throw new PlatformError("This X sign-in is missing its details. Start again.");
+  const pending = await open<PendingX>(JSON.parse(pendingSealed), await importKey(deps.setting("CREDENTIAL_ENCRYPTION_KEY")));
+  const signedIn = await finishXSignIn(deps.setting, deps.http ?? fetch, pending, code, redirectUri);
+  return [{
+    externalAccountId: signedIn.id,
+    ownerExternalId: signedIn.id,
+    handle: signedIn.username,
+    displayName: signedIn.name,
+    avatarUrl: signedIn.avatar ?? undefined,
+    scopes: signedIn.scope.split(" ").filter(Boolean),
+    tokens: signedIn.tokens,
+    // The access expiry stays with the tokens (see refreshTokens).
+    capabilities: CAPABILITIES.x,
+  }];
 }
 
 async function blueskyIdentity(deps: ConnectionDeps, pendingSealed: string | null, params: URLSearchParams, redirectUri: string): Promise<Identity[]> {
@@ -170,9 +192,11 @@ export async function completeConnection(deps: ConnectionDeps, platform: Platfor
   try {
     identities = platform === "bluesky"
       ? await blueskyIdentity(deps, session.code_verifier_encrypted, params, callbackUrl(platform, deps.setting))
-      : await exchangeCode(platform, code, callbackUrl(platform, deps.setting), deps.setting, deps.http);
+      : platform === "x"
+        ? await xIdentity(deps, session.code_verifier_encrypted, code, callbackUrl(platform, deps.setting))
+        : await exchangeCode(platform, code, callbackUrl(platform, deps.setting), deps.setting, deps.http);
   } catch (error) {
-    return fail(error instanceof PlatformError || error instanceof AtprotoError ? error.message : `${name} sign-in failed. Try again.`);
+    return fail(error instanceof PlatformError || error instanceof AtprotoError || error instanceof XError ? error.message : `${name} sign-in failed. Try again.`);
   }
 
   const externalIdOf = (identity: (typeof identities)[number]) => identity.externalAccountId || `workspace:${session.workspace_id}`;

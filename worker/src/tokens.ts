@@ -12,6 +12,7 @@ const REFRESH_WINDOW_MS: Record<Platform, number> = {
   facebook: 0, // Page tokens do not expire.
   linkedin: 7 * 24 * 60 * 60 * 1000,
   bluesky: 0, // Renewed when used (its expiry isn't in the column the sweep reads).
+  x: 0, // Same.
 };
 
 type Claimed = {

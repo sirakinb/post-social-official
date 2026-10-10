@@ -152,4 +152,9 @@ async function bluesky(): Promise<MetricsResult> {
   return { extra: {}, unavailable: ["views", "likes", "comments", "shares"] };
 }
 
-export const FETCHERS: Record<Platform, (ctx: FetchContext) => Promise<MetricsResult>> = { instagram, facebook, threads, youtube, tiktok, linkedin, bluesky };
+// X charges for every read, so post stats aren't fetched.
+async function x(): Promise<MetricsResult> {
+  return { extra: {}, unavailable: ["views", "likes", "comments", "shares"] };
+}
+
+export const FETCHERS: Record<Platform, (ctx: FetchContext) => Promise<MetricsResult>> = { instagram, facebook, threads, youtube, tiktok, linkedin, bluesky, x };

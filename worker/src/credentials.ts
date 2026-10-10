@@ -32,9 +32,9 @@ export async function accountSession(deps: CredentialDeps, account: AccountRef, 
   let { credential, tokens, expires } = await load();
   if (expires - now() > 5 * 60_000) return tokens;
 
-  // Bluesky refresh tokens work once, so only one worker may renew at a time: take the
+  // Bluesky and X refresh tokens work once, so only one worker may renew at a time: take the
   // credential's lease, and if someone else holds it, wait for their new tokens.
-  const rotating = account.platform === "bluesky";
+  const rotating = account.platform === "bluesky" || account.platform === "x";
   if (rotating) {
     let leased = false;
     for (let attempt = 0; attempt < 10 && !leased; attempt++) {

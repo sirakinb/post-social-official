@@ -9,6 +9,7 @@ import type { R2 } from "../../../backend/lib/media/r2";
 import { destinationProblems, type DestinationOptions } from "../../../backend/lib/publishing/validate";
 import { publishFacebook } from "./facebook";
 import { publishBluesky } from "./bluesky";
+import { publishX } from "./x";
 import { publishLinkedIn } from "./linkedin";
 import { publishInstagram, publishThreads } from "./meta";
 import { publishTikTok } from "./tiktok";
@@ -25,6 +26,7 @@ export const ADAPTERS: Record<Platform, Adapter> = {
   tiktok: publishTikTok,
   linkedin: publishLinkedIn,
   bluesky: publishBluesky,
+  x: publishX,
 };
 
 export type PublishDeps = {
