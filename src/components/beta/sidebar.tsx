@@ -18,7 +18,7 @@ const ITEMS: Item[] = [
   { href: "/beta/accounts", label: "Accounts", match: (p) => p === "/beta" || p.startsWith("/beta/accounts"), icon: icon(<><path d="M9 7H7a5 5 0 0 0 0 10h2" /><path d="M15 7h2a5 5 0 0 1 0 10h-2" /><path d="M8 12h8" /></>) },
   { href: "/beta/create", label: "Create", match: (p) => p.startsWith("/beta/create") || p.startsWith("/beta/media"), icon: icon(<><path d="M12 5v14" /><path d="M5 12h14" /></>) },
   { href: "/beta/calendar", label: "Calendar", match: (p) => p.startsWith("/beta/calendar"), icon: icon(<><rect x="3" y="4.5" width="18" height="16" rx="2" /><path d="M3 9.5h18M8 2.5v4M16 2.5v4" /></>) },
-  { href: "/beta/activity", label: "Activity", match: (p) => p.startsWith("/beta/activity"), icon: icon(<path d="M3 12h4l3-8 4 16 3-8h4" />) },
+  { href: "/beta/activity", label: "Logs", match: (p) => p.startsWith("/beta/activity"), icon: icon(<path d="M3 12h4l3-8 4 16 3-8h4" />) },
   { href: "/beta/api", label: "API/MCP", match: (p) => p.startsWith("/beta/api") || p.startsWith("/beta/keys"), icon: icon(<><path d="m8 8-5 4 5 4" /><path d="m16 8 5 4-5 4" /><path d="m13.5 5-3 14" /></>) },
   { href: "/beta/usage", label: "Usage", match: (p) => p.startsWith("/beta/usage"), icon: icon(<><path d="M21 12a9 9 0 1 1-9-9" /><path d="M21 12h-9V3" /></>) },
 ];

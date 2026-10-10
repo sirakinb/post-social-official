@@ -170,7 +170,7 @@ export function ApiView(props: { workspaceId: string; role: string; apps: AiApp[
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
                 </button>
               </div>
-              <span className="text-xs text-ps-subtle">Everything your AI does shows in Activity with its name. <a href="/docs" className="text-ps-plum-soft hover:text-ps-text">Full setup guide</a></span>
+              <span className="text-xs text-ps-subtle">Everything your AI does shows in Logs with its name. <a href="/docs" className="text-ps-plum-soft hover:text-ps-text">Full setup guide</a></span>
             </div>
           </div>
         </section>

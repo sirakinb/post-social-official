@@ -1,13 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { appMark } from "@/components/beta/marks";
-import { lowerFirst, statusFor } from "./home";
+import { statusFor } from "./logs";
 
-describe("activity sentences", () => {
-  it("reads naturally after the actor's name", () => {
-    expect(lowerFirst("Created a draft for Pentridge Media")).toBe("created a draft for Pentridge Media");
-    expect(lowerFirst("API key created")).toBe("API key created");
-  });
-
+describe("log statuses", () => {
   it("shows a status only where it helps", () => {
     expect(statusFor("destination.published", "Published to Aki")).toEqual({ label: "Live", tone: "live" });
     expect(statusFor("destination.published", "Sent to Aki's TikTok drafts")).toEqual({ label: "In drafts", tone: "attention" });
