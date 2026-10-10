@@ -192,7 +192,6 @@ export function ConnectionsView(props: {
           <h1 className="m-0 text-lg font-medium">Accounts</h1>
           <p className="mt-1 text-ps-muted">The social accounts Post Social posts to, grouped by profile.</p>
         </div>
-        {canEdit && props.profilesReady && <button type="button" onClick={() => setEditing("new")} className={btn}>New profile</button>}
       </div>
 
       {message && <p role={message.kind === "error" ? "alert" : "status"} className={cn("m-0 rounded-[10px] border px-3.5 py-2.5", message.kind === "error" ? "border-ps-failed/30 bg-ps-failed/[0.08] text-[#FF8A8E]" : "border-ps-line bg-ps-surface text-ps-muted")}>{message.text}</p>}
@@ -204,12 +203,22 @@ export function ConnectionsView(props: {
         </div>
       ))}
 
-      {props.profiles.length > 0 && (
-        <div role="tablist" aria-label="Profiles" className="-mb-2 flex gap-2 overflow-x-auto pb-1">
-          {pill("all", "All accounts", active.length)}
-          {props.profiles.map((p) => pill(p.id, p.name, countIn(p.id), p.color))}
-          {pill("none", "No profile", active.filter((a) => !a.profileId || !profileById.has(a.profileId)).length)}
+      {/* The profile filter is always shown, so grouping is easy to find before any profile exists. */}
+      {props.profilesReady ? (
+        <div className="-mb-2 flex items-center gap-2 overflow-x-auto pb-1">
+          <div role="tablist" aria-label="Profiles" className="flex gap-2">
+            {pill("all", "All accounts", active.length)}
+            {props.profiles.map((p) => pill(p.id, p.name, countIn(p.id), p.color))}
+            {props.profiles.length > 0 && pill("none", "No profile", active.filter((a) => !a.profileId || !profileById.has(a.profileId)).length)}
+          </div>
+          {canEdit && (
+            <button type="button" onClick={() => setEditing("new")} className="inline-flex h-[30px] flex-none items-center rounded-lg border border-dashed border-white/[0.16] px-3 text-xs text-ps-muted hover:border-ps-plum/60 hover:text-ps-text">
+              + New profile
+            </button>
+          )}
         </div>
+      ) : (
+        <p role="status" className="m-0 rounded-[10px] border border-ps-line bg-ps-surface px-3.5 py-2.5 text-ps-muted">Profiles aren&apos;t switched on in this environment yet, so accounts can&apos;t be grouped here.</p>
       )}
 
       {props.loadError && <p role="alert" className="m-0 rounded-xl border border-ps-line bg-ps-surface px-4 py-3 text-[#FF8A8E]">Your accounts could not be loaded. Refresh the page to try again.</p>}
@@ -238,9 +247,6 @@ export function ConnectionsView(props: {
         </section>
       ))}
 
-      {props.profilesReady && props.profiles.length === 0 && canEdit && active.length > 0 && (
-        <p className="m-0 -mt-3 text-xs text-ps-subtle">Managing more than one brand or client? <button type="button" onClick={() => setEditing("new")} className="text-ps-plum-soft hover:text-ps-text">Create a profile</button> for each and group their accounts.</p>
-      )}
 
       {canEdit && (
         <section aria-labelledby="connect-h" className="rounded-xl border border-ps-line bg-ps-surface">

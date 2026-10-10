@@ -48,7 +48,14 @@ describe("Accounts grouped by profile", () => {
 
   it("hides profile controls before profiles exist in this environment", () => {
     render(<ConnectionsView {...base} profiles={[]} profilesReady={false} filter={null} />);
-    expect(screen.queryByRole("button", { name: "New profile" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "+ New profile" })).toBeNull();
     expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.getByRole("status").textContent).toMatch(/aren.t switched on/);
+  });
+
+  it("offers a profile filter and New profile before any profile exists", () => {
+    render(<ConnectionsView {...base} profiles={[]} filter={null} />);
+    expect(screen.getByRole("tab", { name: /All accounts 3/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "+ New profile" })).toBeTruthy();
   });
 });

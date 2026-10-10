@@ -17,6 +17,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
   ]);
   // Before the profiles migration reaches an environment, read accounts without them.
   const profilesReady = !profilesResult.error;
+  if (profilesResult.error) console.error("profiles could not be read", profilesResult.error);
   const { data: accountRows, error: accountError } = profilesReady && !accountsResult.error ? accountsResult : await accountsQuery(COLUMNS);
   const profiles = ((profilesResult.data ?? []) as Profile[]).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 
