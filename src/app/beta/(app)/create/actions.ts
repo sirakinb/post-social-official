@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { getAccessTokenCookieName } from "@insforge/sdk/ssr";
 import { callServer } from "@/lib/beta/workspace";
 import type { CreatorInfo } from "../../../../../backend/lib/connections/tiktok-creator";
+import { UNREACHABLE, requestError } from "../../../../../backend/lib/support";
 
 export type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -21,9 +22,9 @@ export async function callPosts<T = Record<string, unknown>>(action: string, inp
     body: JSON.stringify({ action, ...input }),
     cache: "no-store",
   }).catch(() => null);
-  if (!response) return { ok: false, error: "Post Social could not be reached. Try again." };
+  if (!response) return { ok: false, error: UNREACHABLE };
   const body = (await response.json().catch(() => null)) as (T & { error?: string }) | null;
-  if (!response.ok) return { ok: false, error: body?.error ?? "Something went wrong. Try again." };
+  if (!response.ok) return { ok: false, error: requestError(response.status, body?.error) };
   return { ok: true, data: body as T };
 }
 

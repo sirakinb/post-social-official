@@ -5,7 +5,8 @@ import { coverSupport, type DestinationOptions } from "../../../backend/lib/publ
 // TikTok requirements from its content sharing guidelines.
 
 export type Platform = "instagram" | "facebook" | "threads" | "youtube" | "tiktok" | "linkedin" | "bluesky" | "x";
-export type ComposerAccount = { id: string; platform: Platform; name: string; handle: string; avatarUrl: string | null; captionMax: number | null; videoMaxSeconds: number | null };
+export type ComposerAccount = { id: string; platform: Platform; name: string; handle: string; avatarUrl: string | null; captionMax: number | null; videoMaxSeconds: number | null; profileId?: string | null };
+export type ComposerProfile = { id: string; name: string; color: string };
 export type ComposerMedia = { id: string; name: string; type: "image" | "video"; width: number | null; height: number | null; duration: number | null; url: string | null; poster?: string | null };
 
 // Per-account settings as the person chose them. `caption` overrides the shared caption.

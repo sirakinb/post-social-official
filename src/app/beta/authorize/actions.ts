@@ -2,6 +2,7 @@
 
 import { cookies } from "next/headers";
 import { getAccessTokenCookieName } from "@insforge/sdk/ssr";
+import { OUR_SIDE, UNREACHABLE, requestError } from "../../../../backend/lib/support";
 
 export type AuthorizeParams = Record<string, string | undefined>;
 export type ConsentCheck =
@@ -13,7 +14,7 @@ export type ConsentCheck =
 // request and to record the decision, so the rules live in one place.
 async function callConsent<T>(body: Record<string, unknown>): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
   const base = process.env.API_BASE_URL;
-  if (!base) return { ok: false, error: "Sign-in for apps is not configured." };
+  if (!base) return { ok: false, error: OUR_SIDE };
   const token = (await cookies()).get(getAccessTokenCookieName())?.value;
   if (!token) return { ok: false, error: "Your session ended. Sign in again." };
   const response = await fetch(`${base}/oauth/consent`, {
@@ -22,9 +23,9 @@ async function callConsent<T>(body: Record<string, unknown>): Promise<{ ok: true
     body: JSON.stringify(body),
     cache: "no-store",
   }).catch(() => null);
-  if (!response) return { ok: false, error: "Post Social could not be reached. Try again." };
+  if (!response) return { ok: false, error: UNREACHABLE };
   const data = (await response.json().catch(() => null)) as (T & { error?: { message?: string } }) | null;
-  if (!response.ok) return { ok: false, error: data?.error?.message ?? "Something went wrong. Try again." };
+  if (!response.ok) return { ok: false, error: requestError(response.status, data?.error?.message) };
   return { ok: true, data: data as T };
 }
 

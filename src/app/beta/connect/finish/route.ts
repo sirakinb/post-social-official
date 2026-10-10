@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 import { getAccessTokenCookieName } from "@insforge/sdk/ssr";
+import { OUR_SIDE, UNREACHABLE, requestError } from "../../../../../backend/lib/support";
 
 // The end of connecting a social account. The platform sends the browser here (through
 // the connections function's callback, or straight here for YouTube). The proxy makes sure
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest) {
 
   const base = process.env.CONNECTIONS_BASE_URL;
   const token = (await cookies()).get(getAccessTokenCookieName())?.value;
-  if (!base) return fail("Connections are not configured.");
+  if (!base) return fail(OUR_SIDE);
   if (!token) return fail("Your session ended. Sign in and connect again.");
 
   const query = request.nextUrl.searchParams;
@@ -31,7 +32,8 @@ export async function GET(request: NextRequest) {
     cache: "no-store",
   }).catch(() => null);
   const result = (await response?.json().catch(() => null)) as { ok?: boolean; returnTo?: string | null; message?: string; platform?: string; error?: string } | null;
-  if (!response?.ok || !result) return fail(result?.error ?? "The connection could not be finished. Try again.");
+  if (!response) return fail(UNREACHABLE);
+  if (!response.ok || !result) return fail(requestError(response.status, result?.error));
 
   // returnTo was checked against the web app's addresses when the sign-in started.
   const target = new URL(result.returnTo ?? accounts.toString());

@@ -61,32 +61,84 @@ const toLocalInput = (iso: string) => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-export function CalendarView({ posts, anchor, canEdit }: { posts: CalendarPost[]; anchor: string; canEdit: boolean }) {
+export type CalendarMode = "month" | "week" | "list";
+
+// The server loads posts from 40 days before the anchor to 70 days after it; ranges past
+// that are fetched again around a new anchor.
+const LOADED_BEFORE = 40 * DAY;
+const LOADED_AFTER = 70 * DAY;
+
+// The weeks (Monday to Sunday) that cover a month, so the grid is always whole weeks.
+export function monthRange(year: number, month: number) {
+  const first = new Date(year, month, 1, 12).getTime();
+  const last = new Date(year, month + 1, 0, 12).getTime();
+  const start = mondayOf(first);
+  const end = mondayOf(last) + 7 * DAY;
+  return { start, end, days: Math.round((end - start) / DAY) };
+}
+
+export function CalendarView({ posts, anchor, canEdit, initialView = "month" }: { posts: CalendarPost[]; anchor: string; canEdit: boolean; initialView?: CalendarMode }) {
   const router = useRouter();
   // The current minute, read outside render (0 on the server, where the view isn't drawn).
   const minute = useSyncExternalStore(subscribe, () => Math.floor(Date.now() / 60_000), () => 0);
   const ready = minute > 0;
-  const [view, setView] = useState<"week" | "2w" | "list">("2w");
-  const [offset, setOffset] = useState(0); // in weeks from the anchor's week
+  const [view, setViewState] = useState<CalendarMode>(initialView);
+  // Months from the anchor's month (month and list), or weeks from the anchor's week.
+  const [offset, setOffset] = useState(0);
   const [open, setOpen] = useState<string | null>(null);
 
-  const start = mondayOf(Date.parse(anchor)) + offset * 7 * DAY;
-  const days = view === "week" ? 7 : 14;
-  const range = { start, end: start + days * DAY };
-  const shown = useMemo(() => posts.filter((p) => Date.parse(p.at) >= range.start && Date.parse(p.at) < range.end).sort((a, b) => Date.parse(a.at) - Date.parse(b.at)), [posts, range.start, range.end]);
+  const anchorAt = Date.parse(anchor);
+  const anchorDate = new Date(anchorAt);
+  const rangeFor = (mode: CalendarMode, n: number) => {
+    if (mode === "week") {
+      const start = mondayOf(anchorAt) + n * 7 * DAY;
+      return { start, end: start + 7 * DAY, days: 7 };
+    }
+    return monthRange(anchorDate.getFullYear(), anchorDate.getMonth() + n);
+  };
+  const range = rangeFor(view, offset);
+  const { start: rangeStart, end: rangeEnd } = range;
+  const shown = useMemo(() => posts.filter((p) => Date.parse(p.at) >= rangeStart && Date.parse(p.at) < rangeEnd).sort((a, b) => Date.parse(a.at) - Date.parse(b.at)), [posts, rangeStart, rangeEnd]);
   const counts = { scheduled: shown.filter((p) => ["scheduled", "approved"].includes(p.status)).length, live: shown.filter((p) => p.status === "published").length };
   const selected = posts.find((p) => p.id === open) ?? null;
 
   if (!ready) return <div className="p-8 text-ps-subtle">Loading your calendar…</div>;
 
   const today = startOfDay(minute * 60_000);
-  const title = `${new Date(range.start).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${new Date(range.end - DAY).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+  const shownMonth = new Date(anchorDate.getFullYear(), anchorDate.getMonth() + (view === "week" ? 0 : offset), 1);
+  const title =
+    view === "week"
+      ? `${new Date(range.start).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${new Date(range.end - DAY).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+      : shownMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const loaded = (r: { start: number; end: number }) => r.start >= anchorAt - LOADED_BEFORE && r.end <= anchorAt + LOADED_AFTER;
+  const reload = (mode: CalendarMode, at?: number) => {
+    const qs = new URLSearchParams();
+    if (at !== undefined) qs.set("from", new Date(at).toISOString().slice(0, 10));
+    if (mode !== "month") qs.set("view", mode);
+    router.push(`/beta/calendar${qs.size ? `?${qs}` : ""}`);
+  };
   // Outside the loaded window: ask the server for posts around the new dates.
-  const goTo = (weeks: number) => {
-    const target = start + weeks * 7 * DAY;
-    if (Math.abs(target - Date.parse(anchor)) > 35 * DAY) router.push(`/beta/calendar?from=${new Date(target).toISOString().slice(0, 10)}`);
-    else setOffset(offset + weeks);
+  const goTo = (step: number) => {
+    const next = rangeFor(view, offset + step);
+    if (loaded(next)) setOffset(offset + step);
+    else reload(view, next.start + Math.floor(next.days / 2) * DAY);
+  };
+  const goToday = () => {
+    if (Math.abs(today - anchorAt) < 7 * DAY) setOffset(0);
+    else reload(view);
+  };
+  const setView = (mode: CalendarMode) => {
+    // Keep the same dates in view: month to week lands on today's week when it's in the
+    // month, else the month's first week; week to month lands on that week's month.
+    if (mode === "week" && view !== "week") {
+      const day = today >= range.start && today < range.end ? today : shownMonth.getTime();
+      setOffset(Math.round((mondayOf(day) - mondayOf(anchorAt)) / (7 * DAY)));
+    } else if (mode !== "week" && view === "week") {
+      const d = new Date(range.start + 3 * DAY);
+      setOffset((d.getFullYear() - anchorDate.getFullYear()) * 12 + d.getMonth() - anchorDate.getMonth());
+    }
+    setViewState(mode);
   };
 
   return (
@@ -99,15 +151,15 @@ export function CalendarView({ posts, anchor, canEdit }: { posts: CalendarPost[]
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex">
             <button type="button" aria-label="Earlier" onClick={() => goTo(-1)} className="h-[30px] rounded-l-lg border border-white/[0.08] px-2.5 text-ps-muted hover:text-ps-text">‹</button>
-            <button type="button" onClick={() => setOffset(0)} className="h-[30px] border-y border-white/[0.08] px-3 text-xs text-ps-muted hover:text-ps-text">Today</button>
+            <button type="button" onClick={goToday} className="h-[30px] border-y border-white/[0.08] px-3 text-xs text-ps-muted hover:text-ps-text">Today</button>
             <button type="button" aria-label="Later" onClick={() => goTo(1)} className="h-[30px] rounded-r-lg border border-white/[0.08] px-2.5 text-ps-muted hover:text-ps-text">›</button>
           </div>
           <span className="font-mono text-[11px] text-ps-subtle">{tz}</span>
           <div className="inline-flex rounded-[9px] border border-white/[0.08] bg-ps-surface p-[3px]" role="radiogroup" aria-label="View">
             {(
               [
+                ["month", "Month"],
                 ["week", "Week"],
-                ["2w", "2 weeks"],
                 ["list", "List"],
               ] as const
             ).map(([id, text]) => (
@@ -152,20 +204,23 @@ export function CalendarView({ posts, anchor, canEdit }: { posts: CalendarPost[]
         <div className="overflow-x-auto rounded-xl border border-ps-line">
           <div className="grid min-w-[840px] [grid-template-columns:repeat(7,minmax(0,1fr))]">
             {WEEKDAYS.map((w) => <Label key={w} className="border-b border-white/[0.06] bg-ps-surface px-3 py-2.5">{w}</Label>)}
-            {Array.from({ length: days }, (_, i) => {
+            {Array.from({ length: range.days }, (_, i) => {
               const dayStart = new Date(range.start + i * DAY + 12 * 3600_000);
               const key = startOfDay(dayStart.getTime());
               const items = shown.filter((p) => startOfDay(Date.parse(p.at)) === key);
               const isToday = key === today;
               const weekend = i % 7 >= 5;
+              // In the month view, the days of the neighbouring months are dimmed.
+              const outside = view === "month" && dayStart.getMonth() !== shownMonth.getMonth();
+              const limit = view === "month" ? 3 : 4;
               return (
-                <div key={key} className={cn("min-h-[128px] border-b border-r border-white/[0.05] p-2", weekend ? "bg-[#0E0A1A]" : "bg-ps-ground", key < today && "opacity-70", isToday && "shadow-[inset_0_2px_0_#9B6CFF]")}>
+                <div key={key} className={cn("border-b border-r border-white/[0.05] p-2", view === "month" ? "min-h-[112px]" : "min-h-[160px]", weekend ? "bg-[#0E0A1A]" : "bg-ps-ground", (key < today || outside) && "opacity-60", isToday && "shadow-[inset_0_2px_0_#9B6CFF]")}>
                   <div className="mb-1.5 flex items-center justify-between">
                     {isToday ? <span className="text-[11px] text-ps-plum-soft">Today</span> : <span />}
                     <span className={cn("font-mono text-[11px]", isToday ? "rounded-full bg-ps-plum px-1.5 text-ps-ground" : "text-ps-subtle")}>{dayStart.getDate()}</span>
                   </div>
                   <div className="flex flex-col gap-1">
-                    {items.slice(0, 4).map((p) => (
+                    {items.slice(0, limit).map((p) => (
                       <button
                         key={p.id}
                         type="button"
@@ -180,7 +235,7 @@ export function CalendarView({ posts, anchor, canEdit }: { posts: CalendarPost[]
                         {p.destinations.length > 1 && <span className="font-mono text-[10px] text-ps-subtle">+{p.destinations.length - 1}</span>}
                       </button>
                     ))}
-                    {items.length > 4 && <button type="button" onClick={() => setView("list")} className="text-left text-[11px] text-ps-subtle hover:text-ps-text">+{items.length - 4} more</button>}
+                    {items.length > limit && <button type="button" onClick={() => setView("list")} className="text-left text-[11px] text-ps-subtle hover:text-ps-text">+{items.length - limit} more</button>}
                   </div>
                 </div>
               );

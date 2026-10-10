@@ -56,7 +56,7 @@ export function originAllowedFor(returnTo: string, allowed: string[]) {
   });
 }
 
-export async function startConnection(deps: ConnectionDeps, caller: Caller, input: { workspace_id?: unknown; platform?: unknown; return_to?: unknown; handle?: unknown }) {
+export async function startConnection(deps: ConnectionDeps, caller: Caller, input: { workspace_id?: unknown; platform?: unknown; return_to?: unknown; handle?: unknown; profile_id?: unknown }) {
   const workspaceId = requireUuid(input.workspace_id, "Workspace");
   if (!isPlatform(input.platform)) throw new ApiError(400, `Choose a platform: ${PLATFORMS.join(", ")}.`);
   const returnTo = typeof input.return_to === "string" ? input.return_to : "";
@@ -64,6 +64,13 @@ export async function startConnection(deps: ConnectionDeps, caller: Caller, inpu
   // Signing in to a platform is the person's step; AIs hand them a connect link instead.
   if (isAgentCaller(caller)) throw new ApiError(403, "Accounts are connected by a person in the Post Social web app. Use a connect link.");
   await membership(deps.sql, caller, workspaceId, true, "Reviewers cannot connect accounts.");
+  // The profile the new account goes into, if one was chosen.
+  let profileId: string | null = null;
+  if (input.profile_id !== undefined && input.profile_id !== null && input.profile_id !== "") {
+    const [profile] = await deps.sql<{ id: string }>(`SELECT id FROM public.profiles WHERE id = $1 AND workspace_id = $2`, [requireUuid(input.profile_id, "Profile"), workspaceId]);
+    if (!profile) throw new ApiError(404, "That profile was not found.");
+    profileId = profile.id;
+  }
 
   const state = randomToken();
   const redirectUri = callbackUrl(input.platform, deps.setting);
@@ -86,9 +93,9 @@ export async function startConnection(deps: ConnectionDeps, caller: Caller, inpu
     url = authorizeUrl(input.platform, state, redirectUri, deps.setting);
   }
   await deps.sql(
-    `INSERT INTO public.oauth_states (workspace_id, user_id, provider, state_hash, expires_at, return_to, code_verifier_encrypted)
-     VALUES ($1, $2, $3, $4, now() + make_interval(mins => $5), $6, $7)`,
-    [workspaceId, caller.userId, input.platform, await sha256Hex(state), STATE_MINUTES, returnTo || null, pending],
+    `INSERT INTO public.oauth_states (workspace_id, user_id, provider, state_hash, expires_at, return_to, code_verifier_encrypted, profile_id)
+     VALUES ($1, $2, $3, $4, now() + make_interval(mins => $5), $6, $7, $8)`,
+    [workspaceId, caller.userId, input.platform, await sha256Hex(state), STATE_MINUTES, returnTo || null, pending, profileId],
   );
   return { url, expires_in_seconds: STATE_MINUTES * 60 };
 }
@@ -131,7 +138,7 @@ async function blueskyIdentity(deps: ConnectionDeps, pendingSealed: string | nul
   }];
 }
 
-type StateRow = { workspace_id: string; user_id: string | null; return_to: string | null; code_verifier_encrypted: string | null };
+type StateRow = { workspace_id: string; user_id: string | null; return_to: string | null; code_verifier_encrypted: string | null; profile_id: string | null };
 
 export type CallbackResult = { returnTo: string | null; ok: boolean; message: string; platform: Platform };
 
@@ -166,7 +173,7 @@ export async function completeConnection(deps: ConnectionDeps, platform: Platfor
     ? await deps.sql<StateRow>(
         `UPDATE public.oauth_states SET used_at = now()
          WHERE state_hash = $1 AND provider = $2 AND user_id = $3 AND used_at IS NULL AND expires_at > now()
-         RETURNING workspace_id, user_id, return_to, code_verifier_encrypted`,
+         RETURNING workspace_id, user_id, return_to, code_verifier_encrypted, profile_id`,
         [await sha256Hex(state), platform, userId],
       )
     : [];
@@ -221,12 +228,16 @@ export async function completeConnection(deps: ConnectionDeps, platform: Platfor
       `WITH account AS (
          INSERT INTO public.connected_accounts
            (workspace_id, platform, external_account_id, owner_external_id, handle, display_name, avatar_url,
-            scopes, capabilities, health, health_reason, connected_by_actor_id, last_verified_at, disconnected_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, 'connected', NULL, $10, now(), NULL)
+            scopes, capabilities, health, health_reason, connected_by_actor_id, last_verified_at, disconnected_at, profile_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, 'connected', NULL, $10, now(), NULL,
+                 -- The chosen profile, unless it was deleted while the person was signing in.
+                 (SELECT id FROM public.profiles WHERE id = $16::uuid AND workspace_id = $1))
          ON CONFLICT (workspace_id, platform, external_account_id) DO UPDATE SET
            owner_external_id = EXCLUDED.owner_external_id, handle = EXCLUDED.handle, display_name = EXCLUDED.display_name,
            avatar_url = EXCLUDED.avatar_url, avatar_synced_at = NULL, avatar_attempted_at = NULL, scopes = EXCLUDED.scopes, capabilities = EXCLUDED.capabilities,
-           health = 'connected', health_reason = NULL, last_verified_at = now(), disconnected_at = NULL
+           health = 'connected', health_reason = NULL, last_verified_at = now(), disconnected_at = NULL,
+           -- Reconnecting keeps the account's profile; one chosen now applies only if it had none.
+           profile_id = coalesce(connected_accounts.profile_id, EXCLUDED.profile_id)
          RETURNING id, (xmax = 0) AS created
        ), credential AS (
          INSERT INTO public.credentials
@@ -251,6 +262,7 @@ export async function completeConnection(deps: ConnectionDeps, platform: Platfor
         sealed.encryptedPayload, sealed.initializationVector,
         identity.accessTokenExpiresAt?.toISOString() ?? null, identity.refreshTokenExpiresAt?.toISOString() ?? null,
         `Connected ${name} account ${identity.displayName}`,
+        session.profile_id,
       ],
     );
     connected.push(identity.displayName);

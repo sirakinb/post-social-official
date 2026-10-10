@@ -8,6 +8,7 @@ import { mediaActions, type MediaDeps } from "../media/service";
 import type { R2 } from "../media/r2";
 import { postActions } from "../publishing/service";
 import { listAccounts, listMedia, listPosts, listResults } from "./reads";
+import { createProfile, deleteProfile, listProfiles, moveAccount, updateProfile } from "../connections/profiles";
 import { PERIODS, usageReport } from "../usage";
 
 export type ApiDeps = {
@@ -112,10 +113,15 @@ export const operations: Operation[] = [
   {
     name: "list_social_accounts",
     title: "List connected accounts",
-    description: "Lists the social accounts connected to Post Social, with their ids, health and what each can post (capabilities and limits).",
+    description: "Lists the social accounts connected to Post Social, with their ids, health, profile and what each can post (capabilities and limits).",
     method: "GET",
     path: "/v1/accounts",
-    input: { properties: { platform: { type: "string", enum: PLATFORMS, description: "Only this platform." } } },
+    input: {
+      properties: {
+        platform: { type: "string", enum: PLATFORMS, description: "Only this platform." },
+        profile_id: { type: "string", description: "Only accounts in this profile (an id from list_profiles), or none for accounts in no profile." },
+      },
+    },
     readOnly: true,
     run: (deps, caller, input) => listAccounts(deps.sql, caller, { ...input, workspace_id: caller.workspaceId }, deps.webAppUrl),
   },
@@ -125,13 +131,83 @@ export const operations: Operation[] = [
     description: "Returns a link the person opens to connect a social account in Post Social. Accounts can only be connected by the person, never by an AI.",
     method: "POST",
     path: "/v1/accounts/connect-link",
-    input: { properties: { platform: { type: "string", enum: PLATFORMS } }, required: ["platform"] },
-    run: async (deps, _caller, input) => {
+    input: { properties: { platform: { type: "string", enum: PLATFORMS }, profile_id: { ...id("profile"), description: "The profile the new account goes into (from list_profiles). Optional." } }, required: ["platform"] },
+    run: async (deps, caller, input) => {
       if (!PLATFORMS.includes(input.platform as never)) throw new ApiError(400, `Choose a platform: ${PLATFORMS.join(", ")}.`);
       const url = new URL("/beta/accounts", deps.webAppUrl);
       url.searchParams.set("connect", String(input.platform));
+      if (input.profile_id !== undefined && input.profile_id !== "") {
+        const [profile] = await deps.sql<{ id: string }>(`SELECT id FROM public.profiles WHERE id = $1 AND workspace_id = $2`, [requireUuid(input.profile_id, "Profile"), caller.workspaceId]);
+        if (!profile) throw new ApiError(404, "That profile was not found.");
+        url.searchParams.set("profile", profile.id);
+      }
       return { url: url.toString(), message: `Open this link to connect ${DISPLAY_NAMES[input.platform as keyof typeof DISPLAY_NAMES]}. You will sign in to Post Social first.` };
     },
+  },
+  {
+    name: "list_profiles",
+    title: "List profiles",
+    description: "Lists the profiles accounts are grouped under (a business, organisation or client), with how many connected accounts each has. Filter list_social_accounts by profile_id to see a profile's accounts.",
+    method: "GET",
+    path: "/v1/profiles",
+    input: { properties: {} },
+    readOnly: true,
+    run: (deps, caller) => listProfiles(deps.sql, caller, { workspace_id: caller.workspaceId }),
+  },
+  {
+    name: "create_profile",
+    title: "Create a profile",
+    description: "Creates a profile to group accounts under, such as a business, organisation or client.",
+    method: "POST",
+    path: "/v1/profiles",
+    input: {
+      properties: {
+        name: { type: "string", maxLength: 60, description: "The profile's name, unique in the workspace." },
+        description: { type: "string", maxLength: 280 },
+        color: { type: "string", pattern: "^#[0-9A-Fa-f]{6}$", description: "A colour like #9B6CFF." },
+        timezone: { type: "string", description: "An IANA time zone, e.g. America/New_York." },
+      },
+      required: ["name"],
+    },
+    creates: true,
+    run: (deps, caller, input) => createProfile(deps.sql, caller, { ...input, workspace_id: caller.workspaceId }),
+  },
+  {
+    name: "update_profile",
+    title: "Edit a profile",
+    description: "Changes a profile's name, description, colour or time zone. Leave out what stays the same.",
+    method: "PATCH",
+    path: "/v1/profiles/{profile_id}",
+    input: {
+      properties: {
+        profile_id: id("profile"),
+        name: { type: "string", maxLength: 60 },
+        description: { type: "string", maxLength: 280 },
+        color: { type: "string", pattern: "^#[0-9A-Fa-f]{6}$" },
+        timezone: { type: "string" },
+      },
+      required: ["profile_id"],
+    },
+    run: (deps, caller, input) => updateProfile(deps.sql, caller, input),
+  },
+  {
+    name: "delete_profile",
+    title: "Delete a profile",
+    description: "Deletes a profile. Its accounts stay connected and move to no profile.",
+    method: "DELETE",
+    path: "/v1/profiles/{profile_id}",
+    input: { properties: { profile_id: id("profile") }, required: ["profile_id"] },
+    destructive: true,
+    run: (deps, caller, input) => deleteProfile(deps.sql, caller, input),
+  },
+  {
+    name: "move_account_to_profile",
+    title: "Move an account to a profile",
+    description: "Puts a connected account in a profile, or in no profile when profile_id is none.",
+    method: "POST",
+    path: "/v1/accounts/{account_id}/profile",
+    input: { properties: { account_id: id("connected account"), profile_id: { type: "string", description: "The profile id (from list_profiles), or none for no profile." } }, required: ["account_id", "profile_id"] },
+    run: (deps, caller, input) => moveAccount(deps.sql, caller, input),
   },
   {
     name: "list_media",

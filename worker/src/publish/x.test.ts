@@ -86,6 +86,9 @@ describe("X posts", () => {
     const error = await publishX(h.ctx).catch((e) => e);
     expect(error).toBeInstanceOf(PublishError);
     expect(error.code).toBe("x_no_credits");
+    // It's Post Social's balance, so the person is pointed to support, not the X console.
+    expect(error.message).toMatch(/Contact support/);
+    expect(error.message).not.toMatch(/Developer Console/);
     expect(h.ctx.checkpoint.publish_started_at).toBeUndefined();
   });
 

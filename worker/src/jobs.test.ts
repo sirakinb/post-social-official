@@ -50,7 +50,7 @@ describe("runNextJob", () => {
     });
     await runNextJob(deps);
     expect(probed).toBe(false);
-    expect(calls.some((c) => c.query.includes("SET status = 'failed'") && c.params.includes("Processing kept failing. Try uploading the file again."))).toBe(true);
+    expect(calls.some((c) => c.query.includes("SET status = 'failed'") && c.params.some((p) => typeof p === "string" && p.startsWith("Processing kept failing. Try uploading the file again") && p.includes("contact support")))).toBe(true);
     expect(calls.some((c) => c.query.includes("UPDATE public.media_jobs") && c.params[1] === "failed")).toBe(true);
   });
 });
