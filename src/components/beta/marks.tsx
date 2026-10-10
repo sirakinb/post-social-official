@@ -1,5 +1,5 @@
 // Who did something, shown the way people recognize it: the real Claude and ChatGPT marks
-// for AI apps, a key for API keys, a photo (or a symbol) for people, Post Social itself
+// for AI apps, a key for API keys, a photo (or a symbol) for people, the Post Social mark
 // for automatic steps. Marks from simple-icons (CC0), used to identify the connected app.
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -50,7 +50,14 @@ export function ActorMark({ kind, name, avatarUrl, size = 22, className, fallbac
   }
   if (kind === "system") {
     return (
-      <span className={cn(box, "bg-ps-plum text-[10px] font-semibold text-ps-ground")} style={style} title="Post Social">P</span>
+      <span className={cn(box, "bg-[#0C081A] text-white")} style={style} title="Post Social" role="img" aria-label="Post Social">
+        {/* The Post Social mark (globals.css .ps-mark), sized by font size. */}
+        <span className="ps-mark" style={{ fontSize: Math.round(size * 0.62), marginLeft: -Math.round(size * 0.08), marginTop: -Math.round(size * 0.04) }} aria-hidden="true">
+          <span className="ps-mark__gate" />
+          <span className="ps-mark__routes" />
+          <span className="ps-mark__spark" />
+        </span>
+      </span>
     );
   }
   const placeholder =
