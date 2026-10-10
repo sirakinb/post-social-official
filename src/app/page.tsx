@@ -12,10 +12,9 @@ import { Fraunces, GeistPixelGrid } from "./fonts";
 // The landing. It opens at dusk (lanterns leaving the lake the way posts leave for every
 // platform), then walks through what Post Social does, with real screens from the app.
 
-type Platform = "tiktok" | "instagram" | "facebook" | "threads" | "youtube" | "linkedin" | "bluesky";
+type Platform = "tiktok" | "instagram" | "facebook" | "threads" | "youtube" | "linkedin" | "bluesky" | "x";
 
-// Shown in the hero strip after the live platforms, dimmed, until each one ships.
-const SOON: { platform: "x"; name: string }[] = [{ platform: "x", name: "X" }];
+
 
 const PLATFORMS: { platform: Platform; name: string; text: string }[] = [
   { platform: "tiktok", name: "TikTok", text: "Videos and photo posts, or send a draft to your TikTok inbox to finish in the app." },
@@ -25,6 +24,7 @@ const PLATFORMS: { platform: Platform; name: string; text: string }[] = [
   { platform: "youtube", name: "YouTube", text: "Shorts uploaded straight to your channel." },
   { platform: "linkedin", name: "LinkedIn", text: "Text, photos, galleries of up to 20 and videos on your profile." },
   { platform: "bluesky", name: "Bluesky", text: "Text, up to 4 photos or a video, with links, mentions and hashtags." },
+  { platform: "x", name: "X", text: "Text, up to 4 photos or a video, posted to your account." },
 ];
 
 const NAV = [
@@ -36,8 +36,8 @@ const NAV = [
 ];
 
 const FAQ = [
-  { q: "Which platforms are supported?", a: "TikTok, Instagram, Facebook Pages, Threads, YouTube, LinkedIn and Bluesky, each through the platform's official API and sign-in. X is next." },
-  { q: "What can I publish?", a: "Videos and photo posts on TikTok; photos, Reels and carousels on Instagram; text, links, photos, Reels and videos on Facebook Pages; text, photos, videos and carousels on Threads; Shorts on YouTube; and text, photos and videos on LinkedIn and Bluesky. What a given account can post depends on its type and the platform's rules, and Post Social checks each file before it goes out." },
+  { q: "Which platforms are supported?", a: "TikTok, Instagram, Facebook Pages, Threads, YouTube, LinkedIn, Bluesky and X, each through the platform's official API and sign-in." },
+  { q: "What can I publish?", a: "Videos and photo posts on TikTok; photos, Reels and carousels on Instagram; text, links, photos, Reels and videos on Facebook Pages; text, photos, videos and carousels on Threads; Shorts on YouTube; and text, photos and videos on LinkedIn, Bluesky and X. What a given account can post depends on its type and the platform's rules, and Post Social checks each file before it goes out." },
   { q: "Can an AI publish for me?", a: "Yes. Connect Claude, ChatGPT, or any AI agent, or call the API from your own automations. Your AI drafts, schedules and publishes exactly as you direct it. TikTok posts from an AI land in your TikTok inbox for you to finish." },
   { q: "Can I schedule posts?", a: "Yes. Publish now or pick a date and time, then see everything on the calendar and move it if plans change." },
   { q: "Do you need my social passwords?", a: "No. Each account connects through the platform's own sign-in page, and you can disconnect it at any time." },
@@ -133,17 +133,11 @@ export default function LandingPage() {
             <ParticleWordmark text="POST SOCIAL" fontSize={64} gap={3} label="Post Social" fit />
           </div>
 
-          <ul aria-label="Publishes to TikTok, Instagram, Facebook Pages, Threads, YouTube, LinkedIn and Bluesky, with X coming soon" className="lp-rise mt-2 flex flex-wrap justify-center gap-2.5 sm:gap-3">
+          <ul aria-label="Publishes to TikTok, Instagram, Facebook Pages, Threads, YouTube, LinkedIn, Bluesky and X" className="lp-rise mt-2 flex flex-wrap justify-center gap-2.5 sm:gap-3">
             {PLATFORMS.map((p) => (
               <li key={p.platform}>
                 <PlatformCardIcon platform={p.platform} className="shadow-[0_8px_24px_rgba(0,0,0,0.35)] ring-1 ring-white/15" />
                 <span className="sr-only">{p.name}</span>
-              </li>
-            ))}
-            {SOON.map((p) => (
-              <li key={p.platform} className="relative opacity-45" title={`${p.name}: coming soon`}>
-                <PlatformCardIcon platform={p.platform} className="ring-1 ring-white/15" />
-                <span className="sr-only">{p.name} (coming soon)</span>
               </li>
             ))}
           </ul>
@@ -316,7 +310,7 @@ export default function LandingPage() {
           <div className="mx-auto max-w-6xl px-5 py-24 sm:px-8 md:py-28">
             <Label>Platforms</Label>
             <h2 className="lp-h2 mt-3 max-w-3xl">Starting with the places your content already lives.</h2>
-            <p className="mt-5 max-w-2xl leading-relaxed text-[#FAF6F0]/65 md:text-lg">Seven platforms, one workspace. Each connects through the platform&apos;s official sign-in.</p>
+            <p className="mt-5 max-w-2xl leading-relaxed text-[#FAF6F0]/65 md:text-lg">Eight platforms, one workspace. Each connects through the platform&apos;s official sign-in.</p>
             <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {PLATFORMS.map((p) => (
                 <div key={p.platform} className="lp-card p-6 transition-colors hover:border-white/20">
@@ -325,15 +319,6 @@ export default function LandingPage() {
                   <p className="mt-2 text-[15px] leading-relaxed text-[#FAF6F0]/60">{p.text}</p>
                 </div>
               ))}
-              <div className="lp-card flex flex-col justify-between border-dashed p-6">
-                <div className="flex gap-2 opacity-60">
-                  <PlatformCardIcon platform="x" />
-                </div>
-                <div>
-                  <h3 className="mt-4 text-lg font-medium">Coming next</h3>
-                  <p className="mt-2 text-[15px] leading-relaxed text-[#FAF6F0]/60">X.</p>
-                </div>
-              </div>
             </div>
           </div>
         </section>
