@@ -19,7 +19,7 @@ async function failure(response: Response, what: string): Promise<never> {
   const detail = body.detail ?? body.errors?.[0]?.message ?? body.title;
   if (response.status === 401) throw new PublishError("access_expired", `${what} was refused because the X access expired. Reconnect X and try again.`, false, undefined, true);
   if (response.status === 402 || /credits|payment|spend/i.test(detail ?? "")) {
-    throw new PublishError("x_no_credits", "X refused the post because Post Social's X credits ran out. Add credits in the X Developer Console, then retry.", false);
+    throw new PublishError("x_no_credits", `X refused the post because Post Social's X credits ran out${detail ? ` (X said: ${detail})` : ""}. Add credits in the X Developer Console, then retry.`, false);
   }
   if (response.status === 429) throw new PublishError("x_rate_limited", "X's posting limit for this account is used up for now. Post Social will try again later.", true);
   if (response.status === 403) throw new PublishError("x_forbidden", `${what} was refused by X${detail ? `: ${detail}` : ""}.`, false);
