@@ -2,6 +2,10 @@
 // path is stable for platform dashboards:
 //   POST /start                         { workspace_id, platform, return_to } -> { url }
 //   POST /disconnect                    { account_id }
+//   POST /profiles/create               { workspace_id, name, description?, color?, timezone? }
+//   POST /profiles/update               { profile_id, name?, description?, color?, timezone? }
+//   POST /profiles/delete               { profile_id } (its accounts move to no profile)
+//   POST /accounts/move                 { account_id, profile_id | null }
 //   GET  /oauth/{platform}/callback     platform sign-in callback: sends the browser to the web
 //                                       app's /beta/connect/finish, which finishes it as the
 //                                       signed-in person (POST /complete)
@@ -11,10 +15,11 @@
 //   POST /meta/data-deletion            Meta data-deletion callback
 //   GET  /meta/data-deletion/status     ?code=
 //   POST /meta/deauthorize              Meta deauthorize callback
-import { ApiError } from "../../lib/access";
+import { ApiError, type Caller } from "../../lib/access";
 import type { SignedInUser } from "../../lib/insforge-admin";
 import { callbackUrl, completeConnection, disconnectAccount, finishingOrigin, isPlatform, startConnection, type ConnectionDeps } from "../../lib/connections/service";
 import { deletionStatus, handleDataDeletion, handleDeauthorize } from "../../lib/connections/meta-deletion";
+import { createProfile, deleteProfile, moveAccount, updateProfile } from "../../lib/connections/profiles";
 import { clientKey, clientMetadata, publicJwk } from "../../lib/connections/atproto";
 
 export type ConnectionsHandlerDeps = ConnectionDeps & {
@@ -36,6 +41,15 @@ function cors(request: Request, deps: ConnectionsHandlerDeps): Record<string, st
   if (origin && deps.allowedReturnOrigins.some((o) => o === origin)) headers["Access-Control-Allow-Origin"] = origin;
   return headers;
 }
+
+// Signed-in actions on the web app's behalf, besides /start, /disconnect and /complete.
+const PERSON_ACTIONS = {
+  "/profiles/create": (deps: ConnectionsHandlerDeps, caller: Caller, body: Record<string, unknown>) => createProfile(deps.sql, caller, body),
+  "/profiles/update": (deps: ConnectionsHandlerDeps, caller: Caller, body: Record<string, unknown>) => updateProfile(deps.sql, caller, body),
+  "/profiles/delete": (deps: ConnectionsHandlerDeps, caller: Caller, body: Record<string, unknown>) => deleteProfile(deps.sql, caller, body),
+  "/accounts/move": (deps: ConnectionsHandlerDeps, caller: Caller, body: Record<string, unknown>) => moveAccount(deps.sql, caller, body),
+};
+const isPersonAction = (path: string): path is keyof typeof PERSON_ACTIONS => Object.hasOwn(PERSON_ACTIONS, path);
 
 function redirectTo(base: string, params: Record<string, string>) {
   const url = new URL(base);
@@ -81,7 +95,7 @@ export function createConnectionsHandler(deps: ConnectionsHandlerDeps) {
         return json(200, await handleDeauthorize({ sql: deps.sql, appSecrets: deps.metaAppSecrets }, request));
       }
 
-      if (path === "/start" || path === "/disconnect" || path === "/complete") {
+      if (path === "/start" || path === "/disconnect" || path === "/complete" || isPersonAction(path)) {
         const headers = cors(request, deps);
         if (method === "OPTIONS") return new Response(null, { status: 204, headers });
         if (method !== "POST") return json(405, { error: "Use POST." }, headers);
@@ -96,6 +110,7 @@ export function createConnectionsHandler(deps: ConnectionsHandlerDeps) {
           const params = new URLSearchParams(Object.entries((body.params ?? {}) as Record<string, unknown>).filter(([, v]) => typeof v === "string") as Array<[string, string]>);
           return json(200, await completeConnection(deps, body.platform, params, user.id), headers);
         }
+        if (isPersonAction(path)) return json(200, await PERSON_ACTIONS[path](deps, caller, body), headers);
         const result = path === "/start" ? await startConnection(deps, caller, body) : await disconnectAccount(deps, caller, body);
         return json(200, result, headers);
       }

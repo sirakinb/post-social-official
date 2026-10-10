@@ -1,5 +1,5 @@
 import { loadViewer } from "@/lib/beta/workspace";
-import type { ComposerAccount, ComposerMedia, Cover, Platform, PlatformChoice } from "@/lib/beta/composer-model";
+import type { ComposerAccount, ComposerMedia, ComposerProfile, Cover, Platform, PlatformChoice } from "@/lib/beta/composer-model";
 import { getMediaLinks } from "./actions";
 import { Composer, type EditingPost } from "./composer";
 
@@ -16,8 +16,10 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
   if (!workspace) return <p className="p-8 text-ps-muted">You are not a member of any workspace yet.</p>;
   if (workspace.role === "reviewer") return <p className="p-8 text-ps-muted">Reviewers can see posts but not create them.</p>;
 
-  const [{ data: accountRows }, { data: mediaRows }] = await Promise.all([
-    client.database.from("connected_accounts").select("id, platform, handle, display_name, avatar_url, health, capabilities").eq("workspace_id", workspace.id).neq("health", "disconnected").order("platform"),
+  const ACCOUNT_COLUMNS = "id, platform, handle, display_name, avatar_url, health, capabilities";
+  const accountsQuery = (columns: string) => client.database.from("connected_accounts").select(columns).eq("workspace_id", workspace.id).neq("health", "disconnected").order("platform");
+  const [withProfiles, { data: mediaRows }, profilesResult] = await Promise.all([
+    accountsQuery(`${ACCOUNT_COLUMNS}, profile_id`),
     client.database
       .from("media_assets")
       .select("id, display_name, file_name, media_type, width, height, duration_seconds")
@@ -26,9 +28,13 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
       .is("hidden_from_library_at", null)
       .order("created_at", { ascending: false })
       .limit(48),
+    client.database.from("profiles").select("id, name, color").eq("workspace_id", workspace.id),
   ]);
+  // Before the profiles migration reaches an environment, read accounts without them.
+  const { data: accountRows } = profilesResult.error || withProfiles.error ? await accountsQuery(ACCOUNT_COLUMNS) : withProfiles;
+  const profiles = ((profilesResult.error ? [] : profilesResult.data ?? []) as ComposerProfile[]).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 
-  const accounts: ComposerAccount[] = ((accountRows ?? []) as Array<{ id: string; platform: string; handle: string; display_name: string; avatar_url: string | null; capabilities: { caption_max_chars?: number; video_max_seconds?: number } | null }>)
+  const accounts: ComposerAccount[] = ((accountRows ?? []) as unknown as Array<{ id: string; platform: string; handle: string; display_name: string; avatar_url: string | null; capabilities: { caption_max_chars?: number; video_max_seconds?: number } | null; profile_id?: string | null }>)
     .filter((a) => PLATFORMS.includes(a.platform as Platform))
     .map((a) => ({
       id: a.id,
@@ -38,6 +44,7 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
       avatarUrl: a.avatar_url,
       captionMax: a.capabilities?.caption_max_chars ?? null,
       videoMaxSeconds: a.capabilities?.video_max_seconds ?? null,
+      profileId: a.profile_id ?? null,
     }));
 
   // Editing an existing post (from Calendar or Home).
@@ -78,7 +85,7 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
   }
 
   const initialMedia = !editing && startMedia && UUID.test(startMedia) && library.some((m) => m.id === startMedia) ? [startMedia] : [];
-  return <Composer workspaceId={workspace.id} accounts={accounts} library={library} editing={editing} initialMedia={initialMedia} />;
+  return <Composer workspaceId={workspace.id} accounts={accounts} profiles={profiles} library={library} editing={editing} initialMedia={initialMedia} />;
 }
 
 function toComposerMedia(m: MediaRow): ComposerMedia {

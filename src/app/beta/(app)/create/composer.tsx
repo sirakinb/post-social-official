@@ -20,6 +20,7 @@ import {
   type Cover,
   tiktokProblems,
   type ComposerAccount,
+  type ComposerProfile,
   type ComposerMedia,
   type PlatformChoice,
 } from "@/lib/beta/composer-model";
@@ -40,7 +41,7 @@ const toLocalInput = (iso: string) => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-export function Composer({ workspaceId, accounts, library: initialLibrary, editing, initialMedia = [] }: { workspaceId: string; accounts: ComposerAccount[]; library: ComposerMedia[]; editing: EditingPost | null; initialMedia?: string[] }) {
+export function Composer({ workspaceId, accounts, profiles = [], library: initialLibrary, editing, initialMedia = [] }: { workspaceId: string; accounts: ComposerAccount[]; profiles?: ComposerProfile[]; library: ComposerMedia[]; editing: EditingPost | null; initialMedia?: string[] }) {
   const [library, setLibrary] = useState(initialLibrary);
   const [selected, setSelected] = useState<string[]>(editing?.accounts.map((a) => a.accountId) ?? []);
   const [choices, setChoices] = useState<Record<string, PlatformChoice>>(() => Object.fromEntries((editing?.accounts ?? []).map((a) => [a.accountId, a.choice])));
@@ -60,6 +61,9 @@ export function Composer({ workspaceId, accounts, library: initialLibrary, editi
   const [done, setDone] = useState<Done | null>(null);
 
   const chosen = accounts.filter((a) => selected.includes(a.id));
+  // Show one profile's accounts; accounts already picked stay picked.
+  const [profileFilter, setProfileFilter] = useState<string>("all");
+  const visible = profileFilter === "all" ? accounts : accounts.filter((a) => (a.profileId ?? "none") === profileFilter || selected.includes(a.id));
   const media = mediaIds.map((id) => library.find((m) => m.id === id)).filter((m): m is ComposerMedia => Boolean(m));
   const choiceFor = (id: string) => choices[id] ?? {};
   const setChoice = (id: string, change: Partial<PlatformChoice>) => setChoices((all) => ({ ...all, [id]: { ...all[id], ...change } }));
@@ -175,14 +179,31 @@ export function Composer({ workspaceId, accounts, library: initialLibrary, editi
         </div>
 
         <div>
-          <Label className="mb-2.5">Post to</Label>
+          <div className="mb-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
+            <Label>Post to</Label>
+            {profiles.length > 0 && (
+              <div role="radiogroup" aria-label="Profile" className="flex flex-wrap gap-1">
+                {[{ id: "all", name: "All", color: "" }, ...profiles].map((p) => (
+                  <button key={p.id} type="button" role="radio" aria-checked={profileFilter === p.id} onClick={() => setProfileFilter(p.id)} className={cn("inline-flex h-6 items-center gap-1.5 rounded-md px-2 text-xs", profileFilter === p.id ? "bg-[#2A2142] text-ps-text" : "text-ps-muted hover:text-ps-text")}>
+                    {p.color && <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: p.color }} />}
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            )}
+            {profileFilter !== "all" && (
+              <button type="button" onClick={() => setSelected((s) => [...new Set([...s, ...accounts.filter((a) => a.profileId === profileFilter).map((a) => a.id)])])} className="text-xs text-ps-plum-soft hover:text-ps-text">
+                Select all in {profiles.find((p) => p.id === profileFilter)?.name}
+              </button>
+            )}
+          </div>
           {accounts.length === 0 ? (
             <p className="m-0 text-ps-muted">
               No accounts yet. <Link href="/beta/accounts" className="text-ps-plum-soft hover:text-ps-text">Connect one</Link> first.
             </p>
           ) : (
             <div className="flex flex-wrap gap-2">
-              {accounts.map((a) => {
+              {visible.map((a) => {
                 const on = selected.includes(a.id);
                 return (
                   <button

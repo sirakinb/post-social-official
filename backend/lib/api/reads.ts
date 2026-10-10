@@ -1,6 +1,6 @@
 // Lists for API and MCP callers. (The web app reads these through row-level security; keys
 // have no database session, so the server reads on their behalf, scoped to the workspace.)
-import { ApiError, membership, type Caller, type Sql } from "../access";
+import { ApiError, membership, requireUuid, type Caller, type Sql } from "../access";
 import { DISPLAY_NAMES, PLATFORMS, type Platform } from "../connections/platforms";
 import { publicAsset, type AssetRow } from "../media/service";
 
@@ -24,16 +24,21 @@ function platformFilter(value: unknown): Platform | null {
 // get the full link.
 const fullLink = (url: unknown, site?: string) => (typeof url === "string" && url.startsWith("/") ? (site ? `${site.replace(/\/+$/, "")}${url}` : null) : url ?? null);
 
-export async function listAccounts(sql: Sql, caller: Caller, input: { workspace_id: string; platform?: unknown }, site?: string) {
+export async function listAccounts(sql: Sql, caller: Caller, input: { workspace_id: string; platform?: unknown; profile_id?: unknown }, site?: string) {
   await membership(sql, caller, input.workspace_id, false);
   const platform = platformFilter(input.platform);
+  // A profile id, or "none" for accounts in no profile.
+  const profile = input.profile_id === undefined || input.profile_id === null || input.profile_id === "" ? null : input.profile_id === "none" ? "none" : requireUuid(input.profile_id, "Profile");
   const rows = await sql<Record<string, unknown> & { platform: Platform; policy: string }>(
     `SELECT a.id, a.platform, a.handle, a.display_name, a.avatar_url, a.health, a.health_reason, a.capabilities,
-            coalesce(a.approval_policy_override, w.default_approval_policy) AS policy, a.created_at
+            coalesce(a.approval_policy_override, w.default_approval_policy) AS policy, a.created_at,
+            a.profile_id, pr.name AS profile_name
      FROM public.connected_accounts a JOIN public.workspaces w ON w.id = a.workspace_id
+     LEFT JOIN public.profiles pr ON pr.id = a.profile_id
      WHERE a.workspace_id = $1 AND ($2::text IS NULL OR a.platform = $2)
+       AND ($3::text IS NULL OR ($3 = 'none' AND a.profile_id IS NULL) OR a.profile_id::text = $3)
      ORDER BY a.platform, a.display_name`,
-    [input.workspace_id, platform],
+    [input.workspace_id, platform, profile],
   );
   return {
     accounts: rows.map(({ policy, ...row }) => ({
