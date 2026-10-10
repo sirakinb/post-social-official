@@ -175,7 +175,7 @@ export function ConnectionsView(props: {
                   {busy === p.id ? "Opening…" : p.name}
                 </button>
               ))}
-              <span className="ml-auto text-xs text-ps-subtle">LinkedIn, X and Bluesky are coming soon</span>
+              <span className="ml-auto text-xs text-ps-subtle">X and Bluesky are coming soon</span>
             </div>
           )}
         </div>
