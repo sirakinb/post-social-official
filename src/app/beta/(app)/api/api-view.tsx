@@ -73,12 +73,9 @@ export function ApiView(props: { workspaceId: string; role: string; apps: AiApp[
       {message && <p role={message.kind === "error" ? "alert" : "status"} className={cn("m-0 rounded-[10px] border px-3.5 py-2.5", message.kind === "error" ? "border-ps-failed/30 bg-ps-failed/[0.08] text-[#FF8A8E]" : "border-ps-line bg-ps-surface text-ps-muted")}>{message.text}</p>}
 
       <section aria-labelledby="ai-h">
-        <div className="mb-2.5 flex items-baseline justify-between">
-          <h2 id="ai-h" className="m-0 text-sm font-medium">AI apps you signed in to</h2>
-          <a href="#connect-ai" className="text-xs text-ps-plum-soft hover:text-ps-text">How to connect an AI</a>
-        </div>
+        <h2 id="ai-h" className="m-0 mb-2.5 text-sm font-medium">AI apps you signed in to</h2>
         <div className="rounded-xl border border-ps-line bg-ps-surface">
-          {props.apps.length === 0 && <p className="m-0 px-4 py-6 text-center text-ps-muted">No AI apps yet. Connect Claude or ChatGPT below; they&apos;ll show up here.</p>}
+          {props.apps.length === 0 && <p className="m-0 px-4 py-6 text-center text-ps-muted">No AI apps yet. Connect one with the setup steps on this page and it will show up here.</p>}
           {props.apps.map((a) => (
             <div key={a.id} className="border-b border-white/[0.05] last:border-b-0">
               <button type="button" aria-expanded={openApp === a.id} onClick={() => setOpenApp(openApp === a.id ? null : a.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left">
