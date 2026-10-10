@@ -19,6 +19,8 @@ const settings: Record<string, string> = {
   GOOGLE_CLIENT_ID: "g-client",
   GOOGLE_CLIENT_SECRET: "g-secret",
   GOOGLE_REDIRECT_URI: "http://localhost:3333/oauth/youtube/callback",
+  LINKEDIN_CLIENT_ID: "li-client",
+  LINKEDIN_CLIENT_SECRET: "li-secret",
   CONNECTIONS_BASE_URL: "https://fn.example/connections",
 };
 const setting = (name: string) => {
@@ -66,7 +68,7 @@ describe("token encryption", () => {
 });
 
 describe("sign-in links", () => {
-  it.each(["instagram", "facebook", "threads", "youtube", "tiktok"] as Platform[])("asks %s for exactly the permissions in the PRD", (platform) => {
+  it.each(["instagram", "facebook", "threads", "youtube", "tiktok", "linkedin"] as Platform[])("asks %s for exactly the permissions in the PRD", (platform) => {
     const url = new URL(authorizeUrl(platform, "state-1", callbackUrl(platform, setting), setting));
     const scope = url.searchParams.get("scope") ?? "";
     expect(scope.split(/[ ,]/).sort()).toEqual([...SCOPES[platform]].sort());
@@ -161,6 +163,20 @@ describe("exchanging sign-in codes", () => {
     await expect(exchangeCode("youtube", "c", "r", setting, without.http)).rejects.toThrow(/myaccount\.google\.com/);
   });
 
+  it("LinkedIn: the member's id, name and photo; access for 60 days", async () => {
+    const { http, calls } = fakeHttp([
+      [/linkedin\.com\/oauth\/v2\/accessToken/, { access_token: "li-a", expires_in: 5183999, scope: "openid,profile,w_member_social" }],
+      [/api\.linkedin\.com\/v2\/userinfo/, { sub: "abc123", name: "Aki B", picture: "https://media.licdn.com/p.jpg" }],
+    ]);
+    const [identity] = await exchangeCode("linkedin", "c", callbackUrl("linkedin", setting), setting, http);
+    expect(identity).toMatchObject({ externalAccountId: "abc123", displayName: "Aki B", handle: "Aki B", avatarUrl: "https://media.licdn.com/p.jpg", tokens: { accessToken: "li-a" } });
+    expect(identity.scopes).toEqual(["openid", "profile", "w_member_social"]);
+    expect(identity.accessTokenExpiresAt!.getTime()).toBeGreaterThan(Date.now() + 59 * 24 * 3600 * 1000);
+    expect(calls[0]).toBe("POST https://www.linkedin.com/oauth/v2/accessToken");
+    const denied = fakeHttp([[/accessToken/, { error: "invalid_request", error_description: "Unable to retrieve access token" }, 400]]);
+    await expect(exchangeCode("linkedin", "c", "r", setting, denied.http)).rejects.toThrow("LinkedIn sign-in failed: Unable to retrieve access token.");
+  });
+
   it("turns platform errors into plain messages", async () => {
     const { http } = fakeHttp([[/oauth\/access_token/, { error: { message: "Invalid verification code format.", code: 100 } }, 400]]);
     await expect(exchangeCode("threads", "c", "r", setting, http)).rejects.toThrow("Threads sign-in failed: Invalid verification code format.");
@@ -174,6 +190,9 @@ describe("refresh and revoke", () => {
     const tt = fakeHttp([[/oauth\/token/, { access_token: "new", expires_in: 86400 }]]);
     expect((await refreshTokens("tiktok", { accessToken: "old", refreshToken: "r" }, setting, tt.http))!.tokens).toEqual({ accessToken: "new", refreshToken: "r" });
     expect(await refreshTokens("facebook", { accessToken: "page" }, setting)).toBeNull();
+    expect(await refreshTokens("linkedin", { accessToken: "li" }, setting)).toBeNull();
+    const li = fakeHttp([[/linkedin\.com\/oauth\/v2\/accessToken/, { access_token: "new", expires_in: 5184000, refresh_token: "r2" }]]);
+    expect((await refreshTokens("linkedin", { accessToken: "old", refreshToken: "r" }, setting, li.http))!.tokens).toEqual({ accessToken: "new", refreshToken: "r2" });
     await expect(refreshTokens("youtube", { accessToken: "a" }, setting)).rejects.toThrow(/refresh token is missing/);
   });
 
@@ -182,6 +201,8 @@ describe("refresh and revoke", () => {
     expect(await revokeTokens("youtube", { accessToken: "a", refreshToken: "refresh-1" }, setting, google.http)).toBe("confirmed");
     const meta = fakeHttp([[/graph\.facebook\.com\/v25\.0\/me\/permissions/, {}, 400]]);
     expect(await revokeTokens("facebook", { accessToken: "a" }, setting, meta.http)).toBe("platform_http_400");
+    const li = fakeHttp([[/linkedin\.com\/oauth\/v2\/revoke/, {}]]);
+    expect(await revokeTokens("linkedin", { accessToken: "a" }, setting, li.http)).toBe("confirmed");
     const down = (async () => {
       throw new Error("offline");
     }) as unknown as typeof fetch;

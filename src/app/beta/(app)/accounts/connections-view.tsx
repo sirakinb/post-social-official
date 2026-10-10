@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useSyncExternalStore, type FormEvent } from "react";
 import { ActorMark } from "@/components/beta/marks";
+import { AccountMark } from "@/components/beta/avatar-img";
 import { PlatformMark, Status } from "@/components/beta/ui";
 import { cn } from "@/lib/utils";
 import { createKey, revokeGrant, revokeKey } from "../keys/actions";
@@ -18,8 +19,9 @@ const PLATFORMS = [
   { id: "threads", name: "Threads", note: "Your profile" },
   { id: "youtube", name: "YouTube", note: "Shorts" },
   { id: "tiktok", name: "TikTok", note: "Your account" },
+  { id: "linkedin", name: "LinkedIn", note: "Your profile" },
 ];
-const KIND: Record<string, string> = { instagram: "Instagram", facebook: "Facebook Page", threads: "Threads", youtube: "YouTube channel", tiktok: "TikTok" };
+const KIND: Record<string, string> = { instagram: "Instagram", facebook: "Facebook Page", threads: "Threads", youtube: "YouTube channel", tiktok: "TikTok", linkedin: "LinkedIn" };
 
 // "12 min ago" in the browser; plain dates on the server (it doesn't know the clock here).
 const ago = (iso: string | null, now: number) => {
@@ -137,14 +139,7 @@ export function ConnectionsView(props: {
           {active.map((a) => (
             <div key={a.id} className="flex flex-wrap items-center gap-3 border-b border-white/[0.05] px-4 py-3">
               <span className="relative">
-                {a.avatarUrl ? (
-                  <>
-                    <ActorMark kind="user" name={a.name} avatarUrl={a.avatarUrl} size={32} />
-                    <PlatformMark platform={a.platform} size={16} className="absolute -bottom-1 -right-1.5 rounded-[5px]" />
-                  </>
-                ) : (
-                  <PlatformMark platform={a.platform} size={32} className="rounded-full" />
-                )}
+                <AccountMark platform={a.platform} avatarUrl={a.avatarUrl} size={32} badge={16} />
               </span>
               <span className="min-w-[180px] flex-1">
                 <span className="block">{a.name} <span className="text-ps-subtle">{a.platform === "youtube" || a.platform === "facebook" ? KIND[a.platform] : `@${a.handle} · ${KIND[a.platform]}`}</span></span>
@@ -174,7 +169,7 @@ export function ConnectionsView(props: {
                   {busy === p.id ? "Opening…" : p.name}
                 </button>
               ))}
-              <span className="ml-auto text-xs text-ps-subtle">LinkedIn, X and Bluesky are coming soon</span>
+              <span className="ml-auto text-xs text-ps-subtle">X and Bluesky are coming soon</span>
             </div>
           )}
         </div>

@@ -22,10 +22,13 @@ export type TikTokOptions = {
   disclose_branded_content?: boolean;
   ai_generated?: boolean;
 };
+// LinkedIn member posts. media_type left out follows the media: none is text, a video is
+// a video post, images are an image post (2 to 20 show as a gallery).
+export type LinkedInOptions = { kind: "linkedin"; media_type?: "text" | "image" | "video"; text?: string; title?: string; visibility?: "PUBLIC" | "CONNECTIONS" };
 // A video's cover, on any platform's options: an image from the library, or a frame of the
 // video (milliseconds from the start). Which platforms can use which: coverSupport().
 export type CoverOptions = { cover_media_id?: string; cover_time_ms?: number };
-export type DestinationOptions = (InstagramOptions | FacebookOptions | ThreadsOptions | YouTubeOptions | TikTokOptions) & CoverOptions;
+export type DestinationOptions = (InstagramOptions | FacebookOptions | ThreadsOptions | YouTubeOptions | TikTokOptions | LinkedInOptions) & CoverOptions;
 
 export type MediaFacts = {
   id: string;
@@ -47,6 +50,7 @@ export const POST_TYPES: Record<Platform, string[]> = {
   threads: ["text", "image", "video", "carousel"],
   youtube: ["short"],
   tiktok: ["direct", "inbox"],
+  linkedin: ["text", "image", "video"],
 };
 
 const TIKTOK_PRIVACY = ["PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR", "SELF_ONLY"];
@@ -98,6 +102,8 @@ export function coverSupport(options: DestinationOptions, media: Array<Pick<Medi
       return { image: false, frame: false, why: isVideo ? "Post Social can't set a Facebook video cover yet; Facebook uses its own thumbnail." : "Covers apply to videos only." };
     case "threads":
       return { image: false, frame: false, why: "Threads doesn't support custom covers." };
+    case "linkedin":
+      return linkedinMediaType(options, media) === "video" ? { image: true, frame: true } : { image: false, frame: false, why: "Covers apply to videos only." };
   }
 }
 
@@ -152,8 +158,31 @@ function normalizeKind(platform: Platform, raw: unknown): { options?: Destinatio
         problems: [],
       };
     }
+    case "linkedin": {
+      if (str("media_type") !== undefined && !pick("media_type", ["text", "image", "video"] as const)) return { problems: ["Choose a LinkedIn post type: text, image or video."] };
+      if (str("visibility") !== undefined && !pick("visibility", ["PUBLIC", "CONNECTIONS"] as const)) return { problems: ["Choose who can see the LinkedIn post: PUBLIC or CONNECTIONS."] };
+      return {
+        options: {
+          kind: "linkedin",
+          media_type: pick("media_type", ["text", "image", "video"] as const),
+          text: str("text"),
+          title: str("title"),
+          visibility: pick("visibility", ["PUBLIC", "CONNECTIONS"] as const, "PUBLIC"),
+        },
+        problems: [],
+      };
+    }
   }
 }
+
+// A LinkedIn post's type: as chosen, or from the media.
+export function linkedinMediaType(options: LinkedInOptions, media: Array<Pick<MediaFacts, "media_type">>): "text" | "image" | "video" {
+  if (options.media_type) return options.media_type;
+  if (!media.length) return "text";
+  return media.some((m) => m.media_type === "video") ? "video" : "image";
+}
+
+export const LINKEDIN_MAX_IMAGES = 20;
 
 // A TikTok post's type: as chosen, or from the media (only images means a photo post).
 export function tiktokMediaType(options: TikTokOptions, media: Array<Pick<MediaFacts, "media_type">>): "video" | "photo" {
@@ -189,6 +218,7 @@ export function captionFor(options: DestinationOptions, postCaption: string) {
   if (options.kind === "facebook") return options.message ?? postCaption;
   if (options.kind === "threads") return options.text ?? postCaption;
   if (options.kind === "youtube") return options.description ?? postCaption;
+  if (options.kind === "linkedin") return options.text ?? postCaption;
   return postCaption;
 }
 
@@ -338,6 +368,31 @@ export function destinationProblems(args: {
         if (options.disclose_branded_content && options.privacy_level === "SELF_ONLY") {
           problems.push("Branded content on TikTok cannot be private; choose a wider audience or turn off branded content.");
         }
+      }
+      break;
+    }
+
+    case "linkedin": {
+      const length = [...caption].length;
+      if (length > 3000) problems.push(`LinkedIn posts can be at most 3,000 characters; this one is ${length.toLocaleString("en-US")}.`);
+      if ((options.title ?? "").length > 200) problems.push("LinkedIn video titles can be at most 200 characters.");
+      const type = linkedinMediaType(options, media);
+      if (type === "text") {
+        if (!caption) problems.push("Write the text for this LinkedIn post.");
+        if (media.length) problems.push("A LinkedIn text post cannot include media; choose image or video instead.");
+      } else if (type === "image") {
+        if (videos.length) problems.push("LinkedIn image posts can only contain images; post the video separately.");
+        if (images.length === 0) problems.push("A LinkedIn image post needs at least 1 image.");
+        if (images.length > LINKEDIN_MAX_IMAGES) problems.push(`LinkedIn posts can have at most ${LINKEDIN_MAX_IMAGES} images; this one has ${images.length}.`);
+        types(images, ["image/jpeg", "image/png", "image/gif"], "LinkedIn images");
+      } else {
+        exactly(1, "video", "A LinkedIn video post");
+        types(videos, ["video/mp4"], "LinkedIn videos");
+        videos.forEach((v) => {
+          videoLength(v, 3, 1800, "LinkedIn videos");
+          if (v.size_bytes > 500 * 1024 * 1024) problems.push(`LinkedIn videos can be at most 500 MB; ${v.name} is ${Math.round(v.size_bytes / 1024 / 1024)} MB.`);
+          if (v.size_bytes < 75 * 1024) problems.push(`LinkedIn videos must be at least 75 KB; ${v.name} is smaller.`);
+        });
       }
       break;
     }

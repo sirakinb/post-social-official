@@ -77,6 +77,7 @@ export function createApiHandler(deps: ApiHandlerDeps) {
     // The function may be reached directly (/v1/...) or through the web domain (/api/v1/...).
     const path = new URL(request.url).pathname.replace(/\/+$/, "").replace(/^\/api(?=\/)/, "") || "/";
 
+    if (path.startsWith("/avatars/")) return avatarRoute(deps, request, path);
     if (path === "/keys") return personRoute(deps, request);
     if (path === "/oauth/consent") return consentRoute(deps, request);
     if (path === "/waitlist") return waitlistRoute(deps, request);
@@ -270,6 +271,23 @@ async function consentRoute(deps: ApiHandlerDeps, request: Request) {
 }
 
 // Web app only: API keys and connected apps, with the person's sign-in token.
+// A connected account's saved profile picture (/avatars/<account id>/<version>), sent on
+// to a short-lived storage link. No sign-in: the platforms show these pictures publicly,
+// and the account id is unguessable. The version is part of the address so a new picture
+// gets a new address and the redirect can be cached.
+async function avatarRoute(deps: ApiHandlerDeps, request: Request, path: string) {
+  if (request.method !== "GET" && request.method !== "HEAD") return json(405, errorBody(405, "Use GET."), { Allow: "GET, HEAD" });
+  const match = path.match(/^\/avatars\/([0-9a-f-]{36})\/([0-9a-f]{16})$/i);
+  if (!match) return json(404, errorBody(404, "No such picture."));
+  const [row] = await deps.sql<{ avatar_key: string }>(
+    `SELECT avatar_key FROM public.connected_accounts WHERE id = $1 AND health <> 'disconnected' AND avatar_key IS NOT NULL`,
+    [match[1]],
+  ).catch(() => []);
+  if (!row || !row.avatar_key.includes(`/${match[2].toLowerCase()}.`)) return json(404, errorBody(404, "No such picture."));
+  const link = await deps.r2.presignGet(row.avatar_key, 2 * 60 * 60);
+  return new Response(null, { status: 302, headers: { Location: link, "Cache-Control": "public, max-age=3600", "Access-Control-Allow-Origin": "*" } });
+}
+
 async function personRoute(deps: ApiHandlerDeps, request: Request) {
   const origin = request.headers.get("origin");
   const cors: Record<string, string> = { "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type, Authorization", Vary: "Origin" };

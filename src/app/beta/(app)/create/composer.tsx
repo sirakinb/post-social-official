@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActorMark } from "@/components/beta/marks";
+import { AccountMark } from "@/components/beta/avatar-img";
 import { Label, PlatformMark, Thumb } from "@/components/beta/ui";
 import { useUpload, type ReadyMedia } from "@/components/beta/use-upload";
 import {
@@ -196,16 +196,9 @@ export function Composer({ workspaceId, accounts, library: initialLibrary, editi
                     className={cn("inline-flex h-[38px] items-center gap-2.5 rounded-full border pl-1.5 pr-3 text-[13px] transition-colors", on ? "border-ps-plum/60 bg-ps-plum/[0.12] text-ps-text" : "border-white/[0.08] text-ps-subtle opacity-80 hover:opacity-100")}
                   >
                     <span className="relative">
-                      {a.avatarUrl ? (
-                        <>
-                          <ActorMark kind="user" name={a.name} avatarUrl={a.avatarUrl} size={26} />
-                          <PlatformMark platform={a.platform} size={15} className="absolute -bottom-1 -right-1.5 rounded-[5px]" />
-                        </>
-                      ) : (
-                        <PlatformMark platform={a.platform} size={26} className="rounded-full" />
-                      )}
+                      <AccountMark platform={a.platform} avatarUrl={a.avatarUrl} size={26} badge={15} />
                     </span>
-                    {a.platform === "youtube" || a.platform === "facebook" ? a.name : `@${a.handle}`}
+                    {a.platform === "youtube" || a.platform === "facebook" || a.platform === "linkedin" ? a.name : `@${a.handle}`}
                   </button>
                 );
               })}
@@ -421,7 +414,7 @@ function PlatformOptions({ account, choice, media, caption, onChange, creator, c
       <div className="flex items-center gap-2">
         <PlatformMark platform={account.platform} />
         <span className="font-medium">{NAMES[account.platform]}</span>
-        <span className="text-ps-subtle">{account.platform === "youtube" || account.platform === "facebook" ? account.name : `@${account.handle}`}</span>
+        <span className="text-ps-subtle">{account.platform === "youtube" || account.platform === "facebook" || account.platform === "linkedin" ? account.name : `@${account.handle}`}</span>
       </div>
       {types && (
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -458,6 +451,11 @@ function PlatformOptions({ account, choice, media, caption, onChange, creator, c
             </span>
           </div>
         </>
+      )}
+      {account.platform === "linkedin" && (
+        <p className="m-0 text-xs text-ps-muted">
+          Posts to your LinkedIn profile as {media.some((m) => m.type === "video") ? "a video" : media.length > 1 ? "an image gallery" : media.length ? "an image post" : "a text post"}.
+        </p>
       )}
       {account.platform === "tiktok" && <TikTokOptions value={choice.tiktok ?? NEW_TIKTOK} onChange={(t) => onChange({ tiktok: t })} info={creator} infoError={creatorError} accountName={account.name} photo={isTikTokPhotoPost(media)} />}
     </div>
