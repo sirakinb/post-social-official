@@ -18,8 +18,9 @@ const PLATFORMS = [
   { id: "threads", name: "Threads", note: "Your profile" },
   { id: "youtube", name: "YouTube", note: "Shorts" },
   { id: "tiktok", name: "TikTok", note: "Your account" },
+  { id: "linkedin", name: "LinkedIn", note: "Your profile" },
 ];
-const KIND: Record<string, string> = { instagram: "Instagram", facebook: "Facebook Page", threads: "Threads", youtube: "YouTube channel", tiktok: "TikTok" };
+const KIND: Record<string, string> = { instagram: "Instagram", facebook: "Facebook Page", threads: "Threads", youtube: "YouTube channel", tiktok: "TikTok", linkedin: "LinkedIn" };
 
 // "12 min ago" in the browser; plain dates on the server (it doesn't know the clock here).
 const ago = (iso: string | null, now: number) => {

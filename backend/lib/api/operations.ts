@@ -50,8 +50,9 @@ const OPTIONS_HELP = [
   "facebook: media_type text | link | image | reel | video; message (overrides caption); link (for link posts); title (videos).",
   "threads: media_type text | image | video | carousel; text (overrides caption).",
   "youtube (Shorts, one vertical video up to 3 min): title (required, up to 100 characters); description; privacy_status public | unlisted | private (required).",
-  "Video covers (any platform's options): cover_media_id (an image from list_media) or cover_time_ms (a frame, in milliseconds from the start), not both. Instagram Reels and YouTube take either; TikTok direct posts take a frame only; TikTok drafts, Facebook and Threads can't set a cover. Instagram crops the cover to a centred square in the profile grid.",
+  "Video covers (any platform's options): cover_media_id (an image from list_media) or cover_time_ms (a frame, in milliseconds from the start), not both. Instagram Reels and YouTube take either; TikTok direct posts take a frame only; LinkedIn videos take either; TikTok drafts, Facebook and Threads can't set a cover. Instagram crops the cover to a centred square in the profile grid.",
   "tiktok: delivery_mode must be inbox for AI posts (it goes to the creator's TikTok inbox, where they tap Post; TikTok requires the creator to confirm); media_type video (one video) | photo (1 to 35 images as a swipeable carousel; JPEG, PNG or WebP, resized for TikTok automatically), left out it follows the media; title (photo posts only, up to 90 characters); comments_enabled, duet_enabled, stitch_enabled (default off; Duet and Stitch are video only); disclose_your_brand, disclose_branded_content; ai_generated.",
+  "linkedin (the member's own profile): media_type text | image | video, left out it follows the media; text (overrides caption, up to 3,000 characters); title (videos); visibility PUBLIC (default) | CONNECTIONS. Images: 1 to 20 JPEG, PNG or GIF (2 or more show as a gallery). Videos: one MP4, 3 seconds to 30 minutes, up to 500 MB.",
 ].join(" ");
 
 const destinations: JsonSchema = {

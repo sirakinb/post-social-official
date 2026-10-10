@@ -141,4 +141,10 @@ async function tiktok(ctx: FetchContext): Promise<MetricsResult> {
   return { views: num(video.view_count), likes: num(video.like_count), comments: num(video.comment_count), shares: num(video.share_count), extra: {}, unavailable: [], resolvedId };
 }
 
-export const FETCHERS: Record<Platform, (ctx: FetchContext) => Promise<MetricsResult>> = { instagram, facebook, threads, youtube, tiktok };
+// Reading a member's post stats needs r_member_social, which LinkedIn grants only to
+// approved partners, so none are fetched.
+async function linkedin(): Promise<MetricsResult> {
+  return { extra: {}, unavailable: ["views", "likes", "comments", "shares"] };
+}
+
+export const FETCHERS: Record<Platform, (ctx: FetchContext) => Promise<MetricsResult>> = { instagram, facebook, threads, youtube, tiktok, linkedin };

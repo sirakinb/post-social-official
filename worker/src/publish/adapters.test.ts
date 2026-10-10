@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import type { DestinationOptions } from "../../../backend/lib/publishing/validate";
 import { publishFacebook } from "./facebook";
+import { linkedinCommentary, publishLinkedIn } from "./linkedin";
 import { publishInstagram, publishThreads } from "./meta";
 import { chunkPlan, publishTikTok } from "./tiktok";
 import { PublishError, type Bundle, type Checkpoint, type StepContext } from "./types";
@@ -431,5 +432,103 @@ describe("TikTok", () => {
       expect(ranges.at(-1)!.end).toBe(size - 1);
     }
     expect(chunkPlan(120_110_993).ranges).toHaveLength(2); // the 101-second video that failed
+  });
+});
+
+describe("LinkedIn", () => {
+  const li = (path: string) => (u: URL) => u.origin === "https://api.linkedin.com" && u.pathname === `/rest${path}`;
+  const bodyOf = (init: RequestInit) => JSON.parse(String(init.body));
+
+  it("posts text as the member, escaping LinkedIn's reserved characters", async () => {
+    let posted: Record<string, any> = {}; // eslint-disable-line @typescript-eslint/no-explicit-any
+    let headers: Headers = new Headers();
+    const h = harness("linkedin", { kind: "linkedin", visibility: "CONNECTIONS" }, [
+      (u, i) => {
+        if (!li("/posts")(u)) return undefined;
+        posted = bodyOf(i);
+        headers = new Headers(i.headers);
+        return new Response(null, { status: 201, headers: { "x-restli-id": "urn:li:share:123" } });
+      },
+    ], { media: [] });
+    h.ctx.bundle.caption = "Launch (beta) #PostSocial";
+    expect(await publishLinkedIn(h.ctx)).toEqual({ kind: "published", platformId: "urn:li:share:123", liveUrl: "https://www.linkedin.com/feed/update/urn:li:share:123/" });
+    expect(posted).toMatchObject({ author: "urn:li:person:acct-1", visibility: "CONNECTIONS", lifecycleState: "PUBLISHED", commentary: "Launch \\(beta\\) {hashtag|\\#|PostSocial}" });
+    expect(posted.content).toBeUndefined();
+    expect(headers.get("linkedin-version")).toMatch(/^\d{6}$/);
+    expect(headers.get("x-restli-protocol-version")).toBe("2.0.0");
+    expect(h.checkpoint.post_id).toBe("urn:li:share:123");
+  });
+
+  it("escapes text and turns hashtags into LinkedIn hashtags", () => {
+    expect(linkedinCommentary("a_b @me [x] <y> #one #two_three C#")).toBe("a\\_b \\@me \\[x\\] \\<y\\> {hashtag|\\#|one} {hashtag|\\#|two\\_three} C\\#");
+    expect(linkedinCommentary("#start")).toBe("{hashtag|\\#|start}");
+  });
+
+  it("uploads images, waits until LinkedIn has them, then posts a gallery", async () => {
+    let n = 0;
+    let ready = false;
+    let posted: Record<string, any> = {}; // eslint-disable-line @typescript-eslint/no-explicit-any
+    const h = harness("linkedin", { kind: "linkedin" }, [
+      (u, i) => (li("/images")(u) && u.searchParams.get("action") === "initializeUpload" && method(i) === "POST" ? json({ value: { uploadUrl: `https://www.linkedin.com/img${++n}`, image: `urn:li:image:I${n}` } }) : undefined),
+      (u) => (u.hostname === "r2.example" ? new Response(new Uint8Array([1, 2, 3])) : undefined),
+      (u, i) => (u.hostname === "www.linkedin.com" && method(i) === "PUT" ? new Response(null, { status: 201 }) : undefined),
+      (u) => (u.pathname.startsWith("/rest/images/") ? json({ status: ready ? "AVAILABLE" : "PROCESSING" }) : undefined),
+      (u, i) => (li("/posts")(u) ? ((posted = bodyOf(i)), new Response(null, { status: 201, headers: { "x-restli-id": "urn:li:share:9" } })) : undefined),
+    ], { media: [{}, {}] });
+    expect(await publishLinkedIn(h.ctx)).toMatchObject({ kind: "wait" });
+    expect(h.checkpoint.images).toEqual(["urn:li:image:I1", "urn:li:image:I2"]);
+    ready = true;
+    expect(await publishLinkedIn(h.ctx)).toMatchObject({ kind: "published", platformId: "urn:li:share:9" });
+    expect(n).toBe(2); // not uploaded again
+    expect(posted.content).toEqual({ multiImage: { images: [{ id: "urn:li:image:I1" }, { id: "urn:li:image:I2" }] } });
+  });
+
+  it("uploads a video in LinkedIn's parts with a cover, finishes it, waits, then posts", async () => {
+    const puts: string[] = [];
+    let finalize: Record<string, any> = {}; // eslint-disable-line @typescript-eslint/no-explicit-any
+    let init: Record<string, any> = {}; // eslint-disable-line @typescript-eslint/no-explicit-any
+    let status = "PROCESSING";
+    let posted: Record<string, any> = {}; // eslint-disable-line @typescript-eslint/no-explicit-any
+    const h = harness("linkedin", { kind: "linkedin", title: "Clip", cover_time_ms: 1500 }, [
+      (u, i) => (li("/videos")(u) && u.searchParams.get("action") === "initializeUpload" ? ((init = bodyOf(i)), json({ value: {
+        video: "urn:li:video:V1", uploadToken: "tok-1", thumbnailUploadUrl: "https://www.linkedin.com/thumb",
+        uploadInstructions: [{ uploadUrl: "https://www.linkedin.com/p1", firstByte: 0, lastByte: 5 }, { uploadUrl: "https://www.linkedin.com/p2", firstByte: 6, lastByte: 9 }],
+      } })) : undefined),
+      (u, i) => (u.hostname === "r2.example" ? (puts.push(`read ${new Headers(i.headers).get("range")}`), new Response(new Uint8Array(4), { status: 206 })) : undefined),
+      (u, i) => (u.hostname === "www.linkedin.com" && method(i) === "PUT" ? (puts.push(u.pathname), new Response(null, { status: 200, headers: { etag: `etag-${u.pathname.slice(1)}` } })) : undefined),
+      (u, i) => (li("/videos")(u) && u.searchParams.get("action") === "finalizeUpload" ? ((finalize = bodyOf(i)), new Response(null, { status: 200 })) : undefined),
+      (u) => (u.pathname === "/rest/videos/urn%3Ali%3Avideo%3AV1" ? json({ status }) : undefined),
+      (u, i) => (li("/posts")(u) ? ((posted = bodyOf(i)), new Response(null, { status: 201, headers: { "x-restli-id": "urn:li:ugcPost:7" } })) : undefined),
+    ], { media: [{ media_type: "video", mime_type: "video/mp4", size_bytes: 10, duration_seconds: 10 }] });
+    const asked = withCoverHelpers(h);
+
+    expect(await publishLinkedIn(h.ctx)).toMatchObject({ kind: "wait" });
+    expect(init.initializeUploadRequest).toEqual({ owner: "urn:li:person:acct-1", fileSizeBytes: 10, uploadCaptions: false, uploadThumbnail: true });
+    expect(puts).toEqual(["read bytes=0-5", "/p1", "read bytes=6-9", "/p2", "/thumb"]);
+    expect(asked).toEqual(["frame 1500"]);
+    expect(finalize.finalizeUploadRequest).toEqual({ video: "urn:li:video:V1", uploadToken: "tok-1", uploadedPartIds: ["etag-p1", "etag-p2"] });
+
+    status = "AVAILABLE";
+    expect(await publishLinkedIn(h.ctx)).toMatchObject({ kind: "published", platformId: "urn:li:ugcPost:7" });
+    expect(puts).toHaveLength(5); // nothing uploaded twice
+    expect(posted.content).toEqual({ media: { id: "urn:li:video:V1", title: "Clip" } });
+  });
+
+  it("doesn't post twice after an interruption, and asks to reconnect when access is refused", async () => {
+    const interrupted = harness("linkedin", { kind: "linkedin" }, [], { media: [], checkpoint: { publish_started_at: "2026-10-05T11:59:00Z" } });
+    await expect(publishLinkedIn(interrupted.ctx)).rejects.toMatchObject({ code: "unconfirmed" });
+
+    const refused = harness("linkedin", { kind: "linkedin" }, [(u) => (li("/posts")(u) ? json({ status: 401, message: "Expired" }, 401) : undefined)], { media: [] });
+    await expect(publishLinkedIn(refused.ctx)).rejects.toMatchObject({ code: "access_expired", reconnect: true });
+
+    const elsewhere = harness("linkedin", { kind: "linkedin" }, [
+      (u) => (li("/images")(u) ? json({ value: { uploadUrl: "https://evil.example/up", image: "urn:li:image:X" } }) : undefined),
+      (u) => (u.hostname === "r2.example" ? new Response(new Uint8Array([1])) : undefined),
+    ]);
+    await expect(publishLinkedIn(elsewhere.ctx)).rejects.toMatchObject({ code: "linkedin_bad_upload_url" });
+
+    const failed = harness("linkedin", { kind: "linkedin" }, [(u) => (li("/posts")(u) ? json({ status: 422, message: "Content is a duplicate" }, 422) : undefined)], { media: [] });
+    const error = await publishLinkedIn(failed.ctx).catch((e: PublishError) => e);
+    expect(error).toMatchObject({ code: "http_422", retryable: false, message: "Posting to LinkedIn failed: Content is a duplicate." });
   });
 });

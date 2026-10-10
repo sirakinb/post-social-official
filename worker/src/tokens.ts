@@ -10,6 +10,7 @@ const REFRESH_WINDOW_MS: Record<Platform, number> = {
   instagram: 7 * 24 * 60 * 60 * 1000,
   threads: 7 * 24 * 60 * 60 * 1000,
   facebook: 0, // Page tokens do not expire.
+  linkedin: 7 * 24 * 60 * 60 * 1000,
 };
 
 type Claimed = {
@@ -46,6 +47,9 @@ export async function refreshDueTokens(deps: TokenDeps) {
       const current = await open({ encryptedPayload: credential.encrypted_payload, initializationVector: credential.initialization_vector }, key);
       const result = await refreshTokens(account.platform, current, deps.setting, deps.http);
       if (!result) {
+        // Nothing to refresh with (LinkedIn without a refresh token): once access has run
+        // out, the person must reconnect.
+        if (expiresAt <= now()) await flagExpired(deps, credential.connected_account_id, account, "No refresh token; access ran out.");
         await release(deps, credential.id);
         continue;
       }
@@ -69,21 +73,25 @@ export async function refreshDueTokens(deps: TokenDeps) {
       // person must reconnect. Anything else (network, 5xx) is retried on the next run.
       const refused = error instanceof PlatformError && /^http_4|^(invalid|access_token|refresh_token)/.test(error.code);
       if (refused || expiresAt <= now()) {
-        const reason = `${DISPLAY_NAMES[account.platform]} access expired. Reconnect this account to keep posting.`;
-        await deps.sql(
-          `WITH flagged AS (
-             UPDATE public.connected_accounts SET health = 'needs_attention', health_reason = $2
-             WHERE id = $1 AND health = 'connected' RETURNING id, workspace_id
-           )
-           INSERT INTO public.audit_events (workspace_id, entry_point, event_type, entity_type, entity_id, summary, after_values)
-           SELECT workspace_id, 'worker', 'account.refresh_failed', 'account', id, $3, jsonb_build_object('reason', $4::text) FROM flagged`,
-          [credential.connected_account_id, reason, `Could not refresh ${account.display_name}`, error instanceof Error ? error.message.slice(0, 300) : "unknown"],
-        );
+        await flagExpired(deps, credential.connected_account_id, account, error instanceof Error ? error.message.slice(0, 300) : "unknown");
       }
       await release(deps, credential.id);
     }
   }
   return refreshed;
+}
+
+async function flagExpired(deps: TokenDeps, accountId: string, account: { platform: Platform; display_name: string }, detail: string) {
+  const reason = `${DISPLAY_NAMES[account.platform]} access expired. Reconnect this account to keep posting.`;
+  await deps.sql(
+    `WITH flagged AS (
+       UPDATE public.connected_accounts SET health = 'needs_attention', health_reason = $2
+       WHERE id = $1 AND health = 'connected' RETURNING id, workspace_id
+     )
+     INSERT INTO public.audit_events (workspace_id, entry_point, event_type, entity_type, entity_id, summary, after_values)
+     SELECT workspace_id, 'worker', 'account.refresh_failed', 'account', id, $3, jsonb_build_object('reason', $4::text) FROM flagged`,
+    [accountId, reason, `Could not refresh ${account.display_name}`, detail],
+  );
 }
 
 async function release(deps: TokenDeps, credentialId: string) {

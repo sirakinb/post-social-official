@@ -22,7 +22,11 @@ export async function accountToken(deps: CredentialDeps, account: AccountRef, no
   const refreshed = await refreshTokens(account.platform, tokens, deps.setting, deps.http).catch((error) => {
     throw new PublishError("access_expired", `${account.displayName}'s access expired and could not be renewed (${error instanceof Error ? error.message : "unknown"}). Reconnect it.`, false, undefined, true);
   });
-  if (!refreshed) return tokens.accessToken;
+  if (!refreshed) {
+    // Nothing to renew with (LinkedIn without a refresh token).
+    if (expires <= now()) throw new PublishError("access_expired", `${account.displayName}'s access expired. Reconnect it.`, false, undefined, true);
+    return tokens.accessToken;
+  }
   const sealed = await seal(refreshed.tokens, key);
   await deps.sql(
     `UPDATE public.credentials SET encrypted_payload = $2, initialization_vector = $3, access_token_expires_at = $4,

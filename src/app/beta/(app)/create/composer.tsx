@@ -205,7 +205,7 @@ export function Composer({ workspaceId, accounts, library: initialLibrary, editi
                         <PlatformMark platform={a.platform} size={26} className="rounded-full" />
                       )}
                     </span>
-                    {a.platform === "youtube" || a.platform === "facebook" ? a.name : `@${a.handle}`}
+                    {a.platform === "youtube" || a.platform === "facebook" || a.platform === "linkedin" ? a.name : `@${a.handle}`}
                   </button>
                 );
               })}
@@ -421,7 +421,7 @@ function PlatformOptions({ account, choice, media, caption, onChange, creator, c
       <div className="flex items-center gap-2">
         <PlatformMark platform={account.platform} />
         <span className="font-medium">{NAMES[account.platform]}</span>
-        <span className="text-ps-subtle">{account.platform === "youtube" || account.platform === "facebook" ? account.name : `@${account.handle}`}</span>
+        <span className="text-ps-subtle">{account.platform === "youtube" || account.platform === "facebook" || account.platform === "linkedin" ? account.name : `@${account.handle}`}</span>
       </div>
       {types && (
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -458,6 +458,11 @@ function PlatformOptions({ account, choice, media, caption, onChange, creator, c
             </span>
           </div>
         </>
+      )}
+      {account.platform === "linkedin" && (
+        <p className="m-0 text-xs text-ps-muted">
+          Posts to your LinkedIn profile as {media.some((m) => m.type === "video") ? "a video" : media.length > 1 ? "an image gallery" : media.length ? "an image post" : "a text post"}.
+        </p>
       )}
       {account.platform === "tiktok" && <TikTokOptions value={choice.tiktok ?? NEW_TIKTOK} onChange={(t) => onChange({ tiktok: t })} info={creator} infoError={creatorError} accountName={account.name} photo={isTikTokPhotoPost(media)} />}
     </div>

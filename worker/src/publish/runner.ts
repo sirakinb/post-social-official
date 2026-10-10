@@ -8,6 +8,7 @@ import { accountToken } from "../credentials";
 import type { R2 } from "../../../backend/lib/media/r2";
 import { destinationProblems, type DestinationOptions } from "../../../backend/lib/publishing/validate";
 import { publishFacebook } from "./facebook";
+import { publishLinkedIn } from "./linkedin";
 import { publishInstagram, publishThreads } from "./meta";
 import { publishTikTok } from "./tiktok";
 import { tiktokPhotoLinks } from "./tiktok-photos";
@@ -21,6 +22,7 @@ export const ADAPTERS: Record<Platform, Adapter> = {
   threads: publishThreads,
   youtube: publishYouTube,
   tiktok: publishTikTok,
+  linkedin: publishLinkedIn,
 };
 
 export type PublishDeps = {

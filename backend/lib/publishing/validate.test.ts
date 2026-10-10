@@ -117,6 +117,34 @@ describe("TikTok", () => {
   });
 });
 
+describe("LinkedIn", () => {
+  const linkedin = { kind: "linkedin" } as const;
+  it("follows the media: text, images or one video", () => {
+    expect(check(linkedin, [])).toEqual([]);
+    expect(check(linkedin, [], "  ")).toEqual(["Write the text for this LinkedIn post."]);
+    expect(check(linkedin, [image(), image({ mime_type: "image/png" }), image({ mime_type: "image/gif" })])).toEqual([]);
+    expect(check(linkedin, [media()])).toEqual([]);
+    expect(check(linkedin, [media(), image()])).toEqual(["A LinkedIn video post needs exactly 1 video; this post has 2 files."]);
+    expect(check({ ...linkedin, media_type: "text" }, [image()])).toEqual(["A LinkedIn text post cannot include media; choose image or video instead."]);
+  });
+
+  it("checks limits", () => {
+    expect(check(linkedin, [], "x".repeat(3001))).toEqual(["LinkedIn posts can be at most 3,000 characters; this one is 3,001."]);
+    expect(check(linkedin, Array.from({ length: 21 }, () => image()))).toEqual(["LinkedIn posts can have at most 20 images; this one has 21."]);
+    expect(check(linkedin, [image({ mime_type: "image/webp" })])).toEqual(["LinkedIn images must be JPEG or PNG or GIF; photo.jpg is image/webp."]);
+    expect(check(linkedin, [media({ mime_type: "video/quicktime" })])).toEqual(["LinkedIn videos must be MP4; clip.mp4 is video/quicktime."]);
+    expect(check(linkedin, [media({ duration_seconds: 2 })])).toEqual(["LinkedIn videos must be at least 3 seconds; clip.mp4 is 2 seconds."]);
+    expect(check(linkedin, [media({ size_bytes: 600 * 1024 * 1024 })])).toEqual(["LinkedIn videos can be at most 500 MB; clip.mp4 is 600 MB."]);
+  });
+
+  it("uses its own text, defaults to public and refuses unknown values", () => {
+    expect(check({ ...linkedin, text: "" }, [])).toEqual(["Write the text for this LinkedIn post."]);
+    expect(normalizeOptions("linkedin", {}).options).toEqual({ kind: "linkedin", media_type: undefined, text: undefined, title: undefined, visibility: "PUBLIC" });
+    expect(normalizeOptions("linkedin", { visibility: "FRIENDS" }).problems).toEqual(["Choose who can see the LinkedIn post: PUBLIC or CONNECTIONS."]);
+    expect(normalizeOptions("linkedin", { media_type: "reel" }).problems).toEqual(["Choose a LinkedIn post type: text, image or video."]);
+  });
+});
+
 it("refuses media that is not ready", () => {
   expect(check({ kind: "instagram", media_type: "image" }, [image({ status: "processing" })])).toEqual(["photo.jpg is still being checked; only ready media can be posted."]);
 });

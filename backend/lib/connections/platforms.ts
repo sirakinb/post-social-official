@@ -2,8 +2,8 @@
 // convex/tokenLifecycle.ts and convex/lib/platformRevocation.ts; runtime-neutral (fetch
 // only). Scopes are exactly those in the PRD, section 6.
 
-export type Platform = "instagram" | "facebook" | "threads" | "youtube" | "tiktok";
-export const PLATFORMS: Platform[] = ["instagram", "facebook", "threads", "youtube", "tiktok"];
+export type Platform = "instagram" | "facebook" | "threads" | "youtube" | "tiktok" | "linkedin";
+export const PLATFORMS: Platform[] = ["instagram", "facebook", "threads", "youtube", "tiktok", "linkedin"];
 
 export type Settings = (name: string) => string;
 
@@ -44,6 +44,8 @@ export const SCOPES: Record<Platform, string[]> = {
   facebook: ["pages_show_list", "pages_read_engagement", "pages_manage_posts"],
   threads: ["threads_basic", "threads_content_publish"],
   youtube: ["https://www.googleapis.com/auth/youtube.upload"],
+  // Sign In with LinkedIn (name and photo) + Share on LinkedIn (posting as the member).
+  linkedin: ["openid", "profile", "w_member_social"],
 };
 
 // Read permissions for post stats (Phase 5D). They are requested only where analytics is
@@ -55,6 +57,7 @@ export const ANALYTICS_SCOPES: Record<Platform, string[]> = {
   facebook: [],
   threads: ["threads_manage_insights"],
   youtube: ["https://www.googleapis.com/auth/youtube.readonly"],
+  linkedin: [],
 };
 
 export function analyticsPlatforms(setting: Settings): Platform[] {
@@ -77,6 +80,7 @@ export const DISPLAY_NAMES: Record<Platform, string> = {
   threads: "Threads",
   youtube: "YouTube",
   tiktok: "TikTok",
+  linkedin: "LinkedIn",
 };
 
 // What each platform accepts through its API (2026 documentation). Stored on each account
@@ -105,6 +109,15 @@ export const CAPABILITIES: Record<Platform, Capabilities> = {
     caption_max_chars: 2200,
     video_max_seconds: 600,
     notes: "Each creator's own maximum video length is checked before posting.",
+  },
+  linkedin: {
+    post_types: ["text", "image", "video"],
+    caption_max_chars: 3000,
+    video_min_seconds: 3,
+    video_max_seconds: 1800,
+    carousel_max_items: 20,
+    image_types: ["image/jpeg", "image/png", "image/gif"],
+    notes: "Posts to the member's own profile. Videos are MP4, 75 KB to 500 MB. Up to 20 images show as a gallery.",
   },
 };
 
@@ -160,6 +173,11 @@ export function authorizeUrl(platform: Platform, state: string, redirectUri: str
       url.searchParams.set("access_type", "offline");
       url.searchParams.set("prompt", "consent");
       url.searchParams.set("include_granted_scopes", "false");
+      break;
+    case "linkedin":
+      url = new URL("https://www.linkedin.com/oauth/v2/authorization");
+      url.searchParams.set("client_id", setting("LINKEDIN_CLIENT_ID"));
+      url.searchParams.set("scope", scopesFor("linkedin", setting).join(" "));
       break;
   }
   url.searchParams.set("redirect_uri", redirectUri);
@@ -306,6 +324,36 @@ export async function exchangeCode(platform: Platform, code: string, redirectUri
     }];
   }
 
+  if (platform === "linkedin") {
+    const token = await json(
+      await http("https://www.linkedin.com/oauth/v2/accessToken", form({
+        grant_type: "authorization_code", code, redirect_uri: redirectUri, client_id: setting("LINKEDIN_CLIENT_ID"), client_secret: setting("LINKEDIN_CLIENT_SECRET"),
+      })),
+      "LinkedIn sign-in",
+    );
+    const profile = await json(
+      await http("https://api.linkedin.com/v2/userinfo", { headers: { Authorization: `Bearer ${token.access_token}` } }),
+      "Reading the LinkedIn profile",
+    );
+    // `sub` is the member id that posts are authored as (urn:li:person:{sub}).
+    const externalId = String(profile.sub ?? "");
+    if (!externalId) throw new PlatformError("LinkedIn did not return a profile.");
+    const name = String(profile.name || [profile.given_name, profile.family_name].filter(Boolean).join(" ")).trim() || "LinkedIn member";
+    return [{
+      externalAccountId: externalId,
+      ownerExternalId: externalId,
+      // LinkedIn doesn't share the profile's public address with these permissions.
+      handle: name,
+      displayName: name,
+      avatarUrl: typeof profile.picture === "string" ? profile.picture : undefined,
+      scopes: String(token.scope ?? SCOPES.linkedin.join(" ")).split(/[ ,]+/).filter(Boolean),
+      tokens: { accessToken: token.access_token, refreshToken: token.refresh_token },
+      accessTokenExpiresAt: inSeconds(token.expires_in),
+      refreshTokenExpiresAt: inSeconds(token.refresh_token_expires_in),
+      capabilities: CAPABILITIES.linkedin,
+    }];
+  }
+
   // YouTube. The youtube.upload scope cannot read channel details, so the account is
   // shown as "YouTube channel" and keyed by the Google grant (see completeConnection).
   const tokens = await json(
@@ -333,6 +381,23 @@ export type Refreshed = { tokens: { accessToken: string; refreshToken?: string }
 
 export async function refreshTokens(platform: Platform, current: { accessToken: string; refreshToken?: string }, setting: Settings, http: typeof fetch = fetch): Promise<Refreshed | null> {
   if (platform === "facebook") return null; // Page tokens do not expire.
+  if (platform === "linkedin") {
+    // Most apps get no refresh token: access lasts 60 days, then the person reconnects.
+    if (!current.refreshToken) return null;
+    const token = await json(
+      await http("https://www.linkedin.com/oauth/v2/accessToken", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: current.refreshToken, client_id: setting("LINKEDIN_CLIENT_ID"), client_secret: setting("LINKEDIN_CLIENT_SECRET") }),
+      }),
+      "Refreshing LinkedIn access",
+    );
+    return {
+      tokens: { accessToken: token.access_token, refreshToken: token.refresh_token ?? current.refreshToken },
+      accessTokenExpiresAt: inSeconds(token.expires_in),
+      refreshTokenExpiresAt: inSeconds(token.refresh_token_expires_in),
+    };
+  }
   if (platform === "tiktok") {
     if (!current.refreshToken) throw new PlatformError("TikTok refresh token is missing.");
     const token = await json(
@@ -386,6 +451,12 @@ export async function revokeTokens(platform: Platform, tokens: { accessToken: st
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({ client_key: setting("TIKTOK_CLIENT_KEY"), client_secret: setting("TIKTOK_CLIENT_SECRET"), token: tokens.accessToken }),
+      });
+    } else if (platform === "linkedin") {
+      response = await http("https://www.linkedin.com/oauth/v2/revoke", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ client_id: setting("LINKEDIN_CLIENT_ID"), client_secret: setting("LINKEDIN_CLIENT_SECRET"), token: tokens.accessToken }),
       });
     } else {
       const host = platform === "instagram" ? "https://graph.instagram.com" : platform === "threads" ? "https://graph.threads.net/v1.0" : `https://graph.facebook.com/${META_VERSION}`;

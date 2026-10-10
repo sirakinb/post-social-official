@@ -114,6 +114,18 @@ cannot give. Use `prod` instead of `dev` for prod (asks you to type `prod`). The
   TikTok's portal for both the live app and the sandbox (TXT records on the root domain;
   `www` is a CNAME and can't hold one). Dev uses the same website address.
 
+## LinkedIn sign-in
+
+- **Secrets.** `LINKEDIN_CLIENT_ID` and `LINKEDIN_CLIENT_SECRET`, on the `connections`
+  function (sign-in, disconnect) and the worker (posting), in each environment.
+- **Redirect URLs** (LinkedIn app, Auth tab): `{CONNECTIONS_BASE_URL}/oauth/linkedin/callback`
+  for dev and prod, i.e. `https://syydd6ck-zqc.function2.insforge.app/connections/oauth/linkedin/callback`
+  and `https://syydd6ck.function2.insforge.app/connections/oauth/linkedin/callback`.
+- **Permissions.** `openid`, `profile` and `w_member_social`: posting to the member's own
+  profile. Company Pages need the separately reviewed Community Management API
+  (`w_organization_social`). Without a refresh token, access lasts 60 days and the account
+  is flagged to reconnect when it runs out.
+
 ## Media storage, functions and the worker
 
 | | Dev | Prod |
