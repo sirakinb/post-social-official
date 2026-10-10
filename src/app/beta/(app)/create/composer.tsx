@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActorMark } from "@/components/beta/marks";
+import { AccountMark } from "@/components/beta/avatar-img";
 import { Label, PlatformMark, Thumb } from "@/components/beta/ui";
 import { useUpload, type ReadyMedia } from "@/components/beta/use-upload";
 import {
@@ -196,14 +196,7 @@ export function Composer({ workspaceId, accounts, library: initialLibrary, editi
                     className={cn("inline-flex h-[38px] items-center gap-2.5 rounded-full border pl-1.5 pr-3 text-[13px] transition-colors", on ? "border-ps-plum/60 bg-ps-plum/[0.12] text-ps-text" : "border-white/[0.08] text-ps-subtle opacity-80 hover:opacity-100")}
                   >
                     <span className="relative">
-                      {a.avatarUrl ? (
-                        <>
-                          <ActorMark kind="user" name={a.name} avatarUrl={a.avatarUrl} size={26} />
-                          <PlatformMark platform={a.platform} size={15} className="absolute -bottom-1 -right-1.5 rounded-[5px]" />
-                        </>
-                      ) : (
-                        <PlatformMark platform={a.platform} size={26} className="rounded-full" />
-                      )}
+                      <AccountMark platform={a.platform} avatarUrl={a.avatarUrl} size={26} badge={15} />
                     </span>
                     {a.platform === "youtube" || a.platform === "facebook" || a.platform === "linkedin" ? a.name : `@${a.handle}`}
                   </button>

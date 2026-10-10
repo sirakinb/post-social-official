@@ -13,7 +13,7 @@ export function Preview({ account, media, caption, mediaType, title }: { account
   const fullBleed = (account.platform === "instagram" && mediaType === "reel") || account.platform === "tiktok" || account.platform === "youtube" || (account.platform === "facebook" && mediaType === "reel");
   const author = (
     <div className="flex items-center gap-2">
-      <ActorMark kind="user" name={account.name} avatarUrl={account.avatarUrl} size={26} />
+      <ActorMark kind="user" name={account.name} avatarUrl={account.avatarUrl} size={26} fallback={<PlatformMark platform={account.platform} size={26} className="rounded-full" />} />
       <span className="text-xs font-semibold">{account.platform === "youtube" ? account.name : account.handle}</span>
     </div>
   );

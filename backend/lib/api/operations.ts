@@ -115,7 +115,7 @@ export const operations: Operation[] = [
     path: "/v1/accounts",
     input: { properties: { platform: { type: "string", enum: PLATFORMS, description: "Only this platform." } } },
     readOnly: true,
-    run: (deps, caller, input) => listAccounts(deps.sql, caller, { ...input, workspace_id: caller.workspaceId }),
+    run: (deps, caller, input) => listAccounts(deps.sql, caller, { ...input, workspace_id: caller.workspaceId }, deps.webAppUrl),
   },
   {
     name: "request_connect_link",

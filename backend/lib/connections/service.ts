@@ -161,7 +161,7 @@ export async function completeConnection(deps: ConnectionDeps, platform: Platfor
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, 'connected', NULL, $10, now(), NULL)
          ON CONFLICT (workspace_id, platform, external_account_id) DO UPDATE SET
            owner_external_id = EXCLUDED.owner_external_id, handle = EXCLUDED.handle, display_name = EXCLUDED.display_name,
-           avatar_url = EXCLUDED.avatar_url, scopes = EXCLUDED.scopes, capabilities = EXCLUDED.capabilities,
+           avatar_url = EXCLUDED.avatar_url, avatar_synced_at = NULL, avatar_attempted_at = NULL, scopes = EXCLUDED.scopes, capabilities = EXCLUDED.capabilities,
            health = 'connected', health_reason = NULL, last_verified_at = now(), disconnected_at = NULL
          RETURNING id, (xmax = 0) AS created
        ), credential AS (

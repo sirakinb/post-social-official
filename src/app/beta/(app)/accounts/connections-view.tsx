@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useSyncExternalStore, type FormEvent } from "react";
 import { ActorMark } from "@/components/beta/marks";
+import { AccountMark } from "@/components/beta/avatar-img";
 import { PlatformMark, Status } from "@/components/beta/ui";
 import { cn } from "@/lib/utils";
 import { createKey, revokeGrant, revokeKey } from "../keys/actions";
@@ -138,14 +139,7 @@ export function ConnectionsView(props: {
           {active.map((a) => (
             <div key={a.id} className="flex flex-wrap items-center gap-3 border-b border-white/[0.05] px-4 py-3">
               <span className="relative">
-                {a.avatarUrl ? (
-                  <>
-                    <ActorMark kind="user" name={a.name} avatarUrl={a.avatarUrl} size={32} />
-                    <PlatformMark platform={a.platform} size={16} className="absolute -bottom-1 -right-1.5 rounded-[5px]" />
-                  </>
-                ) : (
-                  <PlatformMark platform={a.platform} size={32} className="rounded-full" />
-                )}
+                <AccountMark platform={a.platform} avatarUrl={a.avatarUrl} size={32} badge={16} />
               </span>
               <span className="min-w-[180px] flex-1">
                 <span className="block">{a.name} <span className="text-ps-subtle">{a.platform === "youtube" || a.platform === "facebook" ? KIND[a.platform] : `@${a.handle} · ${KIND[a.platform]}`}</span></span>

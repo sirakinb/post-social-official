@@ -55,6 +55,8 @@ const nextConfig: NextConfig = {
       ...posthog,
       { source: "/api/v1/:path*", destination: `${api}/v1/:path*` },
       { source: "/mcp", destination: `${api}/mcp` },
+      // Saved profile pictures of connected accounts.
+      { source: "/api/avatars/:path*", destination: `${api}/avatars/:path*` },
       // OAuth for AI apps (ChatGPT, the Claude app): discovery, registration and tokens.
       // The sign-in page itself is /oauth/authorize, a page on this site.
       { source: "/.well-known/oauth-protected-resource", destination: `${api}/.well-known/oauth-protected-resource` },
