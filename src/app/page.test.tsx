@@ -27,8 +27,9 @@ describe("LandingPage", () => {
     expect(screen.getByRole("img", { name: "Post Social" })).toBeInTheDocument();
     const images = screen.getAllByTestId("image").map((i) => i.getAttribute("data-src"));
     expect(images).toContain("/landing/hero-dusk-2560.webp");
-    const strip = screen.getByRole("list", { name: /Publishes to TikTok, Instagram, Facebook Pages, Threads and YouTube/ });
-    expect(within(strip).getAllByRole("listitem")).toHaveLength(5);
+    const strip = screen.getByRole("list", { name: /Publishes to TikTok, Instagram, Facebook Pages, Threads, YouTube, LinkedIn and Bluesky, with X coming soon/ });
+    expect(within(strip).getAllByRole("listitem")).toHaveLength(8);
+    expect(within(strip).getByText("X (coming soon)")).toBeInTheDocument();
   });
 
   it("links each section from the header", () => {
@@ -49,13 +50,13 @@ describe("LandingPage", () => {
     for (const s of screens) expect(s.getAttribute("data-alt")?.length).toBeGreaterThan(10);
   });
 
-  it("is honest about platforms: five live, three marked as coming next", () => {
+  it("is honest about platforms: seven live, one marked as coming next", () => {
     render(<LandingPage />);
     const platforms = document.getElementById("platforms") as HTMLElement;
-    for (const name of ["TikTok", "Instagram", "Facebook Pages", "Threads", "YouTube", "Coming next"]) {
+    for (const name of ["TikTok", "Instagram", "Facebook Pages", "Threads", "YouTube", "LinkedIn", "Bluesky", "Coming next"]) {
       expect(within(platforms).getByRole("heading", { name })).toBeInTheDocument();
     }
-    expect(within(platforms).getByText("LinkedIn, Bluesky and X.")).toBeInTheDocument();
+    expect(within(platforms).getByText("X.")).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/\d+%|free trial|testimonial|eight destinations/i);
   });
 
