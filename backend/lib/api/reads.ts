@@ -20,7 +20,11 @@ function platformFilter(value: unknown): Platform | null {
   return value as Platform;
 }
 
-export async function listAccounts(sql: Sql, caller: Caller, input: { workspace_id: string; platform?: unknown }) {
+// Saved profile pictures are stored as an address on our site (/api/avatars/...); AI apps
+// get the full link.
+const fullLink = (url: unknown, site?: string) => (typeof url === "string" && url.startsWith("/") ? (site ? `${site.replace(/\/+$/, "")}${url}` : null) : url ?? null);
+
+export async function listAccounts(sql: Sql, caller: Caller, input: { workspace_id: string; platform?: unknown }, site?: string) {
   await membership(sql, caller, input.workspace_id, false);
   const platform = platformFilter(input.platform);
   const rows = await sql<Record<string, unknown> & { platform: Platform; policy: string }>(
@@ -34,6 +38,7 @@ export async function listAccounts(sql: Sql, caller: Caller, input: { workspace_
   return {
     accounts: rows.map(({ policy, ...row }) => ({
       ...row,
+      avatar_url: fullLink(row.avatar_url, site),
       platform_name: DISPLAY_NAMES[row.platform],
       ...(policy === "autonomous" ? {} : { approval: "AI posts wait for approval in Post Social (this account is set to ask first)" }),
     })),

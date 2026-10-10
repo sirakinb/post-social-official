@@ -377,6 +377,43 @@ export async function exchangeCode(platform: Platform, code: string, redirectUri
   }];
 }
 
+// The account's current profile picture link, asked fresh from the platform (the links
+// are signed and expire within days, so a saved one can't be reused). Null when the
+// platform shares no picture with our permissions (YouTube upload-only access).
+export async function currentAvatarUrl(platform: Platform, externalAccountId: string, accessToken: string, http: typeof fetch = fetch): Promise<string | null> {
+  const text = (value: unknown) => (typeof value === "string" && value ? value : null);
+  if (platform === "instagram" || platform === "threads") {
+    const url = platform === "instagram" ? new URL(`https://graph.instagram.com/${META_VERSION}/me`) : new URL("https://graph.threads.net/v1.0/me");
+    url.searchParams.set("fields", platform === "instagram" ? "profile_picture_url" : "threads_profile_picture_url");
+    url.searchParams.set("access_token", accessToken);
+    const profile = await json(await http(url), `Reading the ${DISPLAY_NAMES[platform]} picture`);
+    return text(platform === "instagram" ? profile.profile_picture_url : profile.threads_profile_picture_url);
+  }
+  if (platform === "facebook") {
+    const url = new URL(`https://graph.facebook.com/${META_VERSION}/${encodeURIComponent(externalAccountId)}/picture`);
+    url.searchParams.set("redirect", "0");
+    url.searchParams.set("type", "large");
+    url.searchParams.set("access_token", accessToken);
+    const picture = await json(await http(url), "Reading the Facebook Page picture");
+    return text(picture.data?.url);
+  }
+  if (platform === "tiktok") {
+    const creator = await json(
+      await http("https://open.tiktokapis.com/v2/post/publish/creator_info/query/", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json; charset=UTF-8" },
+      }),
+      "Reading the TikTok picture",
+    );
+    return text(creator.data?.creator_avatar_url);
+  }
+  if (platform === "linkedin") {
+    const profile = await json(await http("https://api.linkedin.com/v2/userinfo", { headers: { Authorization: `Bearer ${accessToken}` } }), "Reading the LinkedIn picture");
+    return text(profile.picture);
+  }
+  return null;
+}
+
 export type Refreshed = { tokens: { accessToken: string; refreshToken?: string }; accessTokenExpiresAt?: Date; refreshTokenExpiresAt?: Date };
 
 export async function refreshTokens(platform: Platform, current: { accessToken: string; refreshToken?: string }, setting: Settings, http: typeof fetch = fetch): Promise<Refreshed | null> {
