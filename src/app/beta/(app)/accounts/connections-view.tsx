@@ -147,7 +147,7 @@ export function ConnectionsView(props: {
                 <AccountMark platform={a.platform} avatarUrl={a.avatarUrl} size={32} badge={16} />
               </span>
               <span className="min-w-[180px] flex-1">
-                <span className="block">{a.name} <span className="text-ps-subtle">{a.platform === "youtube" || a.platform === "facebook" ? KIND[a.platform] : `@${a.handle} · ${KIND[a.platform]}`}</span></span>
+                <span className="block">{a.name} <span className="text-ps-subtle">{a.platform === "youtube" || a.platform === "facebook" || a.platform === "linkedin" ? KIND[a.platform] : `@${a.handle} · ${KIND[a.platform]}`}</span></span>
                 <span className="mt-0.5 block text-xs text-ps-subtle">{a.lastPostedAt ? `Last post ${ago(a.lastPostedAt, now)}` : `Connected ${ago(a.connectedAt, now)}`}{a.platform === "tiktok" ? " · AI posts go to your TikTok inbox" : ""}</span>
               </span>
               {a.health === "needs_attention" ? <Status tone="attention" label="Needs attention" /> : <Status tone="live" label="Connected" />}
