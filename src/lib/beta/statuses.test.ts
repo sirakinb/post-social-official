@@ -15,6 +15,9 @@ describe("log statuses", () => {
   it("recognizes AI apps by the name they signed in with", () => {
     expect(appMark("Claude Code (post-social-oauth)")).toBe("claude");
     expect(appMark("ChatGPT")).toBe("openai");
-    expect(appMark("Cursor")).toBeNull();
+    expect(appMark("Codex")).toBe("openai");
+    expect(appMark("Cursor")).toBe("cursor");
+    expect(appMark("Gemini CLI")).toBe("gemini");
+    expect(appMark("Key A")).toBeNull();
   });
 });

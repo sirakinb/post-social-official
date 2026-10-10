@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { areaOf, errorOf, levelOf } from "./logs";
+import { areaOf, errorOf, levelOf, whoDid } from "./logs";
 
 describe("logs", () => {
   it("sorts events into levels and areas", () => {
@@ -17,5 +17,22 @@ describe("logs", () => {
     expect(errorOf("media.failed", { reason: "Video is longer than 3 minutes" }, null)).toEqual({ code: null, message: "Video is longer than 3 minutes" });
     expect(errorOf("account.refresh_failed", null, null)).toBeNull();
     expect(errorOf("post.created", { message: "not an error" }, null)).toBeNull();
+  });
+});
+
+describe("whoDid", () => {
+  const aki = { kind: "user" as const, display_name: "Aki" };
+  const key = { kind: "api_key" as const, display_name: "Key A", client_name: "Claude Code" };
+
+  it("credits publishing steps to whoever made the post", () => {
+    expect(whoDid(null, aki)).toEqual({ actorKind: "user", actorName: "Aki", actorVia: null });
+    expect(whoDid(null, key)).toEqual({ actorKind: "api_key", actorName: "Claude Code", actorVia: "Key A" });
+  });
+
+  it("shows the AI app's own name over the key's, and Post Social when no one is behind it", () => {
+    expect(whoDid(key, aki).actorName).toBe("Claude Code");
+    expect(whoDid({ kind: "oauth_grant", display_name: "Codex", client_name: "Codex" }, null)).toEqual({ actorKind: "oauth_grant", actorName: "Codex", actorVia: null });
+    expect(whoDid({ kind: "api_key", display_name: "Key A", client_name: null }, null).actorName).toBe("Key A");
+    expect(whoDid(null, null)).toEqual({ actorKind: "system", actorName: "Post Social", actorVia: null });
   });
 });

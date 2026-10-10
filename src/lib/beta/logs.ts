@@ -65,7 +65,10 @@ export type LogRow = {
   area: Area | null;
   source: Source;
   actorKind: ActorKind;
+  // The app's own name when an AI app did it ("Claude Code"), else the person's or key's.
   actorName: string;
+  // The key or connection the app used, when that differs from the name shown.
+  actorVia: string | null;
   summary: string;
   status: LogStatus;
   // For failures: the reason given, and its code when there is one.
@@ -106,13 +109,25 @@ type EventRow = {
   before_values: Record<string, unknown> | null;
   after_values: Record<string, unknown> | null;
   metadata: Record<string, unknown> | null;
-  actors: { kind: ActorKind; display_name: string } | null;
+  actors: Actor | null;
 };
+
+type Actor = { kind: ActorKind; display_name: string; client_name?: string | null };
+
+// Who to show for an event. Publishing steps run in our worker, so they are credited to
+// whoever made the post (a person in the web app, or the AI app that sent it); events
+// with no one behind them are Post Social's.
+export function whoDid(actor: Actor | null, postedBy: Actor | null): Pick<LogRow, "actorKind" | "actorName" | "actorVia"> {
+  const who = actor ?? postedBy;
+  if (!who) return { actorKind: "system", actorName: "Post Social", actorVia: null };
+  const app = who.kind === "user" ? null : who.client_name?.trim() || null;
+  return { actorKind: who.kind, actorName: app ?? who.display_name, actorVia: app && app !== who.display_name ? who.display_name : null };
+}
 
 export async function loadLogs(client: Client, workspaceId: string, filters: LogFilters, limit = 50) {
   let query = client.database
     .from("audit_events")
-    .select("id, occurred_at, event_type, entry_point, entity_type, entity_id, summary, before_values, after_values, metadata, actors(kind, display_name)")
+    .select("id, occurred_at, event_type, entry_point, entity_type, entity_id, summary, before_values, after_values, metadata, actors(kind, display_name, client_name)")
     .eq("workspace_id", workspaceId)
     .order("occurred_at", { ascending: false })
     .limit(limit + 1);
@@ -127,10 +142,15 @@ export async function loadLogs(client: Client, workspaceId: string, filters: Log
   // Which post and account each publishing event was about.
   const destinationIds = [...new Set(rows.filter((r) => r.entity_type === "destination" && r.entity_id).map((r) => r.entity_id!))];
   const targets = new Map<string, NonNullable<LogRow["target"]>>();
+  const postedBy = new Map<string, Actor>();
   if (destinationIds.length) {
-    const { data: destinations } = await client.database.from("destinations").select("id, platform, post_id, connected_accounts(display_name)").in("id", destinationIds);
-    for (const d of (destinations ?? []) as unknown as Array<{ id: string; platform: string; post_id: string; connected_accounts: { display_name: string } | null }>) {
+    const { data: destinations } = await client.database
+      .from("destinations")
+      .select("id, platform, post_id, connected_accounts(display_name), actors!destinations_actor_id_fkey(kind, display_name, client_name)")
+      .in("id", destinationIds);
+    for (const d of (destinations ?? []) as unknown as Array<{ id: string; platform: string; post_id: string; connected_accounts: { display_name: string } | null; actors: Actor | null }>) {
       targets.set(d.id, { platform: d.platform, account: d.connected_accounts?.display_name ?? "", postId: d.post_id });
+      if (d.actors) postedBy.set(d.id, d.actors);
     }
   }
 
@@ -143,8 +163,7 @@ export async function loadLogs(client: Client, workspaceId: string, filters: Log
       eventType: r.event_type,
       area: areaOf(r.event_type),
       source: r.entry_point,
-      actorKind: r.actors?.kind ?? "system",
-      actorName: r.actors?.display_name ?? "Post Social",
+      ...whoDid(r.actors, r.entity_type === "destination" && r.entity_id ? (postedBy.get(r.entity_id) ?? null) : null),
       summary: r.summary,
       status: statusFor(r.event_type, r.summary),
       error: errorOf(r.event_type, r.after_values, r.metadata),

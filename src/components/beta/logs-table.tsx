@@ -51,7 +51,7 @@ export function LogsTable({ rows }: { rows: LogRow[] }) {
               <span role="cell" className="text-xs text-ps-muted">{SOURCES[r.source] ?? r.source}</span>
               <span role="cell" className="flex min-w-0 items-center gap-2 text-xs text-ps-muted">
                 <ActorMark kind={r.actorKind} name={r.actorName} size={18} />
-                <span className="truncate">{r.actorName}</span>
+                <span className="truncate" title={r.actorVia ? `${r.actorName}, using ${r.actorVia}` : undefined}>{r.actorName}</span>
               </span>
             </button>
             {expanded && (

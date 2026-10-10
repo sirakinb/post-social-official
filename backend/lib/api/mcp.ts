@@ -2,6 +2,7 @@
 // gets a JSON reply; there are no sessions or server-sent streams. Tools are generated from
 // the operations list, so they match the REST API exactly.
 import type { AgentCaller } from "../access";
+import { clientLabel } from "./clients";
 import { availableOperations, type ApiDeps, type Operation } from "./operations";
 import { describeError } from "./rest";
 
@@ -36,6 +37,18 @@ export function toolDefinition(operation: Operation) {
   };
 }
 
+// Notes which app is behind this key or connection, for the logs. Never stops the app
+// connecting if it can't be saved.
+async function rememberClient(deps: ApiDeps, caller: AgentCaller, info: unknown) {
+  const label = clientLabel(info);
+  if (!label) return;
+  try {
+    await deps.sql(`UPDATE public.actors SET client_name = $2 WHERE id = $1 AND client_name IS DISTINCT FROM $2`, [caller.actorId, label]);
+  } catch {
+    // The logs fall back to the key's or app's own name.
+  }
+}
+
 // Returns the reply body, or null for a notification (answered with 202 and no body).
 export async function handleMcp(deps: ApiDeps, caller: AgentCaller, raw: unknown): Promise<unknown | null> {
   if (Array.isArray(raw)) return rpcError(null, -32600, "Batched requests are not supported. Send one message per request.");
@@ -47,6 +60,7 @@ export async function handleMcp(deps: ApiDeps, caller: AgentCaller, raw: unknown
   switch (message.method) {
     case "initialize": {
       const requested = String(message.params?.protocolVersion ?? "");
+      await rememberClient(deps, caller, message.params?.clientInfo);
       return rpcResult(message.id, {
         protocolVersion: PROTOCOL_VERSIONS.includes(requested) ? requested : PROTOCOL_VERSIONS[0],
         capabilities: { tools: { listChanged: false } },
