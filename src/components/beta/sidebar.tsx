@@ -21,9 +21,15 @@ const MAIN: Item[] = [
 ];
 const STATS: Item = { href: "/beta/stats", label: "Stats", match: (p) => p.startsWith("/beta/stats"), icon: icon(<path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />) };
 const CONNECT: Item[] = [
-  { href: "/beta/accounts", label: "Accounts & AI", match: (p) => p.startsWith("/beta/accounts") || p.startsWith("/beta/keys"), icon: icon(<><path d="M9 7H7a5 5 0 0 0 0 10h2" /><path d="M15 7h2a5 5 0 0 1 0 10h-2" /><path d="M8 12h8" /></>) },
+  { href: "/beta/accounts", label: "Accounts", match: (p) => p.startsWith("/beta/accounts"), icon: icon(<><path d="M9 7H7a5 5 0 0 0 0 10h2" /><path d="M15 7h2a5 5 0 0 1 0 10h-2" /><path d="M8 12h8" /></>) },
+  { href: "/beta/api", label: "API/MCP", match: (p) => p.startsWith("/beta/api") || p.startsWith("/beta/keys"), icon: icon(<><path d="m8 8-5 4 5 4" /><path d="m16 8 5 4-5 4" /><path d="m13.5 5-3 14" /></>) },
   { href: "/beta/usage", label: "Usage", match: (p) => p.startsWith("/beta/usage"), icon: icon(<><path d="M21 12a9 9 0 1 1-9-9" /><path d="M21 12h-9V3" /></>) },
 ];
+// Pinned under the main list: the public setup guide (opens in a new tab) and Settings.
+const DOCS = { href: "/docs", label: "Docs", icon: icon(<><path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H19v15H5.5A1.5 1.5 0 0 0 4 19.5z" /><path d="M4 19.5A1.5 1.5 0 0 0 5.5 21H19v-3" /></>) };
+const SETTINGS: Item = { href: "/beta/settings", label: "Settings", match: (p) => p.startsWith("/beta/settings"), icon: icon(<><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></>) };
+
+const linkClass = "flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[13px] transition-colors";
 
 function NavLink({ item, path }: { item: Item; path: string }) {
   const active = item.match(path);
@@ -32,7 +38,7 @@ function NavLink({ item, path }: { item: Item; path: string }) {
       href={item.href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[13px] transition-colors",
+        linkClass,
         active ? "bg-ps-plum/[0.14] text-ps-text shadow-[inset_2px_0_0_#9B6CFF]" : "text-ps-muted hover:bg-white/[0.03] hover:text-ps-text",
       )}
     >
@@ -50,7 +56,8 @@ export function Sidebar(props: {
   signOut: () => Promise<void>;
 }) {
   const path = usePathname() ?? "/beta";
-  const main = props.statsEnabled ? [...MAIN, STATS] : MAIN;
+  // One flat list, in the order people use it.
+  const items = [...MAIN, ...(props.statsEnabled ? [STATS] : []), ...CONNECT];
   const percent = props.plan && props.plan.limit > 0 ? Math.min(100, (props.plan.used / props.plan.limit) * 100) : 0;
   return (
     <nav aria-label="Main" className="flex w-full flex-col gap-5 border-b border-ps-line bg-ps-sidebar px-3 py-3.5 md:sticky md:top-0 md:h-screen md:w-60 md:flex-none md:border-b-0 md:border-r">
@@ -60,14 +67,20 @@ export function Sidebar(props: {
       </div>
 
       <div className="flex flex-col gap-0.5">
-        {main.map((item) => <NavLink key={item.href} item={item} path={path} />)}
-      </div>
-      <div className="flex flex-col gap-0.5">
-        <div className="px-2.5 pb-1.5 font-mono text-[10.5px] uppercase tracking-[0.14em] text-ps-subtle">Connect</div>
-        {CONNECT.map((item) => <NavLink key={item.href} item={item} path={path} />)}
+        {items.map((item) => <NavLink key={item.href} item={item} path={path} />)}
       </div>
 
       <div className="hidden flex-1 md:block" />
+
+      <div className="flex flex-col gap-0.5">
+        <a href={DOCS.href} target="_blank" rel="noopener" className={cn(linkClass, "text-ps-muted hover:bg-white/[0.03] hover:text-ps-text")}>
+          {DOCS.icon}
+          <span className="flex-1">{DOCS.label}</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" className="text-ps-subtle"><path d="M7 17 17 7M8 7h9v9" /></svg>
+          <span className="sr-only"> (opens in a new tab)</span>
+        </a>
+        <NavLink item={SETTINGS} path={path} />
+      </div>
 
       {props.plan && (
         <Link href="/beta/usage" className="block rounded-[10px] border border-ps-line bg-ps-surface p-3 hover:border-ps-line-strong">
