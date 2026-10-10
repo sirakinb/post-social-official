@@ -2,7 +2,8 @@
 // disconnect. Tokens are encrypted before they are stored; every change is audited.
 import { ApiError, isAgentCaller, membership, requireUuid, type Caller, type Sql } from "../access";
 import { importKey, open, randomToken, seal, sha256Hex } from "./crypto";
-import { DISPLAY_NAMES, PLATFORMS, PlatformError, authorizeUrl, exchangeCode, revokeTokens, type Platform, type Settings } from "./platforms";
+import { AtprotoError, finishSignIn, publicProfile, startSignIn, type PendingSignIn } from "./atproto";
+import { CAPABILITIES, DISPLAY_NAMES, PLATFORMS, PlatformError, authorizeUrl, exchangeCode, revokeTokens, type Identity, type Platform, type Settings } from "./platforms";
 
 export type ConnectionDeps = {
   sql: Sql;
@@ -54,7 +55,7 @@ export function originAllowedFor(returnTo: string, allowed: string[]) {
   });
 }
 
-export async function startConnection(deps: ConnectionDeps, caller: Caller, input: { workspace_id?: unknown; platform?: unknown; return_to?: unknown }) {
+export async function startConnection(deps: ConnectionDeps, caller: Caller, input: { workspace_id?: unknown; platform?: unknown; return_to?: unknown; handle?: unknown }) {
   const workspaceId = requireUuid(input.workspace_id, "Workspace");
   if (!isPlatform(input.platform)) throw new ApiError(400, `Choose a platform: ${PLATFORMS.join(", ")}.`);
   const returnTo = typeof input.return_to === "string" ? input.return_to : "";
@@ -64,15 +65,51 @@ export async function startConnection(deps: ConnectionDeps, caller: Caller, inpu
   await membership(deps.sql, caller, workspaceId, true, "Reviewers cannot connect accounts.");
 
   const state = randomToken();
+  const redirectUri = callbackUrl(input.platform, deps.setting);
+  let url: string;
+  let pending: string | null = null;
+  if (input.platform === "bluesky") {
+    // Bluesky's sign-in is pushed to the account's server first; what it needs to finish
+    // (the PKCE verifier and the DPoP key) is kept encrypted with the state.
+    const started = await startSignIn(deps.setting, deps.http ?? fetch, state, redirectUri, input.handle).catch((error) => {
+      throw new ApiError(400, error instanceof AtprotoError ? error.message : "Bluesky sign-in could not start. Try again.");
+    });
+    url = started.url;
+    const sealed = await seal(started.pending, await importKey(deps.setting("CREDENTIAL_ENCRYPTION_KEY")));
+    pending = JSON.stringify(sealed);
+  } else {
+    url = authorizeUrl(input.platform, state, redirectUri, deps.setting);
+  }
   await deps.sql(
-    `INSERT INTO public.oauth_states (workspace_id, user_id, provider, state_hash, expires_at, return_to)
-     VALUES ($1, $2, $3, $4, now() + make_interval(mins => $5), $6)`,
-    [workspaceId, caller.userId, input.platform, await sha256Hex(state), STATE_MINUTES, returnTo || null],
+    `INSERT INTO public.oauth_states (workspace_id, user_id, provider, state_hash, expires_at, return_to, code_verifier_encrypted)
+     VALUES ($1, $2, $3, $4, now() + make_interval(mins => $5), $6, $7)`,
+    [workspaceId, caller.userId, input.platform, await sha256Hex(state), STATE_MINUTES, returnTo || null, pending],
   );
-  return { url: authorizeUrl(input.platform, state, callbackUrl(input.platform, deps.setting), deps.setting), expires_in_seconds: STATE_MINUTES * 60 };
+  return { url, expires_in_seconds: STATE_MINUTES * 60 };
 }
 
-type StateRow = { workspace_id: string; user_id: string | null; return_to: string | null };
+async function blueskyIdentity(deps: ConnectionDeps, pendingSealed: string | null, params: URLSearchParams, redirectUri: string): Promise<Identity[]> {
+  if (!pendingSealed) throw new PlatformError("This Bluesky sign-in is missing its details. Start again.");
+  const key = await importKey(deps.setting("CREDENTIAL_ENCRYPTION_KEY"));
+  const pending = await open<PendingSignIn>(JSON.parse(pendingSealed), key);
+  const http = deps.http ?? fetch;
+  const { session, handle, scope } = await finishSignIn(deps.setting, http, pending, params, redirectUri);
+  const profile = await publicProfile(http, session.did).catch(() => null);
+  const shownHandle = profile?.handle ?? handle ?? session.did;
+  return [{
+    externalAccountId: session.did,
+    ownerExternalId: session.did,
+    handle: shownHandle,
+    displayName: profile?.displayName ?? shownHandle,
+    avatarUrl: profile?.avatar ?? undefined,
+    scopes: scope.split(" ").filter(Boolean),
+    tokens: session,
+    // The access expiry stays inside the session (see refreshTokens).
+    capabilities: CAPABILITIES.bluesky,
+  }];
+}
+
+type StateRow = { workspace_id: string; user_id: string | null; return_to: string | null; code_verifier_encrypted: string | null };
 
 export type CallbackResult = { returnTo: string | null; ok: boolean; message: string; platform: Platform };
 
@@ -107,7 +144,7 @@ export async function completeConnection(deps: ConnectionDeps, platform: Platfor
     ? await deps.sql<StateRow>(
         `UPDATE public.oauth_states SET used_at = now()
          WHERE state_hash = $1 AND provider = $2 AND user_id = $3 AND used_at IS NULL AND expires_at > now()
-         RETURNING workspace_id, user_id, return_to`,
+         RETURNING workspace_id, user_id, return_to, code_verifier_encrypted`,
         [await sha256Hex(state), platform, userId],
       )
     : [];
@@ -119,6 +156,7 @@ export async function completeConnection(deps: ConnectionDeps, platform: Platfor
   if (denied) return fail(`${name} did not grant access${params.get("error_description") ? `: ${params.get("error_description")}` : "."}`);
   const code = params.get("code");
   if (!code) return fail(`${name} did not return a sign-in code. Start again.`);
+  // Bluesky's code arrives with the server that issued it (iss) and is finished below.
 
   // The person who started the sign-in must still be a member who can connect accounts.
   const [member] = await deps.sql<{ role: string; actor_id: string | null }>(
@@ -130,9 +168,11 @@ export async function completeConnection(deps: ConnectionDeps, platform: Platfor
 
   let identities;
   try {
-    identities = await exchangeCode(platform, code, callbackUrl(platform, deps.setting), deps.setting, deps.http);
+    identities = platform === "bluesky"
+      ? await blueskyIdentity(deps, session.code_verifier_encrypted, params, callbackUrl(platform, deps.setting))
+      : await exchangeCode(platform, code, callbackUrl(platform, deps.setting), deps.setting, deps.http);
   } catch (error) {
-    return fail(error instanceof PlatformError ? error.message : `${name} sign-in failed. Try again.`);
+    return fail(error instanceof PlatformError || error instanceof AtprotoError ? error.message : `${name} sign-in failed. Try again.`);
   }
 
   const externalIdOf = (identity: (typeof identities)[number]) => identity.externalAccountId || `workspace:${session.workspace_id}`;

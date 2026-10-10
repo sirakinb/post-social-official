@@ -6,13 +6,16 @@
 //                                       app's /beta/connect/finish, which finishes it as the
 //                                       signed-in person (POST /complete)
 //   POST /complete                      { platform, params } -> where to go next
+//   GET  /oauth/bluesky/client-metadata.json   Bluesky's client id (our app's description)
+//   GET  /oauth/bluesky/jwks.json       the public key Bluesky checks our sign-in requests with
 //   POST /meta/data-deletion            Meta data-deletion callback
 //   GET  /meta/data-deletion/status     ?code=
 //   POST /meta/deauthorize              Meta deauthorize callback
 import { ApiError } from "../../lib/access";
 import type { SignedInUser } from "../../lib/insforge-admin";
-import { completeConnection, disconnectAccount, finishingOrigin, isPlatform, startConnection, type ConnectionDeps } from "../../lib/connections/service";
+import { callbackUrl, completeConnection, disconnectAccount, finishingOrigin, isPlatform, startConnection, type ConnectionDeps } from "../../lib/connections/service";
 import { deletionStatus, handleDataDeletion, handleDeauthorize } from "../../lib/connections/meta-deletion";
+import { clientKey, clientMetadata, publicJwk } from "../../lib/connections/atproto";
 
 export type ConnectionsHandlerDeps = ConnectionDeps & {
   userForToken: (token: string | null) => Promise<SignedInUser | null>;
@@ -58,6 +61,13 @@ export function createConnectionsHandler(deps: ConnectionsHandlerDeps) {
         finish.searchParams.set("platform", callback[1]);
         query.forEach((value, key) => finish.searchParams.set(key, value));
         return new Response(null, { status: 302, headers: { Location: finish.toString(), "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" } });
+      }
+
+      if (path === "/oauth/bluesky/client-metadata.json" && method === "GET") {
+        return json(200, clientMetadata(deps.setting, callbackUrl("bluesky", deps.setting)), { "Cache-Control": "public, max-age=300" });
+      }
+      if (path === "/oauth/bluesky/jwks.json" && method === "GET") {
+        return json(200, { keys: [publicJwk(clientKey(deps.setting))] }, { "Cache-Control": "public, max-age=300" });
       }
 
       if (path === "/meta/data-deletion" && method === "POST") {

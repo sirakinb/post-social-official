@@ -126,6 +126,26 @@ cannot give. Use `prod` instead of `dev` for prod (asks you to type `prod`). The
   (`w_organization_social`). Without a refresh token, access lasts 60 days and the account
   is flagged to reconnect when it runs out.
 
+## Bluesky sign-in
+
+Bluesky has no developer app to register. Our app is described by a page we serve, and
+that page's address is our client id:
+`{CONNECTIONS_BASE_URL}/oauth/bluesky/client-metadata.json` (with our public key at
+`/oauth/bluesky/jwks.json`). It uses the official atproto OAuth (pushed requests, PKCE,
+DPoP-bound tokens, `private_key_jwt`), so nobody types a password into Post Social.
+
+- **Secret.** `BLUESKY_CLIENT_JWK`: an ES256 private key as a JWK with a `kid`, one per
+  environment, on the `connections` function and the worker. Create and store it in one
+  step, without it being shown:
+  `scripts/insforge-env.sh dev secrets add BLUESKY_CLIENT_JWK "$(node -e 'const c=require("crypto");const {privateKey}=c.generateKeyPairSync("ec",{namedCurve:"P-256"});console.log(JSON.stringify({...privateKey.export({format:"jwk"}),kid:c.randomUUID().slice(0,8)}))')"`
+  Replacing it signs every Bluesky account out (their tokens are tied to our key), so
+  people reconnect.
+- **Permissions.** `atproto transition:generic`: post and upload media for the account.
+  Access lasts minutes and is renewed when used; each refresh token works once, so the
+  worker holds the credential's lease while renewing.
+- **Accounts.** Connecting asks for the handle, which finds the account's own server;
+  left empty, sign-in starts at bsky.social.
+
 ## Media storage, functions and the worker
 
 | | Dev | Prod |

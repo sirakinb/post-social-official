@@ -1,9 +1,12 @@
 // Per-platform sign-in, token exchange, refresh and revoke. Ported from convex/oauth.ts,
 // convex/tokenLifecycle.ts and convex/lib/platformRevocation.ts; runtime-neutral (fetch
-// only). Scopes are exactly those in the PRD, section 6.
+// only). Scopes are exactly those in the PRD, section 6. Bluesky's sign-in is different
+// (pushed requests and DPoP-bound tokens) and lives in atproto.ts.
+import { BLUESKY_SCOPE, publicProfile, refreshSession, revokeSession, type BlueskySession } from "./atproto";
+import type { TokenSet } from "./crypto";
 
-export type Platform = "instagram" | "facebook" | "threads" | "youtube" | "tiktok" | "linkedin";
-export const PLATFORMS: Platform[] = ["instagram", "facebook", "threads", "youtube", "tiktok", "linkedin"];
+export type Platform = "instagram" | "facebook" | "threads" | "youtube" | "tiktok" | "linkedin" | "bluesky";
+export const PLATFORMS: Platform[] = ["instagram", "facebook", "threads", "youtube", "tiktok", "linkedin", "bluesky"];
 
 export type Settings = (name: string) => string;
 
@@ -14,7 +17,7 @@ export type Identity = {
   displayName: string;
   avatarUrl?: string;
   scopes: string[];
-  tokens: { accessToken: string; refreshToken?: string };
+  tokens: TokenSet;
   accessTokenExpiresAt?: Date;
   refreshTokenExpiresAt?: Date;
   capabilities: Capabilities;
@@ -46,6 +49,7 @@ export const SCOPES: Record<Platform, string[]> = {
   youtube: ["https://www.googleapis.com/auth/youtube.upload"],
   // Sign In with LinkedIn (name and photo) + Share on LinkedIn (posting as the member).
   linkedin: ["openid", "profile", "w_member_social"],
+  bluesky: BLUESKY_SCOPE.split(" "),
 };
 
 // Read permissions for post stats (Phase 5D). They are requested only where analytics is
@@ -58,6 +62,7 @@ export const ANALYTICS_SCOPES: Record<Platform, string[]> = {
   threads: ["threads_manage_insights"],
   youtube: ["https://www.googleapis.com/auth/youtube.readonly"],
   linkedin: [],
+  bluesky: [],
 };
 
 export function analyticsPlatforms(setting: Settings): Platform[] {
@@ -81,6 +86,7 @@ export const DISPLAY_NAMES: Record<Platform, string> = {
   youtube: "YouTube",
   tiktok: "TikTok",
   linkedin: "LinkedIn",
+  bluesky: "Bluesky",
 };
 
 // What each platform accepts through its API (2026 documentation). Stored on each account
@@ -118,6 +124,14 @@ export const CAPABILITIES: Record<Platform, Capabilities> = {
     carousel_max_items: 20,
     image_types: ["image/jpeg", "image/png", "image/gif"],
     notes: "Posts to the member's own profile. Videos are MP4, 75 KB to 500 MB. Up to 20 images show as a gallery.",
+  },
+  bluesky: {
+    post_types: ["text", "image", "video"],
+    caption_max_chars: 300,
+    video_max_seconds: 180,
+    carousel_max_items: 4,
+    image_types: ["image/jpeg", "image/png", "image/webp", "image/gif"],
+    notes: "Up to 300 characters. Up to 4 images (larger ones are resized to Bluesky's 1 MB limit), or one MP4 video of up to 3 minutes and 100 MB. Links, mentions and hashtags become clickable.",
   },
 };
 
@@ -179,6 +193,9 @@ export function authorizeUrl(platform: Platform, state: string, redirectUri: str
       url.searchParams.set("client_id", setting("LINKEDIN_CLIENT_ID"));
       url.searchParams.set("scope", scopesFor("linkedin", setting).join(" "));
       break;
+    case "bluesky":
+      // Bluesky's sign-in starts with a pushed request (atproto.ts startSignIn).
+      throw new PlatformError("Bluesky sign-in is started with startSignIn.");
   }
   url.searchParams.set("redirect_uri", redirectUri);
   url.searchParams.set("response_type", "code");
@@ -187,6 +204,7 @@ export function authorizeUrl(platform: Platform, state: string, redirectUri: str
 }
 
 export async function exchangeCode(platform: Platform, code: string, redirectUri: string, setting: Settings, http: typeof fetch = fetch): Promise<Identity[]> {
+  if (platform === "bluesky") throw new PlatformError("Bluesky sign-in is finished with finishSignIn.");
   const form = (fields: Record<string, string>) => ({
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -381,6 +399,7 @@ export async function exchangeCode(platform: Platform, code: string, redirectUri
 // are signed and expire within days, so a saved one can't be reused). Null when the
 // platform shares no picture with our permissions (YouTube upload-only access).
 export async function currentAvatarUrl(platform: Platform, externalAccountId: string, accessToken: string, http: typeof fetch = fetch): Promise<string | null> {
+  if (platform === "bluesky") return (await publicProfile(http, externalAccountId)).avatar;
   const text = (value: unknown) => (typeof value === "string" && value ? value : null);
   if (platform === "instagram" || platform === "threads") {
     const url = platform === "instagram" ? new URL(`https://graph.instagram.com/${META_VERSION}/me`) : new URL("https://graph.threads.net/v1.0/me");
@@ -414,9 +433,18 @@ export async function currentAvatarUrl(platform: Platform, externalAccountId: st
   return null;
 }
 
-export type Refreshed = { tokens: { accessToken: string; refreshToken?: string }; accessTokenExpiresAt?: Date; refreshTokenExpiresAt?: Date };
+export type Refreshed = { tokens: TokenSet; accessTokenExpiresAt?: Date; refreshTokenExpiresAt?: Date };
 
-export async function refreshTokens(platform: Platform, current: { accessToken: string; refreshToken?: string }, setting: Settings, http: typeof fetch = fetch): Promise<Refreshed | null> {
+export async function refreshTokens(platform: Platform, current: TokenSet, setting: Settings, http: typeof fetch = fetch): Promise<Refreshed | null> {
+  if (platform === "bluesky") {
+    // The access expiry lives in the session, not in credentials.access_token_expires_at,
+    // so the refresh sweep leaves Bluesky alone; accounts are renewed when used.
+    try {
+      return { tokens: await refreshSession(setting, http, current as unknown as BlueskySession) };
+    } catch (error) {
+      throw new PlatformError(error instanceof Error ? error.message : "Renewing Bluesky access failed.", (error as { code?: string }).code ?? "platform_error");
+    }
+  }
   if (platform === "facebook") return null; // Page tokens do not expire.
   if (platform === "linkedin") {
     // Most apps get no refresh token: access lasts 60 days, then the person reconnects.
@@ -474,8 +502,9 @@ export async function refreshTokens(platform: Platform, current: { accessToken: 
 }
 
 // Revokes access at the platform. Returns a short outcome code; never throws.
-export async function revokeTokens(platform: Platform, tokens: { accessToken: string; refreshToken?: string }, setting: Settings, http: typeof fetch = fetch): Promise<string> {
+export async function revokeTokens(platform: Platform, tokens: TokenSet, setting: Settings, http: typeof fetch = fetch): Promise<string> {
   try {
+    if (platform === "bluesky") return await revokeSession(setting, http, tokens as unknown as BlueskySession);
     let response: Response;
     if (platform === "youtube") {
       // Revoking the refresh token ends the whole Google grant, as the privacy policy says.

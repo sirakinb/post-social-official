@@ -147,4 +147,9 @@ async function linkedin(): Promise<MetricsResult> {
   return { extra: {}, unavailable: ["views", "likes", "comments", "shares"] };
 }
 
-export const FETCHERS: Record<Platform, (ctx: FetchContext) => Promise<MetricsResult>> = { instagram, facebook, threads, youtube, tiktok, linkedin };
+// Bluesky post stats aren't fetched yet.
+async function bluesky(): Promise<MetricsResult> {
+  return { extra: {}, unavailable: ["views", "likes", "comments", "shares"] };
+}
+
+export const FETCHERS: Record<Platform, (ctx: FetchContext) => Promise<MetricsResult>> = { instagram, facebook, threads, youtube, tiktok, linkedin, bluesky };

@@ -32,7 +32,7 @@ export function llmsText() {
   return [
     "# Post Social",
     "",
-    "> Post Social connects an AI to a person's social accounts (Instagram, Facebook Pages, Threads, YouTube Shorts, TikTok, LinkedIn) so the AI can publish, schedule and track posts as the person directs.",
+    "> Post Social connects an AI to a person's social accounts (Instagram, Facebook Pages, Threads, YouTube Shorts, TikTok, LinkedIn, Bluesky) so the AI can publish, schedule and track posts as the person directs.",
     "",
     "## Connect",
     `- MCP server (streamable HTTP): ${MCP_URL}. Sign-in is OAuth 2.1 with dynamic client registration and PKCE (discovery at ${SITE}/.well-known/oauth-protected-resource/mcp), or send an API key: Authorization: Bearer ps_live_...`,

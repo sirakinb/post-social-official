@@ -457,6 +457,11 @@ function PlatformOptions({ account, choice, media, caption, onChange, creator, c
           Posts to your LinkedIn profile as {media.some((m) => m.type === "video") ? "a video" : media.length > 1 ? "an image gallery" : media.length ? "an image post" : "a text post"}.
         </p>
       )}
+      {account.platform === "bluesky" && (
+        <p className="m-0 text-xs text-ps-muted">
+          Posts to Bluesky as {media.some((m) => m.type === "video") ? "a video" : media.length ? `${media.length === 1 ? "an image" : `${media.length} images`}` : "a text post"}. Links, @mentions and #hashtags become clickable.
+        </p>
+      )}
       {account.platform === "tiktok" && <TikTokOptions value={choice.tiktok ?? NEW_TIKTOK} onChange={(t) => onChange({ tiktok: t })} info={creator} infoError={creatorError} accountName={account.name} photo={isTikTokPhotoPost(media)} />}
     </div>
   );

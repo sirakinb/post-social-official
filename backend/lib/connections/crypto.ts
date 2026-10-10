@@ -2,7 +2,8 @@
 // InsForge functions (Deno), the worker (Node) and tests. Format: base64(ciphertext||tag)
 // plus a base64 12-byte IV, matching convex/lib/credentialCrypto.ts.
 
-export type TokenSet = { accessToken: string; refreshToken?: string };
+// Platforms with more to keep (Bluesky: its DPoP key and servers) store it alongside.
+export type TokenSet = { accessToken: string; refreshToken?: string; [extra: string]: unknown };
 export type Sealed = { encryptedPayload: string; initializationVector: string };
 
 const ALGORITHM = "AES-GCM";
@@ -25,19 +26,19 @@ export async function importKey(encoded: string | undefined) {
   return crypto.subtle.importKey("raw", raw, ALGORITHM, false, ["encrypt", "decrypt"]);
 }
 
-export async function seal(tokens: TokenSet, key: CryptoKey): Promise<Sealed> {
+export async function seal(tokens: TokenSet | object, key: CryptoKey): Promise<Sealed> {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = await crypto.subtle.encrypt({ name: ALGORITHM, iv }, key, new TextEncoder().encode(JSON.stringify(tokens)));
   return { encryptedPayload: toBase64(new Uint8Array(ciphertext)), initializationVector: toBase64(iv) };
 }
 
-export async function open(sealed: Sealed, key: CryptoKey): Promise<TokenSet> {
+export async function open<T = TokenSet>(sealed: Sealed, key: CryptoKey): Promise<T> {
   const plaintext = await crypto.subtle.decrypt(
     { name: ALGORITHM, iv: fromBase64(sealed.initializationVector) },
     key,
     fromBase64(sealed.encryptedPayload),
   );
-  return JSON.parse(new TextDecoder().decode(plaintext)) as TokenSet;
+  return JSON.parse(new TextDecoder().decode(plaintext)) as T;
 }
 
 export async function sha256Hex(value: string) {
