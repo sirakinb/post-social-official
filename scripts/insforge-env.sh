@@ -60,6 +60,14 @@ is_read_only() {
   esac
 }
 
+# The command as shown in the confirm prompt, with secret values left out.
+describe() {
+  case "$1 ${2:-}" in
+    "secrets add"|"secrets update") echo "secrets $2 ${3:-} (value hidden)" ;;
+    *) echo "$*" ;;
+  esac
+}
+
 # Prints the applied migration versions of the linked environment, one per line.
 applied_versions() {
   "${CLI[@]}" db migrations list --json 2>/dev/null \
@@ -90,7 +98,7 @@ case "$target" in
       confirm_prod "Read-only command on PROD ($PROD_NAME)."
     else
       require_releasable_main
-      confirm_prod "This CHANGES PROD ($PROD_NAME): $*."
+      confirm_prod "This CHANGES PROD ($PROD_NAME): $(describe "$@")."
     fi
     switch_to_prod
     "${CLI[@]}" "$@"
