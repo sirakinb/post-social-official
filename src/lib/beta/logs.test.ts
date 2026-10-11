@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { areaOf, errorOf, levelOf, whoDid } from "./logs";
+import { describe, expect, it, vi } from "vitest";
+import { areaOf, errorOf, levelOf, loadLogs, whoDid } from "./logs";
 
 describe("logs", () => {
   it("sorts events into levels and areas", () => {
@@ -34,5 +34,28 @@ describe("whoDid", () => {
     expect(whoDid({ kind: "oauth_grant", display_name: "Codex", client_name: "Codex" }, null)).toEqual({ actorKind: "oauth_grant", actorName: "Codex", actorVia: null });
     expect(whoDid({ kind: "api_key", display_name: "Key A", client_name: null }, null).actorName).toBe("Key A");
     expect(whoDid(null, null)).toEqual({ actorKind: "system", actorName: "Post Social", actorVia: null });
+  });
+});
+
+describe("loadLogs", () => {
+  it("still loads when the database doesn't have app names yet", async () => {
+    const selects: string[] = [];
+    const event = { id: "e1", occurred_at: "2026-10-11T00:00:00Z", event_type: "post.created", entry_point: "mcp", entity_type: "post", entity_id: "p1", summary: "Created a draft", before_values: null, after_values: null, metadata: null, actors: { kind: "api_key", display_name: "Key A" } };
+    const from = vi.fn(() => {
+      const chain: Record<string, unknown> = {};
+      for (const m of ["eq", "order", "limit", "in", "or", "lt"]) chain[m] = () => chain;
+      chain.select = (columns: string) => {
+        selects.push(columns);
+        return chain;
+      };
+      chain.then = (resolve: (v: unknown) => void) =>
+        resolve(selects.at(-1)!.includes("client_name") ? { data: null, error: { message: "column actors.client_name does not exist" } } : { data: [event], error: null });
+      return chain;
+    });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const result = await loadLogs({ database: { from } } as never, "w", { level: "all", area: null, source: null, actorId: null, before: null });
+    expect(result.failed).toBe(false);
+    expect(result.logs[0]).toMatchObject({ actorKind: "api_key", actorName: "Key A" });
+    expect(selects).toHaveLength(2);
   });
 });
