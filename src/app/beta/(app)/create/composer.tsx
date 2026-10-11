@@ -295,7 +295,7 @@ export function Composer({ workspaceId, accounts, profiles = [], library: initia
                 )}
               </div>
             ))}
-            <button type="button" onClick={() => setPicker(true)} className="h-[84px] w-[84px] rounded-[10px] border border-dashed border-white/[0.18] text-xs text-ps-muted hover:border-ps-plum/50 hover:text-ps-text">
+            <button type="button" data-attr="add-media" onClick={() => setPicker(true)} className="h-[84px] w-[84px] rounded-[10px] border border-dashed border-white/[0.18] text-xs text-ps-muted hover:border-ps-plum/50 hover:text-ps-text">
               Add media
             </button>
           </div>
@@ -503,7 +503,7 @@ function MediaPicker({ library, selected, onClose, onToggle, onFiles }: { librar
           <div className="flex items-center gap-2">
             <Link href="/beta/media" className="px-2 text-xs text-ps-subtle hover:text-ps-text">Manage library</Link>
             <input ref={input} type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime" multiple className="sr-only" onChange={(e) => onFiles(Array.from(e.target.files ?? []))} />
-            <button type="button" onClick={() => input.current?.click()} className="h-8 rounded-lg bg-ps-plum px-3.5 font-medium text-ps-ground hover:bg-[#AD86FF]">Upload from computer</button>
+            <button type="button" data-attr="upload-media" onClick={() => input.current?.click()} className="h-8 rounded-lg bg-ps-plum px-3.5 font-medium text-ps-ground hover:bg-[#AD86FF]">Upload from computer</button>
             <button type="button" onClick={onClose} className="h-8 rounded-lg border border-white/[0.12] px-3">Done</button>
           </div>
         </div>

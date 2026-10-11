@@ -316,7 +316,7 @@ function PostCard({ post, canEdit, onClose }: { post: CalendarPost; canEdit: boo
         <div className="flex items-center gap-2 border-t border-white/[0.06] px-4 py-3">
           <label className="sr-only" htmlFor="move-to">New time</label>
           <input id="move-to" type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} className="h-8 flex-1 rounded-lg border border-ps-line-strong bg-ps-ground px-2 text-[13px] [color-scheme:dark]" />
-          <button type="button" disabled={busy} onClick={() => act(() => reschedule(post.id, new Date(when).toISOString()))} className="h-8 rounded-lg bg-ps-plum px-3 font-medium text-ps-ground disabled:opacity-60">Move</button>
+          <button type="button" data-attr="reschedule-post" disabled={busy} onClick={() => act(() => reschedule(post.id, new Date(when).toISOString()))} className="h-8 rounded-lg bg-ps-plum px-3 font-medium text-ps-ground disabled:opacity-60">Move</button>
         </div>
       )}
       {error && <p role="alert" className="m-0 px-4 pb-2 text-xs text-[#FF8A8E]">{error}</p>}
@@ -326,7 +326,7 @@ function PostCard({ post, canEdit, onClose }: { post: CalendarPost; canEdit: boo
           <button type="button" onClick={() => setMoving(true)} className="h-8 flex-1 rounded-lg border border-white/[0.12] hover:border-white/25">Move</button>
         )}
         {editable && (confirmCancel ? (
-          <button type="button" disabled={busy} onClick={() => act(() => cancel(post.id))} className="h-8 flex-1 rounded-lg border border-ps-failed/40 text-[#FF8A8E]">Confirm cancel</button>
+          <button type="button" data-attr="cancel-post" disabled={busy} onClick={() => act(() => cancel(post.id))} className="h-8 flex-1 rounded-lg border border-ps-failed/40 text-[#FF8A8E]">Confirm cancel</button>
         ) : (
           <button type="button" onClick={() => setConfirmCancel(true)} className="h-8 flex-1 rounded-lg border border-white/[0.12] text-[#FF8A8E] hover:border-ps-failed/40">Cancel post</button>
         ))}
