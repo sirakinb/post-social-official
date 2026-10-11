@@ -26,6 +26,13 @@ describe("Sidebar", () => {
     for (const gone of ["Home", "Media", "Stats"]) expect(screen.queryByRole("link", { name: gone })).toBeNull();
   });
 
+  it("puts Drafts right after Create", () => {
+    render(<Sidebar {...props} />);
+    const labels = screen.getAllByRole("link").map((l) => l.textContent);
+    expect(labels.slice(0, 4)).toEqual(["Accounts", "Create", "Drafts", "Calendar"]);
+    expect(screen.getByRole("link", { name: "Drafts" })).toHaveAttribute("href", "/beta/drafts");
+  });
+
   it("opens the docs in a new tab", () => {
     render(<Sidebar {...props} />);
     const docs = screen.getByRole("link", { name: /Docs/ });
