@@ -163,7 +163,7 @@ export function ConnectionsView(props: {
           </span>
         ) : (
           <span className="flex gap-1.5">
-            {a.health === "needs_attention" && <button type="button" disabled={busy !== null} onClick={() => connect(a.platform, a.platform === "bluesky" ? a.handle : undefined)} className={btn}>Reconnect</button>}
+            {a.health === "needs_attention" && <button type="button" disabled={busy !== null} onClick={() => connect(a.platform, a.platform === "bluesky" ? a.handle : undefined)} className={btn} data-attr="reconnect-account">Reconnect</button>}
             <button type="button" onClick={() => setConfirming(a.id)} className="h-[30px] rounded-lg px-2.5 text-xs text-ps-subtle hover:text-ps-text">Disconnect</button>
           </span>
         ))}
@@ -199,7 +199,7 @@ export function ConnectionsView(props: {
         <div key={a.id} role="status" className="flex flex-wrap items-center gap-2.5 rounded-[10px] border border-ps-attention/30 bg-ps-attention/[0.07] px-3.5 py-2.5 text-[#F5D49A]">
           <span className="h-1.5 w-1.5 rounded-full bg-ps-attention" />
           <span className="flex-1">{a.name} on {KIND[a.platform]} needs to be reconnected{a.reason ? `: ${a.reason}` : "."}</span>
-          {canEdit && <button type="button" disabled={busy !== null} onClick={() => connect(a.platform, a.platform === "bluesky" ? a.handle : undefined)} className={btn}>Reconnect</button>}
+          {canEdit && <button type="button" disabled={busy !== null} onClick={() => connect(a.platform, a.platform === "bluesky" ? a.handle : undefined)} className={btn} data-attr="reconnect-account">Reconnect</button>}
         </div>
       ))}
 
@@ -265,7 +265,7 @@ export function ConnectionsView(props: {
           </div>
           <div className="flex flex-wrap items-center gap-2 px-4 py-3">
             {PLATFORMS.map((p) => (
-              <button key={p.id} type="button" disabled={busy !== null} onClick={() => connect(p.id)} className={cn(btn, "gap-2", requested?.id === p.id && "border-ps-plum text-ps-text")} title={p.note}>
+              <button key={p.id} type="button" disabled={busy !== null} onClick={() => connect(p.id)} data-attr={`connect-${p.id}`} className={cn(btn, "gap-2", requested?.id === p.id && "border-ps-plum text-ps-text")} title={p.note}>
                 <PlatformMark platform={p.id} size={16} className="rounded-[5px]" />
                 {busy === p.id ? "Opening…" : p.name}
               </button>

@@ -285,7 +285,7 @@ export function Composer({
           <Button
             variant="secondary"
             onClick={() => onSaveDraft?.(state)}
-            data-testid="save-draft" disabled={busy}
+            data-testid="save-draft" data-attr="save-draft" disabled={busy}
           >
             Save draft
           </Button>
@@ -293,7 +293,7 @@ export function Composer({
             variant="secondary"
             disabled={busy || !canPublish || !schedule}
             onClick={() => onSchedule?.(state, schedule)}
-            data-testid="schedule-post"
+            data-testid="schedule-post" data-attr="schedule-post"
           >
             Schedule
           </Button>
@@ -301,7 +301,7 @@ export function Composer({
             variant="primary"
             disabled={busy || !canPublish}
             onClick={() => onPublish?.(state)}
-            data-testid="publish-now"
+            data-testid="publish-now" data-attr="publish-now"
           >
             {busy && uploadProgress != null
               ? `Uploading ${uploadProgress}%…`

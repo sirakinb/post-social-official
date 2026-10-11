@@ -65,17 +65,17 @@ function AccountRow({
 
       <div className="flex flex-wrap items-center gap-2">
         {needsAttention ? (
-          <Button variant="primary" size="sm" onClick={onReconnect} disabled={busy}>
+          <Button variant="primary" size="sm" onClick={onReconnect} disabled={busy} data-attr="reconnect-account">
             <RefreshCw className="h-4 w-4" aria-hidden="true" />
             Reconnect
           </Button>
         ) : isConnected ? (
-          <Button variant="secondary" size="sm" onClick={onReconnect} disabled={busy}>
+          <Button variant="secondary" size="sm" onClick={onReconnect} disabled={busy} data-attr="reconnect-account">
             <RefreshCw className="h-4 w-4" aria-hidden="true" />
             Reconnect
           </Button>
         ) : (
-          <Button variant="primary" size="sm" onClick={onReconnect} disabled={busy}>
+          <Button variant="primary" size="sm" onClick={onReconnect} disabled={busy} data-attr="connect-account">
             <Plus className="h-4 w-4" aria-hidden="true" />
             Connect
           </Button>
@@ -164,11 +164,11 @@ export default function AccountsPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={() => connect("tiktok")} disabled={connecting !== null}><Plus className="h-4 w-4" aria-hidden="true" />{connecting === "tiktok" ? "Opening TikTok…" : "Connect TikTok"}</Button>
-          <Button variant="primary" onClick={() => connect("instagram")} disabled={connecting !== null}><Plus className="h-4 w-4" aria-hidden="true" />{connecting === "instagram" ? "Opening Instagram…" : "Connect Instagram"}</Button>
-          <Button variant="secondary" onClick={() => connect("facebook")} disabled={connecting !== null}><Plus className="h-4 w-4" aria-hidden="true" />{connecting === "facebook" ? "Opening Facebook…" : "Connect Facebook Page"}</Button>
-          <Button variant="secondary" onClick={() => connect("threads")} disabled={connecting !== null}><Plus className="h-4 w-4" aria-hidden="true" />{connecting === "threads" ? "Opening Threads…" : "Connect Threads"}</Button>
-          <Button variant="secondary" onClick={() => connect("youtube")} disabled={connecting !== null}><Plus className="h-4 w-4" aria-hidden="true" />{connecting === "youtube" ? "Opening YouTube…" : "Connect YouTube"}</Button>
+          <Button variant="secondary" onClick={() => connect("tiktok")} disabled={connecting !== null} data-attr="connect-tiktok"><Plus className="h-4 w-4" aria-hidden="true" />{connecting === "tiktok" ? "Opening TikTok…" : "Connect TikTok"}</Button>
+          <Button variant="primary" onClick={() => connect("instagram")} disabled={connecting !== null} data-attr="connect-instagram"><Plus className="h-4 w-4" aria-hidden="true" />{connecting === "instagram" ? "Opening Instagram…" : "Connect Instagram"}</Button>
+          <Button variant="secondary" onClick={() => connect("facebook")} disabled={connecting !== null} data-attr="connect-facebook"><Plus className="h-4 w-4" aria-hidden="true" />{connecting === "facebook" ? "Opening Facebook…" : "Connect Facebook Page"}</Button>
+          <Button variant="secondary" onClick={() => connect("threads")} disabled={connecting !== null} data-attr="connect-threads"><Plus className="h-4 w-4" aria-hidden="true" />{connecting === "threads" ? "Opening Threads…" : "Connect Threads"}</Button>
+          <Button variant="secondary" onClick={() => connect("youtube")} disabled={connecting !== null} data-attr="connect-youtube"><Plus className="h-4 w-4" aria-hidden="true" />{connecting === "youtube" ? "Opening YouTube…" : "Connect YouTube"}</Button>
         </div>
       </div>
 
@@ -223,6 +223,7 @@ export default function AccountsPage() {
             key={item.platform}
             type="button"
             onClick={() => connect(item.platform as "tiktok" | "instagram" | "facebook" | "threads" | "youtube")}
+            data-attr={`connect-${item.platform}`}
             disabled={connecting !== null}
             className={cn(
               "group flex min-h-36 flex-col items-start justify-between gap-2 rounded-[1.5rem] border border-border bg-surface p-6 text-left transition-all hover:-translate-y-1 hover:border-accent hover:shadow-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-60"
