@@ -224,10 +224,10 @@ export default function PrivacyPage() {
               <p className="mt-2 text-sm leading-relaxed">
                 For privacy questions, contact{" "}
                 <a
-                  href="mailto:aki.b@pentridgemedia.com"
+                  href="mailto:support@postsocial.xyz"
                   className="text-accent hover:text-accent-hover underline"
                 >
-                  aki.b@pentridgemedia.com
+                  support@postsocial.xyz
                 </a>
                 .
               </p>

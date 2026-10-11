@@ -7,7 +7,7 @@ import { signOut } from "../../actions";
 export const metadata = { title: "Settings · Post Social" };
 
 // The address the privacy policy gives for account and data deletion.
-const DELETION_EMAIL = "aki.b@pentridgemedia.com";
+const DELETION_EMAIL = "support@postsocial.xyz";
 
 const ROLE: Record<string, string> = {
   owner: "Owner: full control",

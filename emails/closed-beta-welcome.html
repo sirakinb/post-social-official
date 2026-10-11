@@ -7,13 +7,12 @@
 <meta name="supported-color-schemes" content="dark">
 <title>You're in. Welcome to the Post Social beta</title>
 <!--
-  Closed-beta welcome email. Draft for review, not wired up.
+  Closed-beta welcome email, sent when an invited tester's account is created.
   Subject:   You're in. Welcome to the Post Social beta
   Preheader: Your account is ready.
-  From:      Akinyemi <akinyemi@mail.postsocial.xyz>   Reply-To: Akinyemi's inbox
-  Merge fields: {{first_name}}, {{email}}
-  Images: {{ICON_URL}} -> https://www.postsocial.xyz/email/post-social-icon.png
-          {{BANNER_URL}} -> https://www.postsocial.xyz/email/welcome-banner.jpg
+  From:      Akinyemi <akinyemi@postsocial.xyz>   Reply-To: aki.b@pentridgemedia.com
+  Sent by scripts/beta-invite.ts (npm run beta:invite), which fills in the merge fields:
+  {{first_name}}, {{email}}, {{password}} and {{site_url}}. Images load from postsocial.xyz/email/.
 -->
 </head>
 <body style="margin:0;padding:0;background:#0B0816;">
@@ -25,7 +24,7 @@
   <!-- Wordmark -->
   <tr><td style="padding:0 8px 20px;">
     <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-      <td style="vertical-align:middle;"><img src="{{ICON_URL}}" width="28" height="28" alt="" style="display:block;border:0;border-radius:7px;"></td>
+      <td style="vertical-align:middle;"><img src="https://www.postsocial.xyz/email/post-social-icon.png" width="28" height="28" alt="" style="display:block;border:0;border-radius:7px;"></td>
       <td style="vertical-align:middle;padding-left:10px;font-family:Fraunces,Georgia,'Times New Roman',serif;font-size:12px;letter-spacing:4px;text-transform:uppercase;color:#FAF6F0;">Post Social</td>
     </tr></table>
   </td></tr>
@@ -33,26 +32,27 @@
   <!-- Card -->
   <tr><td style="background:#130E24;border:1px solid #2A2142;border-radius:18px;overflow:hidden;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-      <tr><td><img src="{{BANNER_URL}}" width="600" alt="Paper lanterns rising over a lake at dusk" style="display:block;width:100%;height:auto;border:0;border-radius:18px 18px 0 0;"></td></tr>
+      <tr><td><img src="https://www.postsocial.xyz/email/welcome-banner.jpg" width="600" alt="Paper lanterns rising over a lake at dusk" style="display:block;width:100%;height:auto;border:0;border-radius:18px 18px 0 0;"></td></tr>
       <tr><td style="padding:32px 36px 8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
         <p style="margin:0 0 14px;font-family:'SFMono-Regular',Menlo,Consolas,monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#FFC48A;">Closed beta &middot; Invite</p>
         <h1 style="margin:0 0 16px;font-size:30px;line-height:1.15;font-weight:600;letter-spacing:-0.5px;color:#FAF6F0;">You're in, {{first_name}}.</h1>
-        <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#CFC8DC;">Post Social is open to a small group right now, and you're one of them. Your account is ready. Tell your AI agent (Muse, Claude, ChatGPT, etc.) what to post, or do it yourself in the app, and it goes out to every channel on time.</p>
+        <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#CFC8DC;">Your account is ready. Tell your AI agent (Muse, Claude, ChatGPT, etc.) what to post, or do it yourself in the app, and it goes out to every channel on time.</p>
       </td></tr>
 
       <!-- Sign-in box -->
       <tr><td style="padding:0 36px;">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#1B1530;border:1px solid #33294F;border-radius:14px;">
           <tr><td style="padding:20px 22px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
-            <p style="margin:0 0 4px;font-family:'SFMono-Regular',Menlo,Consolas,monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#9C93B3;">Your sign-in</p>
+            <p style="margin:0 0 4px;font-family:'SFMono-Regular',Menlo,Consolas,monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#9C93B3;">Email</p>
             <p style="margin:0 0 14px;font-size:15px;line-height:1.5;color:#FAF6F0;">{{email}}</p>
-            <p style="margin:0 0 18px;font-size:14px;line-height:1.55;color:#CFC8DC;">Use the password Akinyemi sent you. You can change it anytime in Settings.</p>
+            <p style="margin:0 0 4px;font-family:'SFMono-Regular',Menlo,Consolas,monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#9C93B3;">Password</p>
+            <p style="margin:0 0 20px;font-family:'SFMono-Regular',Menlo,Consolas,monospace;font-size:16px;line-height:1.5;letter-spacing:1px;color:#FAF6F0;">{{password}}</p>
             <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
               <td style="border-radius:999px;background:#FFD7B0;background-image:linear-gradient(180deg,#FFE3C4,#FFC48A);">
-                <a href="https://www.postsocial.xyz/beta/login?utm_source=email&amp;utm_campaign=beta_welcome" style="display:inline-block;padding:12px 24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;font-weight:600;color:#1A1028;text-decoration:none;border-radius:999px;">Sign in</a>
+                <a href="{{site_url}}/beta/login?utm_source=email&amp;utm_campaign=beta_welcome" style="display:inline-block;padding:12px 24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;font-weight:600;color:#1A1028;text-decoration:none;border-radius:999px;">Sign in</a>
               </td>
             </tr></table>
-            <p style="margin:14px 0 0;font-size:13px;line-height:1.5;color:#9C93B3;">Forgot your password? <a href="https://www.postsocial.xyz/beta/reset-password?utm_source=email&amp;utm_campaign=beta_welcome" style="color:#C9A8FF;text-decoration:none;">Reset it here</a></p>
+            <p style="margin:14px 0 0;font-size:13px;line-height:1.5;color:#9C93B3;">Forgot your password? <a href="{{site_url}}/beta/reset-password?utm_source=email&amp;utm_campaign=beta_welcome" style="color:#C9A8FF;text-decoration:none;">Reset it here</a></p>
           </td></tr>
         </table>
       </td></tr>
@@ -80,7 +80,7 @@
       <tr><td style="padding:24px 36px 34px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid #2A2142;"><tr><td style="padding-top:24px;">
           <p style="margin:0 0 10px;font-size:16px;font-weight:600;color:#FAF6F0;">What beta means</p>
-          <p style="margin:0 0 14px;font-size:14px;line-height:1.6;color:#CFC8DC;">Everything works, and your posts go out for real. Things will also change quickly while we learn from this group. If something breaks or feels off, reply to this email. It comes straight to me, and I read every one.</p>
+          <p style="margin:0 0 14px;font-size:14px;line-height:1.6;color:#CFC8DC;">Everything works, and your posts go out for real. If something breaks or feels off, reply to this email.</p>
           <p style="margin:0;font-size:14px;line-height:1.6;color:#CFC8DC;">Glad you're here,<br><span style="color:#FAF6F0;font-weight:600;">Akinyemi</span><br><span style="color:#9C93B3;">Post Social</span></p>
         </td></tr></table>
       </td></tr>
