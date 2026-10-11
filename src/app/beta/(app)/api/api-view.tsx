@@ -93,7 +93,7 @@ export function ApiView(props: { workspaceId: string; role: string; apps: AiApp[
                   </ul>
                   {(a.mine || canManageKeys) && (
                     confirming === a.id ? (
-                      <button type="button" disabled={busy !== null} onClick={() => run(a.id, () => revokeGrant(a.id), `Disconnected ${a.name}. It can't use Post Social anymore.`)} className={cn(btn, "self-start border-ps-failed/40 text-[#FF8A8E]")}>Confirm disconnect</button>
+                      <button type="button" data-attr="disconnect-ai-app" disabled={busy !== null} onClick={() => run(a.id, () => revokeGrant(a.id), `Disconnected ${a.name}. It can't use Post Social anymore.`)} className={cn(btn, "self-start border-ps-failed/40 text-[#FF8A8E]")}>Confirm disconnect</button>
                     ) : (
                       <button type="button" onClick={() => setConfirming(a.id)} className={cn(btn, "self-start text-[#FF8A8E]")}>Disconnect {a.name}</button>
                     )
@@ -109,7 +109,7 @@ export function ApiView(props: { workspaceId: string; role: string; apps: AiApp[
         <section id="keys" aria-labelledby="keys-h">
           <div className="mb-2.5 flex items-baseline justify-between">
             <h2 id="keys-h" className="m-0 text-sm font-medium">API keys</h2>
-            {canManageKeys && !keyForm && <button type="button" onClick={() => setKeyForm(true)} className="h-[30px] rounded-lg bg-ps-plum px-3 text-xs font-medium text-ps-ground hover:bg-[#AD86FF]">Create key</button>}
+            {canManageKeys && !keyForm && <button type="button" data-attr="create-api-key" onClick={() => setKeyForm(true)} className="h-[30px] rounded-lg bg-ps-plum px-3 text-xs font-medium text-ps-ground hover:bg-[#AD86FF]">Create key</button>}
           </div>
           <div className="rounded-xl border border-ps-line bg-ps-surface">
             {newKey && (
@@ -148,7 +148,7 @@ export function ApiView(props: { workspaceId: string; role: string; apps: AiApp[
                 <span className="w-24 text-right text-xs text-ps-subtle">{k.lastUsedAt ? `Used ${ago(k.lastUsedAt, now)}` : "Never used"}</span>
                 {canManageKeys &&
                   (confirming === k.id ? (
-                    <button type="button" disabled={busy !== null} onClick={() => run(k.id, () => revokeKey(k.id), `Revoked “${k.name}”. It stops working right away.`)} className={cn(btn, "border-ps-failed/40 text-[#FF8A8E]")}>Confirm</button>
+                    <button type="button" data-attr="revoke-api-key" disabled={busy !== null} onClick={() => run(k.id, () => revokeKey(k.id), `Revoked “${k.name}”. It stops working right away.`)} className={cn(btn, "border-ps-failed/40 text-[#FF8A8E]")}>Confirm</button>
                   ) : (
                     <button type="button" onClick={() => setConfirming(k.id)} className="h-[30px] px-1.5 text-xs text-ps-subtle hover:text-ps-text">Revoke</button>
                   ))}

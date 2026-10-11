@@ -110,9 +110,9 @@ export function MediaView({ workspaceId, items, showHidden, loadError, canEdit }
             <Link href={showHidden ? "/beta/media" : "/beta/media?hidden=1"} className="text-xs text-ps-muted hover:text-ps-text">{showHidden ? "Back to library" : "Hidden"}</Link>
             {canEdit && !showHidden && (
               <>
-                <button type="button" onClick={() => setImportOpen((v) => !v)} className="h-8 rounded-lg border border-white/[0.12] px-3 hover:border-white/25">From a link</button>
+                <button type="button" data-attr="import-media-link" onClick={() => setImportOpen((v) => !v)} className="h-8 rounded-lg border border-white/[0.12] px-3 hover:border-white/25">From a link</button>
                 <input ref={file} type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm" multiple className="sr-only" onChange={(e) => { for (const f of Array.from(e.target.files ?? [])) void upload(f); e.target.value = ""; }} />
-                <button type="button" onClick={() => file.current?.click()} className="h-8 rounded-lg bg-ps-plum px-3.5 font-medium text-ps-ground hover:bg-[#AD86FF]">Upload</button>
+                <button type="button" data-attr="upload-media" onClick={() => file.current?.click()} className="h-8 rounded-lg bg-ps-plum px-3.5 font-medium text-ps-ground hover:bg-[#AD86FF]">Upload</button>
               </>
             )}
           </div>

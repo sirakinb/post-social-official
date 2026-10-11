@@ -158,7 +158,7 @@ export function ConnectionsView(props: {
       {canEdit &&
         (confirming === a.id ? (
           <span className="flex gap-1.5">
-            <button type="button" disabled={busy !== null} onClick={() => run(a.id, () => disconnect(a.id), `Disconnected ${a.name}. Scheduled posts for it were cancelled.`)} className={cn(btn, "border-ps-failed/40 text-[#FF8A8E]")}>{busy === a.id ? "Disconnecting…" : "Confirm disconnect"}</button>
+            <button type="button" data-attr="disconnect-account" disabled={busy !== null} onClick={() => run(a.id, () => disconnect(a.id), `Disconnected ${a.name}. Scheduled posts for it were cancelled.`)} className={cn(btn, "border-ps-failed/40 text-[#FF8A8E]")}>{busy === a.id ? "Disconnecting…" : "Confirm disconnect"}</button>
             <button type="button" onClick={() => setConfirming(null)} className={btn}>Keep</button>
           </span>
         ) : (
@@ -212,7 +212,7 @@ export function ConnectionsView(props: {
             {props.profiles.length > 0 && pill("none", "No profile", active.filter((a) => !a.profileId || !profileById.has(a.profileId)).length)}
           </div>
           {canEdit && (
-            <button type="button" onClick={() => setEditing("new")} className="inline-flex h-[30px] flex-none items-center rounded-lg border border-dashed border-white/[0.16] px-3 text-xs text-ps-muted hover:border-ps-plum/60 hover:text-ps-text">
+            <button type="button" data-attr="new-profile" onClick={() => setEditing("new")} className="inline-flex h-[30px] flex-none items-center rounded-lg border border-dashed border-white/[0.16] px-3 text-xs text-ps-muted hover:border-ps-plum/60 hover:text-ps-text">
               + New profile
             </button>
           )}
