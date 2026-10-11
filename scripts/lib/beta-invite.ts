@@ -43,7 +43,7 @@ export function renderWelcomeEmail(template: string, fields: WelcomeFields, envi
   const text = [
     `You're in, ${fields.firstName.trim()}.`,
     "",
-    "Post Social is open to a small group right now, and you're one of them. Your account is ready. Tell your AI agent (Muse, Claude, ChatGPT, etc.) what to post, or do it yourself in the app, and it goes out to every channel on time.",
+    "Your account is ready. Tell your AI agent (Muse, Claude, ChatGPT, etc.) what to post, or do it yourself in the app, and it goes out to every channel on time.",
     "",
     `Email: ${fields.email}`,
     `Password: ${fields.password}`,
@@ -56,7 +56,7 @@ export function renderWelcomeEmail(template: string, fields: WelcomeFields, envi
     '3. Connect your AI. Add Post Social to Claude, ChatGPT or your agent of choice, then just ask: "Post today\'s clip to TikTok and Threads at 6pm."',
     "",
     "What beta means",
-    "Everything works, and your posts go out for real. Things will also change quickly while we learn from this group. If something breaks or feels off, reply to this email. It comes straight to me, and I read every one.",
+    "Everything works, and your posts go out for real. If something breaks or feels off, reply to this email. It comes straight to me, and I read every one.",
     "",
     "Glad you're here,",
     "Akinyemi",
