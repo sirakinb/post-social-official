@@ -5,7 +5,7 @@ import { LogsTable } from "./logs-table";
 
 const failed: LogRow = {
   id: "e1", at: "2026-10-10T15:00:00Z", level: "error", eventType: "destination.failed", area: "posts", source: "worker",
-  actorKind: "system", actorName: "Post Social", summary: "Could not publish to Still Meditation",
+  actorKind: "system", actorName: "Post Social", actorVia: null, summary: "Could not publish to Still Meditation",
   status: { label: "Failed", tone: "failed" }, error: { code: "media_rejected", message: "Instagram rejected the video: aspect ratio" },
   target: { platform: "instagram", account: "Still Meditation", postId: "p1" }, details: { after: { code: "media_rejected" } },
 };

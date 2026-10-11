@@ -81,6 +81,18 @@ describe("MCP", () => {
     expect(unknown.result.capabilities).toEqual({ tools: { listChanged: false } });
   });
 
+  it("remembers which app connected, and still connects when that can't be saved", async () => {
+    const sql = vi.fn(async () => []) as unknown as Sql;
+    await call({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", clientInfo: { name: "claude-code", version: "2.1.0" } } }, sql);
+    expect(sql).toHaveBeenCalledWith(expect.stringContaining("SET client_name"), [caller().actorId, "Claude Code"]);
+    const failing = vi.fn(async () => { throw new Error("no column"); }) as unknown as Sql;
+    const reply = await call({ jsonrpc: "2.0", id: 2, method: "initialize", params: { clientInfo: { name: "codex-mcp-client" } } }, failing);
+    expect(reply.result.serverInfo.name).toBe("post-social");
+    const silent = vi.fn() as unknown as Sql;
+    await call({ jsonrpc: "2.0", id: 3, method: "initialize", params: {} }, silent);
+    expect(silent).not.toHaveBeenCalled();
+  });
+
   it("answers notifications with nothing and rejects batches", async () => {
     expect(await call({ jsonrpc: "2.0", method: "notifications/initialized" })).toBeNull();
     expect((await call([{ jsonrpc: "2.0", id: 1, method: "ping" }])).error.code).toBe(-32600);
