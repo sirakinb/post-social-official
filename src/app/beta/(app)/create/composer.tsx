@@ -374,11 +374,11 @@ export function Composer({ workspaceId, accounts, profiles = [], library: initia
             </div>
             <div className="flex gap-2">
               {(!editing || editing.status === "draft") && (
-                <button type="button" disabled={busy !== null || chosen.length === 0} onClick={() => save(false)} className="h-[34px] rounded-lg border border-white/[0.12] px-3.5 text-ps-text hover:border-white/25 disabled:opacity-50">
+                <button type="button" disabled={busy !== null || chosen.length === 0} onClick={() => save(false)} data-attr="save-draft" className="h-[34px] rounded-lg border border-white/[0.12] px-3.5 text-ps-text hover:border-white/25 disabled:opacity-50">
                   {busy === "draft" ? "Saving…" : "Save draft"}
                 </button>
               )}
-              <button type="button" disabled={busy !== null || problems.length > 0} onClick={() => save(true)} className="h-[34px] rounded-lg bg-ps-plum px-4 font-medium text-ps-ground hover:bg-[#AD86FF] disabled:cursor-not-allowed disabled:bg-ps-plum/40 disabled:text-ps-ground/80">
+              <button type="button" disabled={busy !== null || problems.length > 0} onClick={() => save(true)} data-attr={when === "later" ? "schedule-post" : "publish-now"} className="h-[34px] rounded-lg bg-ps-plum px-4 font-medium text-ps-ground hover:bg-[#AD86FF] disabled:cursor-not-allowed disabled:bg-ps-plum/40 disabled:text-ps-ground/80">
                 {busy === "send" ? "Sending…" : primaryLabel}
               </button>
             </div>
