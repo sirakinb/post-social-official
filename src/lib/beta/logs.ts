@@ -124,19 +124,33 @@ export function whoDid(actor: Actor | null, postedBy: Actor | null): Pick<LogRow
   return { actorKind: who.kind, actorName: app ?? who.display_name, actorVia: app && app !== who.display_name ? who.display_name : null };
 }
 
+// Actor columns to read. The app name (client_name) is newer than the rest: if a database
+// doesn't have it yet, the logs still load, with key and app names as before.
+const WITH_APP = "kind, display_name, client_name";
+const WITHOUT_APP = "kind, display_name";
+
 export async function loadLogs(client: Client, workspaceId: string, filters: LogFilters, limit = 50) {
-  let query = client.database
-    .from("audit_events")
-    .select("id, occurred_at, event_type, entry_point, entity_type, entity_id, summary, before_values, after_values, metadata, actors(kind, display_name, client_name)")
-    .eq("workspace_id", workspaceId)
-    .order("occurred_at", { ascending: false })
-    .limit(limit + 1);
-  if (filters.level === "errors") query = query.in("event_type", [...ERROR_EVENTS, ...WARNING_EVENTS]);
-  if (filters.area) query = query.or(AREAS[filters.area].prefixes.map((p) => `event_type.like.${p}*`).join(","));
-  if (filters.source) query = query.eq("entry_point", filters.source);
-  if (filters.actorId) query = query.eq("actor_id", filters.actorId);
-  if (filters.before) query = query.lt("occurred_at", filters.before);
-  const { data, error } = await query;
+  const events = (actor: string) => {
+    let query = client.database
+      .from("audit_events")
+      .select(`id, occurred_at, event_type, entry_point, entity_type, entity_id, summary, before_values, after_values, metadata, actors(${actor})`)
+      .eq("workspace_id", workspaceId)
+      .order("occurred_at", { ascending: false })
+      .limit(limit + 1);
+    if (filters.level === "errors") query = query.in("event_type", [...ERROR_EVENTS, ...WARNING_EVENTS]);
+    if (filters.area) query = query.or(AREAS[filters.area].prefixes.map((p) => `event_type.like.${p}*`).join(","));
+    if (filters.source) query = query.eq("entry_point", filters.source);
+    if (filters.actorId) query = query.eq("actor_id", filters.actorId);
+    if (filters.before) query = query.lt("occurred_at", filters.before);
+    return query;
+  };
+  let actor = WITH_APP;
+  let { data, error } = await events(actor);
+  if (error) {
+    console.error("logs: reading with app names failed, retrying without", error);
+    actor = WITHOUT_APP;
+    ({ data, error } = await events(actor));
+  }
   const rows = ((data ?? []) as unknown as EventRow[]).slice(0, limit);
 
   // Which post and account each publishing event was about.
@@ -146,7 +160,7 @@ export async function loadLogs(client: Client, workspaceId: string, filters: Log
   if (destinationIds.length) {
     const { data: destinations } = await client.database
       .from("destinations")
-      .select("id, platform, post_id, connected_accounts(display_name), actors!destinations_actor_id_fkey(kind, display_name, client_name)")
+      .select(`id, platform, post_id, connected_accounts(display_name), actors!destinations_actor_id_fkey(${actor})`)
       .in("id", destinationIds);
     for (const d of (destinations ?? []) as unknown as Array<{ id: string; platform: string; post_id: string; connected_accounts: { display_name: string } | null; actors: Actor | null }>) {
       targets.set(d.id, { platform: d.platform, account: d.connected_accounts?.display_name ?? "", postId: d.post_id });
