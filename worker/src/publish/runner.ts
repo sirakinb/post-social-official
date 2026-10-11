@@ -16,6 +16,7 @@ import { publishTikTok } from "./tiktok";
 import { tiktokPhotoLinks } from "./tiktok-photos";
 import { coverImage, videoFrame } from "./covers";
 import { failureMessage } from "./support";
+import { publishAttribution } from "./attribution";
 import { PublishError, type Adapter, type Bundle, type Checkpoint, type PublishMedia, type StepContext, type StepResult } from "./types";
 import { publishYouTube } from "./youtube";
 
@@ -165,7 +166,10 @@ export async function runNextPublishJob(deps: PublishDeps): Promise<boolean> {
     await finish("complete", null);
     await deps.sql(`SELECT public.finalize_post($1)`, [b.postId]);
     log("published", { job: job.id, platform: b.platform });
-    await deps.telemetry?.capture("post_published", { platform: b.platform, workspace_id: job.workspace_id, attempt: job.attempt_count });
+    if (deps.telemetry) {
+      const who = await publishAttribution(deps.sql, job.destination_id);
+      await deps.telemetry.capture("post_published", { platform: b.platform, workspace_id: job.workspace_id, attempt: job.attempt_count, source: who.source, ai_app: who.aiApp }, who.userId);
+    }
     return true;
   } catch (cause) {
     const error = cause instanceof PublishError ? cause : new PublishError("unexpected", cause instanceof Error ? cause.message : String(cause), true);
@@ -192,7 +196,10 @@ export async function runNextPublishJob(deps: PublishDeps): Promise<boolean> {
     const message = failureMessage(error).slice(0, 500);
     await finish("failed", message);
     // A post that finally failed: counted so a spike can alert; crashes also get a stack trace.
-    await deps.telemetry?.capture("publish_failed", { platform: bundle?.platform ?? null, workspace_id: job.workspace_id, code: error.code, attempt: job.attempt_count });
+    if (deps.telemetry) {
+      const who = await publishAttribution(deps.sql, job.destination_id);
+      await deps.telemetry.capture("publish_failed", { platform: bundle?.platform ?? null, workspace_id: job.workspace_id, code: error.code, attempt: job.attempt_count, source: who.source, ai_app: who.aiApp }, who.userId);
+    }
     // Crashes, and problems only we can fix (our X credits ran out), page us with the details.
     if (error.code === "unexpected" || error.code === "x_no_credits") await deps.telemetry?.captureException(cause, { job: job.id, platform: bundle?.platform ?? null, area: "publish" });
     await deps.sql(
