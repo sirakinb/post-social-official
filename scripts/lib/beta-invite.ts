@@ -56,7 +56,7 @@ export function renderWelcomeEmail(template: string, fields: WelcomeFields, envi
     '3. Connect your AI. Add Post Social to Claude, ChatGPT or your agent of choice, then just ask: "Post today\'s clip to TikTok and Threads at 6pm."',
     "",
     "What beta means",
-    "Everything works, and your posts go out for real. If something breaks or feels off, reply to this email. It comes straight to me, and I read every one.",
+    "Everything works, and your posts go out for real. If something breaks or feels off, reply to this email.",
     "",
     "Glad you're here,",
     "Akinyemi",

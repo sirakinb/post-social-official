@@ -151,10 +151,10 @@ export default function DataDeletionPage() {
                 confirmations use a one-way hash and are retained for up to 30
                 days. If you cannot access your account, contact us at{" "}
                 <a
-                  href="mailto:aki.b@pentridgemedia.com"
+                  href="mailto:support@postsocial.xyz"
                   className="text-accent hover:text-accent-hover underline"
                 >
-                  aki.b@pentridgemedia.com
+                  support@postsocial.xyz
                 </a>
                 .
               </p>

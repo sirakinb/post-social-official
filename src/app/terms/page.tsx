@@ -158,7 +158,7 @@ export default function TermsPage() {
               </h2>
               <p className="mt-2 text-sm leading-relaxed">
                 Questions about these terms may be sent to{" "}
-                <a href="mailto:aki.b@pentridgemedia.com" className="text-accent hover:text-accent-hover underline">aki.b@pentridgemedia.com</a>.
+                <a href="mailto:support@postsocial.xyz" className="text-accent hover:text-accent-hover underline">support@postsocial.xyz</a>.
               </p>
             </section>
           </div>
