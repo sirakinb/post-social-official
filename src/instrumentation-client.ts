@@ -2,6 +2,7 @@
 // tracking. On only where NEXT_PUBLIC_POSTHOG_KEY is set (production), never locally.
 import posthog from "posthog-js";
 import { cleanUrl, URL_PROPERTIES } from "@/lib/analytics/clean-url";
+import { trackTaggedClicks } from "@/lib/analytics/tagged-clicks";
 
 const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
 
@@ -34,5 +35,6 @@ if (key) {
     },
   });
   posthog.register({ environment: process.env.NEXT_PUBLIC_VERCEL_ENV ?? "development" });
+  trackTaggedClicks((event, properties) => posthog.capture(event, properties));
 }
 
