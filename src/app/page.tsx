@@ -381,7 +381,10 @@ export default function LandingPage() {
             <Link href="/data-deletion" className="hover:text-[#FAF6F0]">Data deletion</Link>
           </nav>
         </div>
-        <p className="mx-auto max-w-6xl px-5 pb-8 text-xs text-[#FAF6F0]/35 sm:px-8">© 2026 Pentridge Media. All rights reserved.</p>
+        <p className="mx-auto flex max-w-6xl flex-wrap gap-x-4 gap-y-1 px-5 pb-8 text-xs text-[#FAF6F0]/35 sm:px-8">
+          <span>© 2026 Pentridge Media. All rights reserved.</span>
+          <Link href="/changelog" className="hover:text-[#FAF6F0]/70">Changelog</Link>
+        </p>
       </footer>
     </div>
   );
