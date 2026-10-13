@@ -269,7 +269,7 @@ export async function completeConnection(deps: ConnectionDeps, platform: Platfor
       ],
     );
     // A step of the new-user funnel; reconnects don't count.
-    if (event?.event_type === "account.connected") trackEvent("account_connected", { platform, workspace_id: session.workspace_id }, session.user_id);
+    if (event?.event_type === "account.connected") trackEvent("account_connected", { platform, workspace_id: session.workspace_id }, session.user_id ?? undefined);
     connected.push(identity.displayName);
   }
   return { returnTo: session.return_to, ok: true, platform, message: `Connected ${connected.join(", ")}.` };

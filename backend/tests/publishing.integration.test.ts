@@ -311,7 +311,7 @@ describe.skipIf(!enabled)("publishing engine on the dev backend (US-027 to US-03
       events.push(JSON.parse(String(init?.body)));
       return new Response("ok");
     };
-    setErrorReporter(createTelemetry({ key: "phc_test", service: "posts", fetchImpl: fetchImpl as typeof fetch }));
+    setErrorReporter(createTelemetry({ key: "phc_test", service: "posts", fetchImpl: fetchImpl as unknown as typeof fetch }));
     try {
       const at = new Date(Date.now() + 3600_000).toISOString();
       const draft = await act(person(), "create", { ...textPost(facebook, `Funnel ${suffix}`), scheduled_at: at });

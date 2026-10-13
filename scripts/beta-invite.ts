@@ -18,8 +18,9 @@ import { generatePassword, PROD_SITE_URL, renderWelcomeEmail, sendWelcomeEmail }
 const repoRoot = path.resolve(import.meta.dirname, "..");
 
 // A secret from the shell, else from that environment's InsForge secrets.
-function secret(target: "dev" | "prod", name: string) {
-  if (process.env[name]) return process.env[name];
+function secret(target: "dev" | "prod", name: string): string {
+  const fromShell = process.env[name];
+  if (fromShell) return fromShell;
   try {
     // Same read as scripts/deploy-worker.sh; on prod the wrapper asks to confirm once.
     const out = execFileSync(path.join(repoRoot, "scripts/insforge-env.sh"), [target, "secrets", "get", name, "--json"], {
