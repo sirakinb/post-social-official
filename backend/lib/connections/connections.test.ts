@@ -1,7 +1,6 @@
 // @vitest-environment node
 import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { openCredential, sealCredential } from "../../../convex/lib/credentialCrypto";
 import { importKey, open, seal, sha256Hex } from "./crypto";
 import { SCOPES, authorizeUrl, exchangeCode, refreshTokens, revokeTokens, type Platform } from "./platforms";
 import { callbackUrl, originAllowedFor } from "./service";
@@ -42,15 +41,10 @@ function fakeHttp(routes: Array<[RegExp, unknown, number?]>) {
 }
 
 describe("token encryption", () => {
-  it("round-trips and is compatible with the Convex format in both directions", async () => {
-    const raw = randomBytes(32);
-    const key = await importKey(raw.toString("base64"));
+  it("round-trips", async () => {
+    const key = await importKey(randomBytes(32).toString("base64"));
     const tokens = { accessToken: "access-1", refreshToken: "refresh-1" };
-
-    const sealed = await seal(tokens, key);
-    expect(await open(sealed, key)).toEqual(tokens);
-    expect(openCredential(sealed, raw)).toEqual(tokens);
-    expect(await open(sealCredential(tokens, raw), key)).toEqual(tokens);
+    expect(await open(await seal(tokens, key), key)).toEqual(tokens);
   });
 
   it("refuses tampered data and bad keys", async () => {

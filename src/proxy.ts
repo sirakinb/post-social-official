@@ -1,6 +1,5 @@
-// Session handling for the new InsForge-backed app under /beta, and the visitor's address
-// for requests this site forwards to the API (rate limits). The current Convex app (/app,
-// /login) is not touched by this proxy.
+// Session handling for the web app under /beta, and the visitor's address for requests this
+// site forwards to the API (rate limits).
 import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@insforge/sdk/ssr/middleware";
 import { BETA_HOME, BETA_LOGIN, isPublicBetaPath } from "@/lib/insforge/auth-rules";

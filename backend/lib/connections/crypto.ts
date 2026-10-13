@@ -1,6 +1,6 @@
 // AES-256-GCM encryption for platform tokens, using Web Crypto so it runs unchanged in
 // InsForge functions (Deno), the worker (Node) and tests. Format: base64(ciphertext||tag)
-// plus a base64 12-byte IV, matching convex/lib/credentialCrypto.ts.
+// plus a base64 12-byte IV, the format the old Convex app used.
 
 // Platforms with more to keep (Bluesky: its DPoP key and servers) store it alongside.
 export type TokenSet = { accessToken: string; refreshToken?: string; [extra: string]: unknown };

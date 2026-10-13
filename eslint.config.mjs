@@ -13,17 +13,10 @@ export default defineConfig([
       ],
     },
   },
-  {
-    files: ["convex/**/*.ts"],
-    rules: {
-      "@typescript-eslint/no-explicit-any": "off",
-    },
-  },
   globalIgnores([
     ".next/**",
     "dist/**",
     "node_modules/**",
-    "convex/_generated/**",
     ".build/**",
     "worker/dist/**",
     "next-env.d.ts",

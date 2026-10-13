@@ -1,5 +1,5 @@
-// Per-platform sign-in, token exchange, refresh and revoke. Ported from convex/oauth.ts,
-// convex/tokenLifecycle.ts and convex/lib/platformRevocation.ts; runtime-neutral (fetch
+// Per-platform sign-in, token exchange, refresh and revoke. Ported from the old Convex app
+// (its oauth, token lifecycle and revocation code); runtime-neutral (fetch
 // only). Scopes are exactly those in the PRD, section 6. Bluesky's sign-in is different
 // (pushed requests and DPoP-bound tokens) and lives in atproto.ts.
 import { BLUESKY_SCOPE, publicProfile, refreshSession, revokeSession, type BlueskySession } from "./atproto";

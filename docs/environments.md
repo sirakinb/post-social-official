@@ -14,14 +14,10 @@ Vercel environment variables (set in the Vercel project, not in git):
 | `NEXT_PUBLIC_APP_ENV` | `development` | `production` |
 | `NEXT_PUBLIC_INSFORGE_URL` | dev API base | prod API base |
 | `NEXT_PUBLIC_INSFORGE_ANON_KEY` | dev anon key | prod anon key |
-| `NEXT_PUBLIC_CONVEX_URL`, `NEXT_PUBLIC_CONVEX_SITE_URL` | same Convex deployment | same Convex deployment |
 
-**Warning: previews use live data until Phase 1.** There is only one Convex deployment,
-and it holds the real accounts and posts. A PR preview reads and writes that same data,
-so editing or approving a post in a preview affects the real one. Do not invite testers
-to previews until the web app runs on InsForge, where previews use the dev branch.
-Previews show an amber badge with the environment, the InsForge host and
-"LIVE Convex data"; production shows none.
+Previews show an amber badge with the environment and the InsForge host; production shows
+none. The old Convex variables (`NEXT_PUBLIC_CONVEX_URL`, `NEXT_PUBLIC_CONVEX_SITE_URL`,
+`CONVEX_SITE_URL`) are no longer read and can be deleted from Vercel.
 
 This folder is linked to **dev** by default. Keys live in `.insforge/project.json` and
 `.env.local`, both gitignored. Never commit them.
@@ -97,8 +93,8 @@ npm run account:create -- dev reviewer --email reviewer@example.com --name "Revi
 ```
 
 Run it in a Terminal window: it needs typed input, which the `!` prefix in Claude Code
-cannot give. Use `prod` instead of `dev` for prod (asks you to type `prod`). The new web app runs at
-`/beta` (sign-in at `/beta/login`) until it replaces `/app` at launch.
+cannot give. Use `prod` instead of `dev` for prod (asks you to type `prod`). The web app runs at
+`/beta` (sign-in at `/beta/login`); the old `/app` and `/login` addresses redirect there.
 
 ## TikTok sign-in and photo posts
 
@@ -107,12 +103,28 @@ cannot give. Use `prod` instead of `dev` for prod (asks you to type `prod`). The
   prod's own address, prod sets `TIKTOK_REDIRECT_URI` to that Convex address and Convex
   (`TIKTOK_FORWARD_URL`) forwards every TikTok sign-in it didn't start to
   `https://syydd6ck.function2.insforge.app/connections/oauth/tiktok/callback`. Once TikTok
-  approves prod's address, delete `TIKTOK_REDIRECT_URI` on prod.
+  approves prod's address, delete `TIKTOK_REDIRECT_URI` on prod. This is the last thing
+  the Convex deployment does: its code has left this repo, but keep the deployment running
+  until `TIKTOK_REDIRECT_URI` is gone from prod, or TikTok sign-in breaks.
 - **Photo posts.** TikTok fetches photos itself, only from a verified domain and without
   following redirects, so it reads them from `https://www.postsocial.xyz/tiktok-media/...`
   (the website passes a signed storage link through). `postsocial.xyz` is verified in
   TikTok's portal for both the live app and the sandbox (TXT records on the root domain;
   `www` is a CNAME and can't hold one). Dev uses the same website address.
+
+## Switching off the old Convex deployment
+
+Its code is gone from this repo, but the deployment (`vibrant-donkey-218`) keeps running
+until it is paused in Convex's dashboard. Before pausing it, make sure no platform still
+sends people to a `convex.site` address:
+
+- **TikTok:** prod's own callback (`https://syydd6ck.function2.insforge.app/connections/oauth/tiktok/callback`)
+  is approved in the TikTok portal, and `TIKTOK_REDIRECT_URI` is deleted from prod secrets.
+- **Meta (Instagram, Facebook, Threads):** the redirect URIs, the data deletion callback and
+  the deauthorize callback point at `https://syydd6ck.function2.insforge.app/connections/...`
+  (`/meta/data-deletion`, `/meta/deauthorize`), not at `convex.site`.
+- **Google (YouTube):** the redirect URI is `https://www.postsocial.xyz/oauth/youtube/callback`.
+- **Vercel:** delete `NEXT_PUBLIC_CONVEX_URL`, `NEXT_PUBLIC_CONVEX_SITE_URL` and `CONVEX_SITE_URL`.
 
 ## LinkedIn sign-in
 
