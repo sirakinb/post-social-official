@@ -6,6 +6,7 @@
 //   POST /profiles/update               { profile_id, name?, description?, color?, timezone? }
 //   POST /profiles/delete               { profile_id } (its accounts move to no profile)
 //   POST /accounts/move                 { account_id, profile_id | null }
+//   POST /accounts/tiktok-delivery      { account_id, delivery: direct | inbox }
 //   GET  /oauth/{platform}/callback     platform sign-in callback: sends the browser to the web
 //                                       app's /beta/connect/finish, which finishes it as the
 //                                       signed-in person (POST /complete)
@@ -19,7 +20,7 @@ import { ApiError, type Caller } from "../../lib/access";
 import type { SignedInUser } from "../../lib/insforge-admin";
 import { callbackUrl, completeConnection, disconnectAccount, finishingOrigin, isPlatform, startConnection, type ConnectionDeps } from "../../lib/connections/service";
 import { deletionStatus, handleDataDeletion, handleDeauthorize } from "../../lib/connections/meta-deletion";
-import { createProfile, deleteProfile, moveAccount, updateProfile } from "../../lib/connections/profiles";
+import { createProfile, deleteProfile, moveAccount, setTiktokDelivery, updateProfile } from "../../lib/connections/profiles";
 import { clientKey, clientMetadata, publicJwk } from "../../lib/connections/atproto";
 
 export type ConnectionsHandlerDeps = ConnectionDeps & {
@@ -48,6 +49,7 @@ const PERSON_ACTIONS = {
   "/profiles/update": (deps: ConnectionsHandlerDeps, caller: Caller, body: Record<string, unknown>) => updateProfile(deps.sql, caller, body),
   "/profiles/delete": (deps: ConnectionsHandlerDeps, caller: Caller, body: Record<string, unknown>) => deleteProfile(deps.sql, caller, body),
   "/accounts/move": (deps: ConnectionsHandlerDeps, caller: Caller, body: Record<string, unknown>) => moveAccount(deps.sql, caller, body),
+  "/accounts/tiktok-delivery": (deps: ConnectionsHandlerDeps, caller: Caller, body: Record<string, unknown>) => setTiktokDelivery(deps.sql, caller, body),
 };
 const isPersonAction = (path: string): path is keyof typeof PERSON_ACTIONS => Object.hasOwn(PERSON_ACTIONS, path);
 

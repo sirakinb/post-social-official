@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 import type { Caller, Sql } from "../access";
-import { cleanTimezone, createProfile, deleteProfile, moveAccount, updateProfile } from "./profiles";
+import { cleanTimezone, createProfile, deleteProfile, moveAccount, setTiktokDelivery, updateProfile } from "./profiles";
 
 const WS = "11111111-1111-4111-8111-111111111111";
 const PROFILE = "22222222-2222-4222-8222-222222222222";
@@ -74,5 +74,34 @@ describe("profiles", () => {
     const { sql, calls } = fakeSql([[/FROM public\.connected_accounts WHERE id/, [{ id: ACCOUNT, workspace_id: WS, platform: "x", display_name: "D", profile_id: PROFILE }]]]);
     expect(await moveAccount(sql, person, { account_id: ACCOUNT, profile_id: "none" })).toEqual({ account_id: ACCOUNT, profile_id: null });
     expect(calls.at(-1)!.query).toMatch(/'account\.moved'/);
+  });
+});
+
+describe("how AI posts reach a TikTok account", () => {
+  const tiktok = { id: ACCOUNT, workspace_id: WS, platform: "tiktok", display_name: "Adzo", tiktok_delivery: "direct" };
+  const found = (row: Record<string, unknown> = tiktok) => [[/FROM public\.connected_accounts WHERE id/, [row]]] as Array<[RegExp, unknown[]]>;
+
+  it("switches to inbox first, audited, for a person or their AI", async () => {
+    for (const caller of [person, { ...person, entryPoint: "mcp" as const }]) {
+      const { sql, calls } = fakeSql(found());
+      expect(await setTiktokDelivery(sql, caller, { account_id: ACCOUNT, delivery: "inbox" })).toEqual({ account_id: ACCOUNT, tiktok_delivery: "inbox" });
+      const update = calls.at(-1)!;
+      expect(update.query).toMatch(/SET tiktok_delivery = \$2/);
+      expect(update.query).toMatch(/'account\.tiktok_delivery_changed'/);
+      expect(update.params).toContain("AI posts to TikTok account Adzo now go to the TikTok inbox first");
+    }
+  });
+
+  it("does nothing when it is already set that way", async () => {
+    const { sql, calls } = fakeSql(found());
+    await setTiktokDelivery(sql, person, { account_id: ACCOUNT, delivery: "direct" });
+    expect(calls.some((c) => /UPDATE/.test(c.query))).toBe(false);
+  });
+
+  it("refuses bad values, reviewers, other platforms and other workspaces", async () => {
+    await expect(setTiktokDelivery(fakeSql(found()).sql, person, { account_id: ACCOUNT, delivery: "later" })).rejects.toThrow(/direct" or "inbox/);
+    await expect(setTiktokDelivery(fakeSql(found(), "reviewer").sql, person, { account_id: ACCOUNT, delivery: "inbox" })).rejects.toThrow(/Reviewers cannot change accounts/);
+    await expect(setTiktokDelivery(fakeSql(found({ ...tiktok, platform: "x" })).sql, person, { account_id: ACCOUNT, delivery: "inbox" })).rejects.toThrow(/Only TikTok accounts/);
+    await expect(setTiktokDelivery(fakeSql(found(), "").sql, person, { account_id: ACCOUNT, delivery: "inbox" })).rejects.toMatchObject({ status: 404 });
   });
 });

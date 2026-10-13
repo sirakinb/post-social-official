@@ -12,7 +12,9 @@ vi.mock("./actions", () => ({
   updateProfile: vi.fn(),
   deleteProfile: vi.fn(),
   moveAccount: vi.fn(),
+  setTiktokDelivery: (...args: unknown[]) => setTiktokDelivery(...(args as [])),
 }));
+const setTiktokDelivery = vi.fn(async () => ({ ok: true as const, data: { tiktok_delivery: "inbox" } }));
 
 const account = (id: string, name: string, profileId: string | null): SocialAccount => ({ id, platform: "x", handle: name.toLowerCase(), name, avatarUrl: null, health: "connected", reason: null, postTypes: [], connectedAt: "2026-10-01T00:00:00Z", lastPostedAt: null, profileId });
 const profiles = [
@@ -57,5 +59,25 @@ describe("Accounts grouped by profile", () => {
     render(<ConnectionsView {...base} profiles={[]} filter={null} />);
     expect(screen.getByRole("tab", { name: /All accounts 3/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: "+ New profile" })).toBeTruthy();
+  });
+});
+
+describe("TikTok AI posts", () => {
+  const tiktok = (tiktokDelivery: "direct" | "inbox" | null): SocialAccount => ({ ...account("t1", "Adzo", null), platform: "tiktok", handle: "adzoai", tiktokDelivery });
+
+  it("posts directly by default and switches to inbox first", () => {
+    render(<ConnectionsView {...base} accounts={[tiktok("direct")]} filter={null} />);
+    const select = screen.getByLabelText("How AI posts reach Adzo") as HTMLSelectElement;
+    expect(select.value).toBe("direct");
+    fireEvent.change(select, { target: { value: "inbox" } });
+    expect(setTiktokDelivery).toHaveBeenCalledWith("t1", "inbox");
+  });
+
+  it("hides the setting where it doesn't exist yet, and from reviewers", () => {
+    const { unmount } = render(<ConnectionsView {...base} accounts={[tiktok(null)]} filter={null} />);
+    expect(screen.queryByLabelText("How AI posts reach Adzo")).toBeNull();
+    unmount();
+    render(<ConnectionsView {...base} role="reviewer" accounts={[tiktok("direct")]} filter={null} />);
+    expect(screen.queryByLabelText("How AI posts reach Adzo")).toBeNull();
   });
 });

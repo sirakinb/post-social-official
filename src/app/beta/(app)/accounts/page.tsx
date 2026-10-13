@@ -10,15 +10,18 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
 
   const COLUMNS = "id, platform, handle, display_name, avatar_url, health, health_reason, capabilities, created_at";
   const accountsQuery = (columns: string) => client.database.from("connected_accounts").select(columns).eq("workspace_id", workspace.id).order("platform").order("display_name");
-  const [accountsResult, { data: lastPosts }, profilesResult] = await Promise.all([
+  const [accountsResult, { data: lastPosts }, profilesResult, deliveryResult] = await Promise.all([
     accountsQuery(`${COLUMNS}, profile_id`),
     client.database.from("destinations").select("connected_account_id, updated_at").eq("workspace_id", workspace.id).eq("status", "published").order("updated_at", { ascending: false }).limit(200),
     client.database.from("profiles").select("id, name, description, color, timezone").eq("workspace_id", workspace.id).order("name"),
+    // Before the TikTok delivery migration reaches an environment, this fails and the setting stays hidden.
+    client.database.from("connected_accounts").select("id, tiktok_delivery").eq("workspace_id", workspace.id).eq("platform", "tiktok"),
   ]);
   // Before the profiles migration reaches an environment, read accounts without them.
   const profilesReady = !profilesResult.error;
   if (profilesResult.error) console.error("profiles could not be read", profilesResult.error);
   const { data: accountRows, error: accountError } = profilesReady && !accountsResult.error ? accountsResult : await accountsQuery(COLUMNS);
+  const delivery = new Map(((deliveryResult.data ?? []) as Array<{ id: string; tiktok_delivery: "direct" | "inbox" }>).map((r) => [r.id, r.tiktok_delivery]));
   const profiles = ((profilesResult.data ?? []) as Profile[]).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 
   const lastPosted = new Map<string, string>();
@@ -36,6 +39,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
     connectedAt: a.created_at,
     lastPostedAt: lastPosted.get(a.id) ?? null,
     profileId: a.profile_id ?? null,
+    tiktokDelivery: deliveryResult.error ? null : (delivery.get(a.id) ?? null),
   }));
 
 

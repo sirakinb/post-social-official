@@ -177,3 +177,39 @@ export async function moveAccount(sql: Sql, caller: Caller, input: { account_id?
   );
   return { account_id: accountId, profile_id: target?.id ?? null };
 }
+
+// How an AI's TikTok posts reach this account: "direct" (the default) posts straight away;
+// "inbox" sends each one to the creator's TikTok inbox to finish and post in TikTok.
+export async function setTiktokDelivery(sql: Sql, caller: Caller, input: { account_id?: unknown; delivery?: unknown }) {
+  const accountId = requireUuid(input.account_id, "Account");
+  if (input.delivery !== "direct" && input.delivery !== "inbox") throw new ApiError(400, 'delivery must be "direct" or "inbox".');
+  const delivery = input.delivery;
+  const [account] = await sql<{ id: string; workspace_id: string; platform: Platform; display_name: string; tiktok_delivery: string }>(
+    `SELECT id, workspace_id, platform, display_name, tiktok_delivery FROM public.connected_accounts WHERE id = $1`,
+    [accountId],
+  );
+  if (!account) throw new ApiError(404, "That account was not found.");
+  const member = await membership(sql, caller, account.workspace_id, true, "Reviewers cannot change accounts.").catch((error) => {
+    if (error instanceof ApiError && error.status === 404) throw new ApiError(404, "That account was not found.");
+    throw error;
+  });
+  if (account.platform !== "tiktok") throw new ApiError(400, "Only TikTok accounts have this setting.");
+  if (account.tiktok_delivery === delivery) return { account_id: accountId, tiktok_delivery: delivery };
+  await sql(
+    `WITH changed AS (
+       UPDATE public.connected_accounts SET tiktok_delivery = $2 WHERE id = $1 RETURNING id
+     )
+     INSERT INTO public.audit_events (workspace_id, actor_id, entry_point, event_type, entity_type, entity_id, summary, before_values, after_values)
+     SELECT $3, $4, $5, 'account.tiktok_delivery_changed', 'account', id, $6, jsonb_build_object('tiktok_delivery', $7::text), jsonb_build_object('tiktok_delivery', $2::text) FROM changed`,
+    [
+      accountId,
+      delivery,
+      account.workspace_id,
+      member.actor_id,
+      caller.entryPoint,
+      delivery === "direct" ? `AI posts to TikTok account ${account.display_name} now post directly` : `AI posts to TikTok account ${account.display_name} now go to the TikTok inbox first`,
+      account.tiktok_delivery,
+    ],
+  );
+  return { account_id: accountId, tiktok_delivery: delivery };
+}

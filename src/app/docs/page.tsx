@@ -112,7 +112,7 @@ npx postsocial create-post --help           # every option for a command`}</Code
           <h2 className="text-base font-semibold text-ink">Good to know</h2>
           <ul className="mt-2 list-disc space-y-1 pl-5">
             <li>You connect your social accounts in Post Social yourself; AIs can send you a connect link but never sign in for you.</li>
-            <li>TikTok asks the creator to confirm each post, so posts from an AI land in your TikTok inbox: open TikTok and tap Post.</li>
+            <li>TikTok posts from an AI go out directly, with the audience you ask for. To finish them in TikTok first, set the account to “Inbox first” in Accounts (or ask your AI to), and each post lands in your TikTok inbox.</li>
             <li>Everything an AI does is labelled with its name in your activity, and you can disconnect it any time under API keys.</li>
           </ul>
         </section>

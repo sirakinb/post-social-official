@@ -31,7 +31,7 @@ export async function listAccounts(sql: Sql, caller: Caller, input: { workspace_
   const profile = input.profile_id === undefined || input.profile_id === null || input.profile_id === "" ? null : input.profile_id === "none" ? "none" : requireUuid(input.profile_id, "Profile");
   const rows = await sql<Record<string, unknown> & { platform: Platform; policy: string }>(
     `SELECT a.id, a.platform, a.handle, a.display_name, a.avatar_url, a.health, a.health_reason, a.capabilities,
-            coalesce(a.approval_policy_override, w.default_approval_policy) AS policy, a.created_at,
+            coalesce(a.approval_policy_override, w.default_approval_policy) AS policy, a.created_at, a.tiktok_delivery,
             a.profile_id, pr.name AS profile_name
      FROM public.connected_accounts a JOIN public.workspaces w ON w.id = a.workspace_id
      LEFT JOIN public.profiles pr ON pr.id = a.profile_id
@@ -41,8 +41,10 @@ export async function listAccounts(sql: Sql, caller: Caller, input: { workspace_
     [input.workspace_id, platform, profile],
   );
   return {
-    accounts: rows.map(({ policy, ...row }) => ({
+    accounts: rows.map(({ policy, tiktok_delivery, ...row }) => ({
       ...row,
+      // How AI posts reach a TikTok account: direct, or the TikTok inbox first.
+      ...(row.platform === "tiktok" ? { tiktok_delivery } : {}),
       avatar_url: fullLink(row.avatar_url, site),
       platform_name: DISPLAY_NAMES[row.platform],
       ...(policy === "autonomous" ? {} : { approval: "AI posts wait for approval in Post Social (this account is set to ask first)" }),

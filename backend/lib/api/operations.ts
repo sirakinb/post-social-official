@@ -8,7 +8,7 @@ import { mediaActions, type MediaDeps } from "../media/service";
 import type { R2 } from "../media/r2";
 import { postActions } from "../publishing/service";
 import { listAccounts, listMedia, listPosts, listResults } from "./reads";
-import { createProfile, deleteProfile, listProfiles, moveAccount, updateProfile } from "../connections/profiles";
+import { createProfile, deleteProfile, listProfiles, moveAccount, setTiktokDelivery, updateProfile } from "../connections/profiles";
 import { PERIODS, usageReport } from "../usage";
 
 export type ApiDeps = {
@@ -52,7 +52,7 @@ const OPTIONS_HELP = [
   "threads: media_type text | image | video | carousel; text (overrides caption).",
   "youtube (Shorts, one vertical video up to 3 min): title (required, up to 100 characters); description; privacy_status public | unlisted | private (required).",
   "Video covers (any platform's options): cover_media_id (an image from list_media) or cover_time_ms (a frame, in milliseconds from the start), not both. Instagram Reels and YouTube take either; TikTok direct posts take a frame only; LinkedIn videos take either; TikTok drafts, Facebook, Threads, Bluesky and X can't set a cover. Instagram crops the cover to a centred square in the profile grid.",
-  "tiktok: delivery_mode must be inbox for AI posts (it goes to the creator's TikTok inbox, where they tap Post; TikTok requires the creator to confirm); media_type video (one video) | photo (1 to 35 images as a swipeable carousel; JPEG, PNG or WebP, resized for TikTok automatically), left out it follows the media; title (photo posts only, up to 90 characters); comments_enabled, duet_enabled, stitch_enabled (default off; Duet and Stitch are video only); disclose_your_brand, disclose_branded_content; ai_generated.",
+  "tiktok: delivery_mode direct (posts straight away; needs privacy_level PUBLIC_TO_EVERYONE | MUTUAL_FOLLOW_FRIENDS | FOLLOWER_OF_CREATOR | SELF_ONLY, the audience the person asked for, never assumed) or inbox (a draft in the creator's TikTok inbox, where they finish it and tap Post); left out, it follows the account's tiktok_delivery from list_accounts (direct unless the person chose inbox; set_tiktok_delivery changes it); media_type video (one video) | photo (1 to 35 images as a swipeable carousel; JPEG, PNG or WebP, resized for TikTok automatically), left out it follows the media; title (photo posts only, up to 90 characters); comments_enabled, duet_enabled, stitch_enabled (default off; Duet and Stitch are video only); disclose_your_brand, disclose_branded_content; ai_generated.",
   "linkedin (the member's own profile): media_type text | image | video, left out it follows the media; text (overrides caption, up to 3,000 characters); title (videos); visibility PUBLIC (default) | CONNECTIONS. Images: 1 to 20 JPEG, PNG or GIF (2 or more show as a gallery). Videos: one MP4, 3 seconds to 30 minutes, up to 500 MB.",
   "bluesky: media_type text | image | video, left out it follows the media; text (overrides caption, up to 300 characters); alt_text (one description per image, in order). Images: 1 to 4 JPEG, PNG, WebP or GIF (larger than 1 MB are resized to fit). Videos: one MP4, up to 3 minutes and 100 MB. Links, @mentions and #hashtags become clickable.",
   "x: media_type text | image | video, left out it follows the media; text (overrides caption, up to 280 characters; links count as 23, emoji as 2); alt_text (one description per image). Images: 1 to 4 JPEG, PNG or WebP up to 5 MB, or one GIF up to 15 MB. Videos: one MP4 or MOV, up to 2 min 20 s and 512 MB. Each X post is billed to Post Social (about 1.5 cents; 20 cents with a link).",
@@ -208,6 +208,15 @@ export const operations: Operation[] = [
     path: "/v1/accounts/{account_id}/profile",
     input: { properties: { account_id: id("connected account"), profile_id: { type: "string", description: "The profile id (from list_profiles), or none for no profile." } }, required: ["account_id", "profile_id"] },
     run: (deps, caller, input) => moveAccount(deps.sql, caller, input),
+  },
+  {
+    name: "set_tiktok_delivery",
+    title: "Choose how AI posts reach a TikTok account",
+    description: "Sets how this TikTok account receives AI posts: direct (the default) posts straight away; inbox sends each post to the creator's TikTok inbox to finish and post in TikTok. Posts that leave delivery_mode out follow this; an account set to inbox refuses direct posts. Change it only when the person asks.",
+    method: "POST",
+    path: "/v1/accounts/{account_id}/tiktok-delivery",
+    input: { properties: { account_id: id("connected TikTok account"), delivery: { type: "string", enum: ["direct", "inbox"] } }, required: ["account_id", "delivery"] },
+    run: (deps, caller, input) => setTiktokDelivery(deps.sql, caller, input),
   },
   {
     name: "list_media",
