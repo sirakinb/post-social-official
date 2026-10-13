@@ -113,6 +113,7 @@ npx postsocial create-post --help           # every option for a command`}</Code
           <ul className="mt-2 list-disc space-y-1 pl-5">
             <li>You connect your social accounts in Post Social yourself; AIs can send you a connect link but never sign in for you.</li>
             <li>TikTok asks the creator to confirm each post, so posts from an AI land in your TikTok inbox: open TikTok and tap Post.</li>
+            <li>Video covers: your AI can set a cover image (an image in your media library) or pick a frame of the video, with <code>cover_media_id</code> or <code>cover_time_ms</code> in a destination&apos;s options. Instagram Reels and YouTube take either; TikTok direct posts take a frame; TikTok drafts, Facebook and Threads use their own default. Instagram crops the cover to a square in your profile grid, so keep titles centred.</li>
             <li>Everything an AI does is labelled with its name in your activity, and you can disconnect it any time under API keys.</li>
           </ul>
         </section>
