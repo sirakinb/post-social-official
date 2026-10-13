@@ -1,0 +1,14 @@
+# Local build output and tooling the Vercel CLI would otherwise upload with `vercel deploy`.
+# Stale generated types in dist/ or .next/ break the type check on Vercel.
+dist
+.next
+out
+*.tsbuildinfo
+node_modules
+.env
+.env.*
+.insforge
+.claude
+worker/dist
+submission/**/*.mp4
+submission/**/*.ass
