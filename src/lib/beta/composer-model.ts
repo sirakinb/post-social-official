@@ -32,7 +32,8 @@ export type TikTokChoice = {
   title: string; // photo posts only (up to 90 characters)
 };
 
-export const NEW_TIKTOK: TikTokChoice = { mode: "inbox", privacyLevel: "", comments: false, duet: false, stitch: false, disclose: false, yourBrand: false, brandedContent: false, aiGenerated: false, title: "" };
+// People post directly by default (TikTok approved Direct Post); the inbox stays one tap away.
+export const NEW_TIKTOK: TikTokChoice = { mode: "direct", privacyLevel: "", comments: false, duet: false, stitch: false, disclose: false, yourBrand: false, brandedContent: false, aiGenerated: false, title: "" };
 
 // Only images make a TikTok photo post (a swipeable carousel of 1 to 35).
 export const isTikTokPhotoPost = (media: ComposerMedia[]) => media.length > 0 && media.every((m) => m.type === "image");
