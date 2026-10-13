@@ -12,3 +12,4 @@ node_modules
 worker/dist
 submission/**/*.mp4
 submission/**/*.ass
+ops/convex-forwarder
