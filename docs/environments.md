@@ -114,8 +114,9 @@ cannot give. Use `prod` instead of `dev` for prod (asks you to type `prod`). The
 
 ## Switching off the old Convex deployment
 
-Its code is gone from this repo, but the deployment (`vibrant-donkey-218`) keeps running
-until it is paused in Convex's dashboard. Before pausing it, make sure no platform still
+The old app's code is gone from this repo. The deployment (`vibrant-donkey-218`) now runs only
+the forwarder in `ops/convex-forwarder` (TikTok sign-in and Meta's deletion callbacks go on to
+InsForge; see its README), and keeps running until it is paused in Convex's dashboard. Before pausing it, make sure no platform still
 sends people to a `convex.site` address:
 
 - **TikTok:** prod's own callback (`https://syydd6ck.function2.insforge.app/connections/oauth/tiktok/callback`)
