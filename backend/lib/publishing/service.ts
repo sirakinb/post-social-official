@@ -364,13 +364,12 @@ export async function submitPost(deps: PostsDeps, caller: Caller, input: Record<
   if (input.scheduled_at !== undefined) await updatePost(deps, caller, { post_id: postId, scheduled_at: input.scheduled_at });
   const { post, member, destinations } = await loadPost(deps, caller, postId, true);
   if (post.status !== "draft") throw new ApiError(409, `Only drafts can be submitted (this post is ${post.status.replace("_", " ")}).`);
-  const result = await validatePost(deps, caller, { post_id: postId });
-  if (!result.ok) throw new ApiError(400, `This post can't be published yet. ${result.problems.join(" ")}`);
-
   const accounts = await loadAccounts(deps, post.workspace_id, destinations.map((d) => d.connected_account_id));
   // The account may have been set to inbox first after this draft was written.
   const blocked = destinations.map((d) => accounts.get(d.connected_account_id)!).find((a, i) => tiktokInboxFirst(caller, a, destinations[i].options));
   if (blocked) throw new ApiError(400, inboxFirst(blocked));
+  const result = await validatePost(deps, caller, { post_id: postId });
+  if (!result.ok) throw new ApiError(400, `This post can't be published yet. ${result.problems.join(" ")}`);
   const waiting = destinations.filter((d) => needsApproval(caller.entryPoint, accounts.get(d.connected_account_id)!.policy, d.platform));
 
   try {
