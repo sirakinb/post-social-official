@@ -1,4 +1,5 @@
 // Deno entry point for the `posts` InsForge function. Settings come from secrets.
+import { withReporting } from "../../lib/telemetry";
 import { createSql, userForToken } from "../../lib/insforge-admin";
 import { createPostsHandler } from "./handler";
 
@@ -12,8 +13,8 @@ function setting(name: string) {
 
 const baseUrl = setting("INSFORGE_BASE_URL");
 
-export default createPostsHandler({
+export default withReporting("posts", (name) => Deno.env.get(name), createPostsHandler({
   sql: createSql(baseUrl, setting("API_KEY")),
   userForToken: (token) => userForToken(baseUrl, token),
   allowedOrigins: (Deno.env.get("WEB_APP_ORIGINS") ?? "").split(",").map((o) => o.trim()).filter(Boolean),
-});
+}));

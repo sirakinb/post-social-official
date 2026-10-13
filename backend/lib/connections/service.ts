@@ -1,6 +1,7 @@
 // Connecting social accounts: start a platform sign-in, finish it on the callback, and
 // disconnect. Tokens are encrypted before they are stored; every change is audited.
 import { ApiError, isAgentCaller, membership, requireUuid, type Caller, type Sql } from "../access";
+import { trackEvent } from "../telemetry";
 import { importKey, open, randomToken, seal, sha256Hex } from "./crypto";
 import { AtprotoError, finishSignIn, publicProfile, startSignIn, type PendingSignIn } from "./atproto";
 import { XError, finishXSignIn, startXSignIn, type PendingX } from "./x";
@@ -225,7 +226,7 @@ export async function completeConnection(deps: ConnectionDeps, platform: Platfor
     const externalId = externalIdOf(identity);
     const sealed = await seal(identity.tokens, key);
     // Reconnecting updates the same row instead of creating a duplicate.
-    await deps.sql(
+    const [event] = await deps.sql<{ event_type: string }>(
       `WITH account AS (
          INSERT INTO public.connected_accounts
            (workspace_id, platform, external_account_id, owner_external_id, handle, display_name, avatar_url,
@@ -256,7 +257,8 @@ export async function completeConnection(deps: ConnectionDeps, platform: Platfor
        INSERT INTO public.audit_events (workspace_id, actor_id, entry_point, event_type, entity_type, entity_id, summary, after_values)
        SELECT $1, $10, 'ui', CASE WHEN created THEN 'account.connected' ELSE 'account.reconnected' END, 'account', id, $15,
               jsonb_build_object('platform', $2::text, 'handle', $5::text)
-       FROM account`,
+       FROM account
+       RETURNING event_type`,
       [
         session.workspace_id, platform, externalId, identity.ownerExternalId ?? null, identity.handle, identity.displayName,
         identity.avatarUrl ?? null, identity.scopes, JSON.stringify(identity.capabilities), member.actor_id,
@@ -266,6 +268,8 @@ export async function completeConnection(deps: ConnectionDeps, platform: Platfor
         session.profile_id,
       ],
     );
+    // A step of the new-user funnel; reconnects don't count.
+    if (event?.event_type === "account.connected") trackEvent("account_connected", { platform, workspace_id: session.workspace_id }, session.user_id);
     connected.push(identity.displayName);
   }
   return { returnTo: session.return_to, ok: true, platform, message: `Connected ${connected.join(", ")}.` };

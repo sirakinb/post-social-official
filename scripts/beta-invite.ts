@@ -12,15 +12,17 @@ import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
 import { assertReleasableMain, createAccount, resolveTarget } from "./lib/accounts.ts";
+import { createTelemetry } from "../backend/lib/telemetry.ts";
 import { generatePassword, PROD_SITE_URL, renderWelcomeEmail, sendWelcomeEmail } from "./lib/beta-invite.ts";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 
-function resendKey(target: "dev" | "prod") {
-  if (process.env.RESEND_API_KEY) return process.env.RESEND_API_KEY;
+// A secret from the shell, else from that environment's InsForge secrets.
+function secret(target: "dev" | "prod", name: string) {
+  if (process.env[name]) return process.env[name];
   try {
     // Same read as scripts/deploy-worker.sh; on prod the wrapper asks to confirm once.
-    const out = execFileSync(path.join(repoRoot, "scripts/insforge-env.sh"), [target, "secrets", "get", "RESEND_API_KEY", "--json"], {
+    const out = execFileSync(path.join(repoRoot, "scripts/insforge-env.sh"), [target, "secrets", "get", name, "--json"], {
       cwd: repoRoot,
       input: "prod\n",
       encoding: "utf8",
@@ -48,7 +50,7 @@ async function main() {
   const target = resolveTarget(targetName, repoRoot);
   if (target.name === "prod") assertReleasableMain(repoRoot);
 
-  const apiKey = resendKey(target.name);
+  const apiKey = secret(target.name, "RESEND_API_KEY");
   if (!apiKey) {
     console.error(`No RESEND_API_KEY in the ${target.name} InsForge secrets. Add it with: scripts/insforge-env.sh ${target.name} secrets add RESEND_API_KEY '<key>'`);
     process.exit(1);
@@ -73,6 +75,9 @@ async function main() {
     workspaceName: values.workspace?.trim() || name,
   });
   console.log(`Created ${email} in workspace "${result.workspaceSlug}" on ${target.name}.`);
+  // The first step of the new-user funnel, credited to the new account (no email or name).
+  const telemetry = createTelemetry({ key: secret(target.name, "POSTHOG_KEY"), host: secret(target.name, "POSTHOG_HOST") || undefined, service: "invite", environment: target.name });
+  await telemetry.capture("user_invited", { workspace_id: result.workspaceId }, result.userId);
 
   const template = readFileSync(path.join(repoRoot, "emails/closed-beta-welcome.html"), "utf8");
   const message = renderWelcomeEmail(template, { firstName: name, email, password, siteUrl: values.site ?? PROD_SITE_URL }, target.name);

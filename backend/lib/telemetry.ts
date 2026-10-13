@@ -121,6 +121,17 @@ export function reportError(error: unknown, context: Record<string, unknown> = {
   pending.add(sent);
 }
 
+// A product event (e.g. a step of the new-user funnel) from code deep in request handling,
+// credited to the person when their id is known. Sent with the error reports, so the
+// function waits for it before answering. Does nothing without a reporter (worker, tests).
+export const tracking = () => reporter !== null;
+
+export function trackEvent(event: string, properties: Record<string, unknown> = {}, distinctId?: string) {
+  if (!reporter) return;
+  const sent = reporter.capture(event, properties, distinctId).finally(() => pending.delete(sent));
+  pending.add(sent);
+}
+
 export async function flushReports() {
   await Promise.allSettled([...pending]);
 }

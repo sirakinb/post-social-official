@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createTelemetry, flushReports, parseStack, reportError, scrub, setErrorReporter, withReporting } from "./telemetry";
+import { createTelemetry, flushReports, parseStack, reportError, scrub, setErrorReporter, trackEvent, withReporting } from "./telemetry";
 
 describe("scrub", () => {
   it("removes tokens and keys from messages", () => {
@@ -78,10 +78,27 @@ describe("function reporting", () => {
     vi.restoreAllMocks();
   });
 
+  it("sends product events credited to the person, and waits for them", async () => {
+    const bodies: Array<{ event: string; distinct_id: string; properties: Record<string, unknown> }> = [];
+    const fetchImpl = vi.fn(async (_url: string, init: RequestInit) => {
+      await new Promise((r) => setTimeout(r, 20));
+      bodies.push(JSON.parse(String(init.body)));
+      return new Response("ok");
+    });
+    setErrorReporter(createTelemetry({ key: "phc_test", service: "posts", environment: "prod", fetchImpl: fetchImpl as unknown as typeof fetch }));
+    trackEvent("post_submitted", { when: "later" }, "user-1");
+    await flushReports();
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toMatchObject({ event: "post_submitted", distinct_id: "user-1" });
+    expect(bodies[0].properties).toMatchObject({ when: "later", service: "posts", environment: "prod", $process_person_profile: true });
+    setErrorReporter(null);
+  });
+
   it("is quiet without a reporter", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     setErrorReporter(null);
     reportError(new Error("x"));
+    trackEvent("account_connected", {}, "user-1");
     await expect(flushReports()).resolves.toBeUndefined();
     vi.restoreAllMocks();
   });

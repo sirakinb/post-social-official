@@ -2,6 +2,7 @@
 // actions back the web app, the REST API and the MCP tools (Phase 5). Every change checks
 // membership and writes an audit entry naming the actor.
 import { ApiError, isAgentCaller, membership, requireUuid, type Caller, type Sql } from "../access";
+import { trackEvent, tracking } from "../telemetry";
 import { DISPLAY_NAMES, type Platform } from "../connections/platforms";
 import { captionFor, destinationProblems, normalizeOptions, type DestinationOptions, type MediaFacts } from "./validate";
 
@@ -358,6 +359,26 @@ export async function updatePost(deps: PostsDeps, caller: Caller, input: Record<
   return { ...(await view(deps, postId)), check: await validatePost(deps, caller, { post_id: postId }) };
 }
 
+// The person a post is credited to in product analytics: the signed-in person, or whoever
+// created the key or approved the app an AI used. Looked up only when analytics is on.
+async function personFor(deps: PostsDeps, caller: Caller): Promise<string | undefined> {
+  if (!isAgentCaller(caller)) return caller.userId;
+  if (!tracking()) return undefined;
+  try {
+    const [row] = await deps.sql<{ user_id: string | null }>(
+      `SELECT coalesce(a.user_id, k.created_by, g.user_id) AS user_id
+         FROM public.actors a
+         LEFT JOIN public.api_keys k ON k.id = a.api_key_id
+         LEFT JOIN public.oauth_grants g ON g.id = a.oauth_grant_id
+        WHERE a.id = $1`,
+      [caller.actorId],
+    );
+    return row?.user_id ?? undefined;
+  } catch {
+    return undefined; // analytics must never get in the way of posting
+  }
+}
+
 export async function submitPost(deps: PostsDeps, caller: Caller, input: Record<string, unknown>) {
   const postId = requireUuid(input.post_id, "Post");
   assertMayPublish(caller);
@@ -388,6 +409,7 @@ export async function submitPost(deps: PostsDeps, caller: Caller, input: Record<
        SELECT 1`,
       [postId, post.workspace_id, member.actor_id],
     );
+    trackEvent("post_submitted", { workspace_id: post.workspace_id, when: "awaiting_approval", source: caller.entryPoint, destinations: destinations.length }, await personFor(deps, caller));
     await audit(deps, post.workspace_id, member.actor_id, caller, postId, "post.submitted", `Submitted for approval (${waiting.map((d) => accounts.get(d.connected_account_id)!.display_name).join(", ")} ${waiting.length === 1 ? "needs" : "need"} your OK)`);
   } else {
     await deps.sql(
@@ -397,6 +419,8 @@ export async function submitPost(deps: PostsDeps, caller: Caller, input: Record<
       [postId],
     );
     const status = (await deps.sql<{ start_publishing: string }>(`SELECT public.start_publishing($1)`, [postId]))[0].start_publishing;
+    // A step of the new-user funnel: the person scheduled a post or sent one out now.
+    trackEvent("post_submitted", { workspace_id: post.workspace_id, when: status === "scheduled" ? "later" : "now", source: caller.entryPoint, destinations: destinations.length }, await personFor(deps, caller));
     await audit(deps, post.workspace_id, member.actor_id, caller, postId, "post.submitted", status === "scheduled" ? `Scheduled for ${post.scheduled_at}` : "Sent for publishing now");
   }
   return view(deps, postId);
