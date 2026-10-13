@@ -24,7 +24,7 @@ export function chunkPlan(size: number) {
 // TikTok error codes that need a plain explanation rather than TikTok's own text.
 const TIKTOK_MESSAGES: Record<string, string> = {
   unaudited_client_can_only_post_to_private_accounts:
-    "Until TikTok approves Post Social's Direct Post review, it can only post to TikTok accounts set to Private. Make the account private in TikTok, or send this as a draft to your TikTok inbox instead.",
+    "TikTok hasn't cleared this Post Social app to post publicly, so it can only post to TikTok accounts set to Private. Make the account private in TikTok, or send this as a draft to your TikTok inbox instead.",
   spam_risk_too_many_posts: "TikTok says this account has posted too much today. Try again tomorrow.",
   spam_risk_too_many_pending_share: "TikTok has several Post Social drafts waiting in this account's inbox. Open TikTok to post or delete them, then try again.",
   spam_risk_user_banned_from_posting: "TikTok has blocked this account from posting right now.",

@@ -382,7 +382,7 @@ export default function ProgressPage() {
 
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="rounded-xl border border-border bg-canvas-ivory p-4">
-                    <Music2 className="h-5 w-5 text-accent" /><h3 className="mt-3 text-sm font-medium">TikTok app</h3><p className="mt-1 text-xs leading-5 text-ink-subtle">Direct Post review</p>
+                    <Music2 className="h-5 w-5 text-accent" /><h3 className="mt-3 text-sm font-medium">TikTok app</h3><p className="mt-1 text-xs leading-5 text-ink-subtle">Direct Post approved</p>
                   </div>
                   <div className="rounded-xl border border-border bg-canvas-ivory p-4">
                     <Instagram className="h-5 w-5 text-accent" /><h3 className="mt-3 text-sm font-medium">Instagram Meta app</h3><p className="mt-1 text-xs leading-5 text-ink-subtle">Current Instagram review</p>

@@ -30,8 +30,8 @@ export function TikTokOptions({ value, onChange, info, infoError, accountName, p
       <div className="inline-flex self-start rounded-[9px] border border-white/[0.08] bg-ps-ground p-[3px]" role="radiogroup" aria-label="How to send it">
         {(
           [
-            ["inbox", "Send to TikTok inbox"],
             ["direct", "Post directly"],
+            ["inbox", "Send to TikTok inbox"],
           ] as const
         ).map(([mode, text]) => (
           <button key={mode} type="button" role="radio" aria-checked={value.mode === mode} onClick={() => set({ mode })} className={cn("h-7 rounded-md px-3 text-xs", value.mode === mode ? "bg-[#2A2142] text-ps-text" : "text-ps-muted hover:text-ps-text")}>

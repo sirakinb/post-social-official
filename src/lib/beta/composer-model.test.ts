@@ -34,9 +34,16 @@ describe("composer defaults", () => {
 describe("TikTok guideline rules", () => {
   const info = { privacy_level_options: ["PUBLIC_TO_EVERYONE", "SELF_ONLY"], can_post: true, max_video_post_duration_sec: 60 };
 
+  const inbox = { ...NEW_TIKTOK, mode: "inbox" as const };
+
+  it("posts directly by default, with no audience picked for the person", () => {
+    expect(NEW_TIKTOK).toMatchObject({ mode: "direct", privacyLevel: "" });
+    expect(tiktokProblems(NEW_TIKTOK, null, [video])).toEqual(["Loading this TikTok account's settings…"]);
+  });
+
   it("sends inbox posts without any posting choices", () => {
-    expect(destinationOptions(account("tiktok"), { tiktok: NEW_TIKTOK }, "Hi", [video])).toEqual({ delivery_mode: "inbox", media_type: "video", ai_generated: false });
-    expect(tiktokProblems(NEW_TIKTOK, null, [video])).toEqual([]);
+    expect(destinationOptions(account("tiktok"), { tiktok: inbox }, "Hi", [video])).toEqual({ delivery_mode: "inbox", media_type: "video", ai_generated: false });
+    expect(tiktokProblems(inbox, null, [video])).toEqual([]);
   });
 
   it("requires a privacy choice with no default, and blocks incomplete disclosure", () => {
@@ -53,7 +60,7 @@ describe("TikTok guideline rules", () => {
     expect(destinationOptions(account("tiktok"), { tiktok: direct }, "Hi", [photo, { ...photo, id: "p2" }])).toMatchObject({
       delivery_mode: "direct", media_type: "photo", title: "Three looks", comments_enabled: true, duet_enabled: false, stitch_enabled: false,
     });
-    expect(destinationOptions(account("tiktok"), { tiktok: { ...NEW_TIKTOK, title: "Kept for photos only" } }, "Hi", [video])).toEqual({ delivery_mode: "inbox", media_type: "video", ai_generated: false });
+    expect(destinationOptions(account("tiktok"), { tiktok: { ...inbox, title: "Kept for photos only" } }, "Hi", [video])).toEqual({ delivery_mode: "inbox", media_type: "video", ai_generated: false });
     expect(tiktokProblems(direct, info, Array.from({ length: 36 }, (_, i) => ({ ...photo, id: `p${i}` })))).toEqual(["TikTok photo posts can have at most 35 images; this one has 36."]);
     expect(tiktokLabel({ ...direct, disclose: true, yourBrand: true }, true)).toBe("Your photo will be labeled “Promotional content”.");
   });
@@ -63,6 +70,7 @@ describe("TikTok guideline rules", () => {
     expect(tiktokLabel({ ...d, yourBrand: true })).toBe("Your video will be labeled “Promotional content”.");
     expect(tiktokLabel({ ...d, yourBrand: true, brandedContent: true })).toBe("Your video will be labeled “Paid partnership”.");
     expect(tiktokLabel(NEW_TIKTOK)).toBeNull();
+    expect(tiktokLabel({ ...d, mode: "inbox", yourBrand: true })).toBeNull();
   });
 });
 
@@ -79,7 +87,7 @@ describe("covers", () => {
     expect(destinationOptions(yt, {}, "Hi", [video], pick)).toMatchObject({ cover_media_id: "img" });
     expect(destinationOptions(tt, { tiktok: { ...NEW_TIKTOK, mode: "direct" } }, "Hi", [video], pick)).not.toHaveProperty("cover_media_id");
     expect(destinationOptions(tt, { tiktok: { ...NEW_TIKTOK, mode: "direct" } }, "Hi", [video], { kind: "frame", ms: 3000 })).toMatchObject({ cover_time_ms: 3000 });
-    expect(destinationOptions(tt, { tiktok: NEW_TIKTOK }, "Hi", [video], { kind: "frame", ms: 3000 })).not.toHaveProperty("cover_time_ms");
+    expect(destinationOptions(tt, { tiktok: { ...NEW_TIKTOK, mode: "inbox" } }, "Hi", [video], { kind: "frame", ms: 3000 })).not.toHaveProperty("cover_time_ms");
     expect(destinationOptions(fb, { mediaType: "reel" }, "Hi", [video], { kind: "frame", ms: 3000 })).not.toHaveProperty("cover_time_ms");
     expect(destinationOptions(ig, { mediaType: "image" }, "Hi", [image], pick)).not.toHaveProperty("cover_media_id");
   });
