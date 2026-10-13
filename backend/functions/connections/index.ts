@@ -1,4 +1,5 @@
 // Deno entry point for the `connections` InsForge function. Settings come from secrets.
+import { withReporting } from "../../lib/telemetry";
 import { createSql, userForToken } from "../../lib/insforge-admin";
 import { createConnectionsHandler } from "./handler";
 
@@ -13,7 +14,7 @@ function setting(name: string) {
 const baseUrl = setting("INSFORGE_BASE_URL");
 const list = (name: string) => (Deno.env.get(name) ?? "").split(",").map((v) => v.trim()).filter(Boolean);
 
-export default createConnectionsHandler({
+export default withReporting("connections", (name) => Deno.env.get(name), createConnectionsHandler({
   sql: createSql(baseUrl, setting("API_KEY")),
   setting,
   allowedReturnOrigins: list("WEB_APP_ORIGINS"),
@@ -21,4 +22,4 @@ export default createConnectionsHandler({
   webAppHome: setting("WEB_APP_HOME"),
   metaAppSecrets: ["META_APP_SECRET", "INSTAGRAM_APP_SECRET", "THREADS_APP_SECRET"].map((n) => Deno.env.get(n)).filter((v): v is string => Boolean(v)),
   selfBaseUrl: setting("CONNECTIONS_BASE_URL"),
-});
+}));

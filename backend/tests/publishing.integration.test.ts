@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createSql } from "../lib/insforge-admin";
 import { importKey, seal } from "../lib/connections/crypto";
 import { postActions } from "../lib/publishing/service";
+import { createTelemetry, flushReports, setErrorReporter } from "../lib/telemetry";
 import type { Caller } from "../lib/access";
 import { createAccount, resolveTarget, type AccountResult } from "../../scripts/lib/accounts";
 import { runNextPublishJob, type PublishDeps } from "../../worker/src/publish/runner";
@@ -302,6 +303,25 @@ describe.skipIf(!enabled)("publishing engine on the dev backend (US-027 to US-03
     for (let i = 0; i < 5 && (await runNextPublishJob({ ...deps(), allowlist: ["someone-else"] })); i++);
     const done = await act(person(), "get", { post_id: draft.id });
     expect(done.destinations[0]).toMatchObject({ status: "failed", error_code: "not_allowlisted" });
+  });
+
+  it("tells analytics who scheduled a post, for the new-user funnel", async () => {
+    const events: Array<{ event: string; distinct_id: string; properties: Record<string, unknown> }> = [];
+    const fetchImpl = async (_url: string | URL | Request, init?: RequestInit) => {
+      events.push(JSON.parse(String(init?.body)));
+      return new Response("ok");
+    };
+    setErrorReporter(createTelemetry({ key: "phc_test", service: "posts", fetchImpl: fetchImpl as unknown as typeof fetch }));
+    try {
+      const at = new Date(Date.now() + 3600_000).toISOString();
+      const draft = await act(person(), "create", { ...textPost(facebook, `Funnel ${suffix}`), scheduled_at: at });
+      await act(person(), "submit", { post_id: draft.id });
+      await flushReports();
+      expect(events).toContainEqual(expect.objectContaining({ event: "post_submitted", distinct_id: owner.userId, properties: expect.objectContaining({ when: "later", source: "ui", destinations: 1 }) }));
+      await act(person(), "cancel", { post_id: draft.id });
+    } finally {
+      setErrorReporter(null);
+    }
   });
 
   it("does not let reviewers or outsiders change posts", async () => {

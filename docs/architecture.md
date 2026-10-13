@@ -101,6 +101,10 @@ every write is tied to the claim, so two workers can never send the same post.
   social account so we stay inside each platform's limits.
 - **Monitoring:** PostHog for errors, post outcomes and alerts; a GitHub Actions uptime check
   every 5 minutes on the site, API and worker.
+- **New-user funnel:** five PostHog events, each credited to the person's id (never their
+  email): `user_invited` (`npm run beta:invite`), `$identify` (first sign-in in a browser),
+  `account_connected` (a new account, not a reconnect), `post_submitted` (scheduled, sent
+  now, or sent for approval; `when` says which) and `post_published` (worker).
 - **Backups:** prod is backed up automatically before every promotion; `npm run db:backup:prod`
   makes one by hand.
 - **Checks:** every change runs typecheck, lint, tests and build in CI; database tests run
