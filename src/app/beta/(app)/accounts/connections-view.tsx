@@ -6,11 +6,11 @@ import { AccountMark } from "@/components/beta/avatar-img";
 import { PlatformMark, Status } from "@/components/beta/ui";
 import { ago, subscribe } from "@/lib/beta/ago";
 import { cn } from "@/lib/utils";
-import { createProfile, deleteProfile, disconnect, moveAccount, startConnection, updateProfile, type ProfileInput } from "./actions";
+import { createProfile, deleteProfile, disconnect, moveAccount, setTiktokDelivery, startConnection, updateProfile, type ProfileInput } from "./actions";
 import { ProfileDialog, type Profile } from "./profile-dialog";
 
 export type { Profile };
-export type SocialAccount = { id: string; platform: string; handle: string; name: string; avatarUrl: string | null; health: string; reason: string | null; postTypes: string[]; connectedAt: string; lastPostedAt: string | null; profileId: string | null };
+export type SocialAccount = { id: string; platform: string; handle: string; name: string; avatarUrl: string | null; health: string; reason: string | null; postTypes: string[]; connectedAt: string; lastPostedAt: string | null; profileId: string | null; tiktokDelivery?: "direct" | "inbox" | null };
 
 // The filter: every account, one profile, or the accounts in no profile.
 type Filter = "all" | "none" | string;
@@ -138,9 +138,27 @@ export function ConnectionsView(props: {
       </span>
       <span className="min-w-[180px] flex-1">
         <span className="block">{a.name} <span className="text-ps-subtle">{a.platform === "youtube" || a.platform === "facebook" || a.platform === "linkedin" ? KIND[a.platform] : `@${a.handle} · ${KIND[a.platform]}`}</span></span>
-        <span className="mt-0.5 block text-xs text-ps-subtle">{a.lastPostedAt ? `Last post ${ago(a.lastPostedAt, now)}` : `Connected ${ago(a.connectedAt, now)}`}{a.platform === "tiktok" ? " · AI posts go to your TikTok inbox" : ""}</span>
+        <span className="mt-0.5 block text-xs text-ps-subtle">{a.lastPostedAt ? `Last post ${ago(a.lastPostedAt, now)}` : `Connected ${ago(a.connectedAt, now)}`}</span>
       </span>
       {a.health === "needs_attention" ? <Status tone="attention" label="Needs attention" /> : <Status tone="live" label="Connected" />}
+      {canEdit && a.platform === "tiktok" && a.tiktokDelivery && (
+        <label className="flex items-center gap-1.5 text-xs text-ps-subtle">
+          AI posts
+          <select
+            aria-label={`How AI posts reach ${a.name}`}
+            value={a.tiktokDelivery}
+            disabled={busy !== null}
+            onChange={(e) => {
+              const next = e.target.value as "direct" | "inbox";
+              run(a.id, () => setTiktokDelivery(a.id, next), next === "direct" ? `AI posts to ${a.name} now post directly.` : `AI posts to ${a.name} now go to your TikTok inbox first.`);
+            }}
+            className="h-[30px] rounded-lg border border-white/[0.12] bg-transparent px-2 text-xs text-ps-muted [color-scheme:dark] hover:border-white/25"
+          >
+            <option value="direct">Post directly</option>
+            <option value="inbox">Inbox first</option>
+          </select>
+        </label>
+      )}
       {canEdit && props.profilesReady && props.profiles.length > 0 && (
         <label className="flex items-center">
           <span className="sr-only">Profile for {a.name}</span>

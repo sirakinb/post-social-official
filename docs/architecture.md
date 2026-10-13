@@ -57,8 +57,10 @@ connecting accounts stay with a person). Environments and promotion: `environmen
    options (e.g. Reel or image). `validate_post` checks every platform's rules first.
 2. Approval: each workspace (and each account) is autonomous or needs approval. Agents follow
    it; people approve in the web app. TikTok approved Direct Post (Oct 13, 2026): people
-   post directly from the web app, while AI posts to TikTok still go to the creator's inbox
-   as drafts, because TikTok requires the creator to see and confirm each direct post.
+   post directly from the web app, and AI posts to TikTok go out directly too (since Oct 13,
+   Aki's call); each direct post must set its audience (`privacy_level`), never assumed. Each
+   TikTok account's `tiktok_delivery` (direct by default, or inbox) decides where AI posts go;
+   people change it in Accounts, AIs with `set_tiktok_delivery`.
 3. Scheduling creates a `publish_job` per destination. The worker claims due jobs, runs the
    platform adapter (`worker/src/publish/*`), saves checkpoints so a retry never posts twice,
    waits for platforms that process in the background, and retries with backoff.
@@ -67,7 +69,7 @@ connecting accounts stay with a person). Environments and promotion: `environmen
 
 Supported now: Instagram (image, Reel, carousel), Facebook Pages (text, link, image, Reel,
 video), Threads (text, image, video, carousel), YouTube (video), TikTok (video and photos, posted
-directly by people; inbox drafts for AIs).
+directly, or as inbox drafts).
 
 ## Media
 

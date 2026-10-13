@@ -150,7 +150,7 @@ describe.skipIf(!enabled)("publishing engine on the dev backend (US-027 to US-03
     expect(audit.map((a) => `${a.entry_point}:${a.event_type}`)).toEqual(["mcp:post.created", "mcp:post.submitted", "ui:post.approved"]);
   });
 
-  it("autonomous accounts publish an AI's post without approval; AI TikTok posts go to the inbox", async () => {
+  it("autonomous accounts publish an AI's post without approval; AI TikTok posts go direct or to the inbox", async () => {
     await sql(`UPDATE public.connected_accounts SET approval_policy_override = 'autonomous' WHERE id IN ($1, $2)`, [threads, tiktok]);
     const auto = await act(ai(), "submit", { post_id: (await act(ai(), "create", textPost(threads, `Autonomous ${suffix}`))).id });
     expect(auto.status).toBe("processing");
@@ -163,7 +163,21 @@ describe.skipIf(!enabled)("publishing engine on the dev backend (US-027 to US-03
     const direct = await act(ai(), "create", {
       workspace_id: owner.workspaceId, caption: "TikTok direct from AI", destinations: [{ account_id: tiktok, options: { delivery_mode: "direct", privacy_level: "SELF_ONLY" } }], media_ids: [],
     });
-    await expect(act(ai(), "submit", { post_id: direct.id })).rejects.toThrow(/delivery_mode "inbox"/);
+    // Direct is accepted too (it stops at the missing video), but never without an audience.
+    await expect(act(ai(), "submit", { post_id: direct.id })).rejects.toThrow(/needs exactly 1 video/);
+    const noAudience = await act(ai(), "create", {
+      workspace_id: owner.workspaceId, caption: "TikTok direct, no audience", destinations: [{ account_id: tiktok, options: { delivery_mode: "direct" } }], media_ids: [],
+    });
+    await expect(act(ai(), "submit", { post_id: noAudience.id })).rejects.toThrow(/Choose who can see this TikTok/);
+
+    // An account set to inbox first: posts without delivery_mode go to the inbox, and a
+    // direct post is refused, including a draft written before the switch.
+    await sql(`UPDATE public.connected_accounts SET tiktok_delivery = 'inbox' WHERE id = $1`, [tiktok]);
+    const followed = await act(ai(), "create", { workspace_id: owner.workspaceId, caption: "TikTok, account default", destinations: [{ account_id: tiktok, options: {} }], media_ids: [] });
+    expect(followed.destinations[0].options).toMatchObject({ delivery_mode: "inbox" });
+    await expect(act(ai(), "create", { workspace_id: owner.workspaceId, caption: "x", destinations: [{ account_id: tiktok, options: { delivery_mode: "direct", privacy_level: "SELF_ONLY" } }], media_ids: [] })).rejects.toThrow(/inbox first/);
+    await expect(act(ai(), "submit", { post_id: direct.id })).rejects.toThrow(/inbox first/);
+    await sql(`UPDATE public.connected_accounts SET tiktok_delivery = 'direct' WHERE id = $1`, [tiktok]);
     await drain();
   });
 
@@ -226,22 +240,6 @@ describe.skipIf(!enabled)("publishing engine on the dev backend (US-027 to US-03
     });
     expect(edited.status).toBe("awaiting_approval");
     expect(edited.approval).toMatchObject({ status: "pending" });
-    await act(person(), "cancel", { post_id: draft.id });
-  });
-
-  it("an AI can't edit a queued post into a direct TikTok post", async () => {
-    await sql(`UPDATE public.connected_accounts SET approval_policy_override = 'autonomous' WHERE id IN ($1, $2)`, [threads, tiktok]);
-    const at = new Date(Date.now() + 3600_000).toISOString();
-    const draft = await act(ai(), "create", { ...textPost(threads, `Queued then TikTok ${suffix}`), scheduled_at: at });
-    expect((await act(ai(), "submit", { post_id: draft.id })).status).toBe("scheduled");
-
-    await expect(
-      act(ai(), "update", { post_id: draft.id, destinations: [{ account_id: tiktok, options: { delivery_mode: "direct", privacy_level: "SELF_ONLY" } }] }),
-    ).rejects.toThrow(/delivery_mode "inbox"/);
-    // Refused before anything changed: still scheduled, still to Threads only.
-    const after = await act(person(), "get", { post_id: draft.id });
-    expect(after.status).toBe("scheduled");
-    expect(after.destinations.map((d) => d.platform)).toEqual(["threads"]);
     await act(person(), "cancel", { post_id: draft.id });
   });
 

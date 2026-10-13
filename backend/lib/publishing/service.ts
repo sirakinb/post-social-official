@@ -22,14 +22,6 @@ export function needsApproval(entryPoint: Caller["entryPoint"], policy: Policy, 
   return policy !== "autonomous";
 }
 
-// TikTok requires the creator to confirm each post. For AI posts that confirmation is
-// TikTok's own: the post goes to the creator's TikTok inbox and they post it from the app.
-function tiktokDirectByAi(caller: Caller, destinations: Array<{ platform: Platform; options: DestinationOptions }>) {
-  return caller.entryPoint !== "ui" && destinations.some((d) => d.platform === "tiktok" && (d.options as { delivery_mode?: string }).delivery_mode !== "inbox");
-}
-const TIKTOK_INBOX_ONLY =
-  'TikTok requires the creator to confirm each post, so posts from an AI go to the TikTok inbox: set the TikTok options to delivery_mode "inbox". The post lands in the creator\'s TikTok app, where they tap Post.';
-
 // Test keys can do everything except send or schedule a post.
 function assertMayPublish(caller: Caller) {
   if (isAgentCaller(caller) && caller.mode === "test") {
@@ -44,14 +36,14 @@ function assertPerson(caller: Caller, action: string) {
   }
 }
 
-type AccountRow = { id: string; platform: Platform; display_name: string; health: string; capabilities: Record<string, unknown>; policy: Policy };
+type AccountRow = { id: string; platform: Platform; display_name: string; health: string; capabilities: Record<string, unknown>; policy: Policy; tiktok_delivery: "direct" | "inbox" };
 type DestinationInput = { account_id: string; options: DestinationOptions };
 
 async function loadAccounts(deps: PostsDeps, workspaceId: string, ids: string[]) {
   if (!ids.length) return new Map<string, AccountRow>();
   const rows = await deps.sql<AccountRow>(
     `SELECT a.id, a.platform, a.display_name, a.health, a.capabilities,
-            coalesce(a.approval_policy_override, w.default_approval_policy) AS policy
+            coalesce(a.approval_policy_override, w.default_approval_policy) AS policy, a.tiktok_delivery
      FROM public.connected_accounts a JOIN public.workspaces w ON w.id = a.workspace_id
      WHERE a.workspace_id = $1 AND a.id = ANY($2::uuid[])`,
     [workspaceId, ids],
@@ -80,7 +72,16 @@ async function loadCovers(deps: PostsDeps, workspaceId: string, destinations: Ar
   return new Map(facts.map((f) => [f.id, f]));
 }
 
-function parseDestinations(raw: unknown, accounts: Map<string, AccountRow>): { destinations: DestinationInput[]; problems: string[] } {
+// Each TikTok account says how an AI's posts reach it: directly (the default) or through the
+// creator's TikTok inbox. An AI that leaves delivery_mode out gets the account's choice, and
+// can't post directly to an account set to inbox first. People choose per post in Create.
+function tiktokInboxFirst(caller: Caller, account: AccountRow, options: DestinationOptions) {
+  return caller.entryPoint !== "ui" && account.platform === "tiktok" && account.tiktok_delivery === "inbox" && (options as { delivery_mode?: string }).delivery_mode !== "inbox";
+}
+const inboxFirst = (account: AccountRow) =>
+  `${account.display_name} is set to send AI posts to the TikTok inbox first: use delivery_mode "inbox", or change the account's TikTok delivery to direct (set_tiktok_delivery, or Accounts in Post Social).`;
+
+function parseDestinations(caller: Caller, raw: unknown, accounts: Map<string, AccountRow>): { destinations: DestinationInput[]; problems: string[] } {
   if (!Array.isArray(raw) || raw.length === 0) throw new ApiError(400, "Choose at least one account to post to.");
   if (raw.length > MAX_DESTINATIONS) throw new ApiError(400, `A post can go to at most ${MAX_DESTINATIONS} accounts.`);
   const problems: string[] = [];
@@ -93,7 +94,11 @@ function parseDestinations(raw: unknown, accounts: Map<string, AccountRow>): { d
     if (seen.has(accountId)) throw new ApiError(400, `${account.display_name} is listed twice.`);
     seen.add(accountId);
     if (account.health === "disconnected") problems.push(`${account.display_name} is disconnected. Reconnect it first.`);
-    const normalized = normalizeOptions(account.platform, item.options);
+    const given = item.options ?? {};
+    const fillDelivery = account.platform === "tiktok" && caller.entryPoint !== "ui" && typeof given === "object" && !Array.isArray(given) && (given as Record<string, unknown>).delivery_mode === undefined;
+    const options = fillDelivery ? { ...(given as Record<string, unknown>), delivery_mode: account.tiktok_delivery } : item.options;
+    const normalized = normalizeOptions(account.platform, options);
+    if (normalized.options && tiktokInboxFirst(caller, account, normalized.options)) problems.push(inboxFirst(account));
     problems.push(...normalized.problems.map((p) => `${account.display_name}: ${p}`));
     if (normalized.options) destinations.push({ account_id: accountId, options: normalized.options });
   }
@@ -211,7 +216,7 @@ export async function validatePost(deps: PostsDeps, caller: Caller, input: Recor
   const caption = parseCaption(input.caption);
   const raw = Array.isArray(input.destinations) ? (input.destinations as Array<Record<string, unknown>>) : [];
   const accounts = await loadAccounts(deps, workspaceId, raw.map((d) => String(d?.account_id ?? "")).filter((id) => /^[0-9a-f-]{36}$/i.test(id)));
-  const { destinations, problems } = parseDestinations(input.destinations, accounts);
+  const { destinations, problems } = parseDestinations(caller, input.destinations, accounts);
   const media = await loadMedia(deps, workspaceId, parseMediaIds(input.media_ids));
   return check(caption, media, destinations, accounts, problems, await loadCovers(deps, workspaceId, destinations));
 }
@@ -223,7 +228,7 @@ export async function createPost(deps: PostsDeps, caller: Caller, input: Record<
   const mediaIds = parseMediaIds(input.media_ids);
   const raw = Array.isArray(input.destinations) ? (input.destinations as Array<Record<string, unknown>>) : [];
   const accounts = await loadAccounts(deps, workspaceId, raw.map((d) => String(d?.account_id ?? "")).filter((id) => /^[0-9a-f-]{36}$/i.test(id)));
-  const { destinations, problems } = parseDestinations(input.destinations, accounts);
+  const { destinations, problems } = parseDestinations(caller, input.destinations, accounts);
   if (problems.length) throw new ApiError(400, problems.join(" "));
   await loadMedia(deps, workspaceId, mediaIds);
   await loadCovers(deps, workspaceId, destinations);
@@ -274,23 +279,13 @@ export async function updatePost(deps: PostsDeps, caller: Caller, input: Record<
   if (input.destinations !== undefined) {
     const raw = Array.isArray(input.destinations) ? (input.destinations as Array<Record<string, unknown>>) : [];
     const accounts = await loadAccounts(deps, post.workspace_id, raw.map((d) => String(d?.account_id ?? "")).filter((id) => /^[0-9a-f-]{36}$/i.test(id)));
-    const parsed = parseDestinations(input.destinations, accounts);
+    const parsed = parseDestinations(caller, input.destinations, accounts);
     if (parsed.problems.length) throw new ApiError(400, parsed.problems.join(" "));
     await loadCovers(deps, post.workspace_id, parsed.destinations);
     newDestinations = parsed.destinations;
   }
 
-  // A queued post goes straight back into the queue after the edit, so an AI's edit must
-  // keep TikTok on the inbox, the same rule as submitting. Checked on the final list,
-  // before anything changes, so a refused edit leaves the post as it was.
   if (queued) {
-    const finalTargets = newDestinations
-      ? await (async () => {
-          const accounts = await loadAccounts(deps, post.workspace_id, newDestinations!.map((d) => d.account_id));
-          return newDestinations!.map((d) => ({ platform: accounts.get(d.account_id)!.platform, options: d.options }));
-        })()
-      : destinations;
-    if (tiktokDirectByAi(caller, finalTargets)) throw new ApiError(400, TIKTOK_INBOX_ONLY);
     const [{ unqueue_post: pulled }] = await deps.sql<{ unqueue_post: boolean }>(`SELECT public.unqueue_post($1)`, [postId]);
     if (!pulled) throw new ApiError(409, "This post started sending, so it can't be changed.");
   }
@@ -369,11 +364,13 @@ export async function submitPost(deps: PostsDeps, caller: Caller, input: Record<
   if (input.scheduled_at !== undefined) await updatePost(deps, caller, { post_id: postId, scheduled_at: input.scheduled_at });
   const { post, member, destinations } = await loadPost(deps, caller, postId, true);
   if (post.status !== "draft") throw new ApiError(409, `Only drafts can be submitted (this post is ${post.status.replace("_", " ")}).`);
-  if (tiktokDirectByAi(caller, destinations)) throw new ApiError(400, TIKTOK_INBOX_ONLY);
   const result = await validatePost(deps, caller, { post_id: postId });
   if (!result.ok) throw new ApiError(400, `This post can't be published yet. ${result.problems.join(" ")}`);
 
   const accounts = await loadAccounts(deps, post.workspace_id, destinations.map((d) => d.connected_account_id));
+  // The account may have been set to inbox first after this draft was written.
+  const blocked = destinations.map((d) => accounts.get(d.connected_account_id)!).find((a, i) => tiktokInboxFirst(caller, a, destinations[i].options));
+  if (blocked) throw new ApiError(400, inboxFirst(blocked));
   const waiting = destinations.filter((d) => needsApproval(caller.entryPoint, accounts.get(d.connected_account_id)!.policy, d.platform));
 
   try {

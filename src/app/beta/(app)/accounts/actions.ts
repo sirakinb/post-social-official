@@ -6,7 +6,7 @@ import { OUR_SIDE, UNREACHABLE, requestError } from "../../../../../backend/lib/
 
 // The web app uses the same `connections` function an AI client will, with the person's
 // own session, so connecting and disconnecting get the same checks and audit trail.
-type Path = "/start" | "/disconnect" | "/profiles/create" | "/profiles/update" | "/profiles/delete" | "/accounts/move";
+type Path = "/start" | "/disconnect" | "/profiles/create" | "/profiles/update" | "/profiles/delete" | "/accounts/move" | "/accounts/tiktok-delivery";
 async function callConnections<T>(path: Path, body: Record<string, unknown>): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
   const base = process.env.CONNECTIONS_BASE_URL;
   if (!base) return { ok: false, error: OUR_SIDE };
@@ -51,4 +51,9 @@ export async function deleteProfile(profileId: string) {
 
 export async function moveAccount(accountId: string, profileId: string | null) {
   return callConnections<{ profile_id: string | null }>("/accounts/move", { account_id: accountId, profile_id: profileId });
+}
+
+// TikTok only: whether AI posts to this account post directly or go to the TikTok inbox first.
+export async function setTiktokDelivery(accountId: string, delivery: "direct" | "inbox") {
+  return callConnections<{ tiktok_delivery: "direct" | "inbox" }>("/accounts/tiktok-delivery", { account_id: accountId, delivery });
 }
