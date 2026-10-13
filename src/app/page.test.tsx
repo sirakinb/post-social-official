@@ -79,6 +79,9 @@ describe("LandingPage", () => {
     for (const [name, href] of [["Docs", "/docs"], ["Privacy", "/privacy"], ["Terms", "/terms"], ["Data deletion", "/data-deletion"]]) {
       expect(within(legal).getByRole("link", { name })).toHaveAttribute("href", href);
     }
+    // Fine print beside the copyright, not among the legal links.
+    expect(within(legal).queryByRole("link", { name: "Changelog" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Changelog" })).toHaveAttribute("href", "/changelog");
   });
 
   it("every waitlist button opens the form, and Escape closes it", () => {
