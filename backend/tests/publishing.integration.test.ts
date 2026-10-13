@@ -255,12 +255,18 @@ describe.skipIf(!enabled)("publishing engine on the dev backend (US-027 to US-03
     platformMode = "refuse";
     await sql(`UPDATE public.publish_jobs SET next_attempt_at = now() WHERE post_id = $1`, [draft.id]);
     await drain();
+    // Back to normal before checking, so a failed check can't break the tests after it.
+    platformMode = "ok";
     [job] = await sql(`SELECT state, attempt_count, next_attempt_at FROM public.publish_jobs WHERE post_id = $1`, [draft.id]);
     expect(job.state).toBe("failed");
     const final = await act(person(), "get", { post_id: draft.id });
     expect(final.status).toBe("failed");
-    expect(final.destinations[0]).toMatchObject({ status: "failed", error_code: "meta_100", error_message: "The platform refused the post: caption has a banned word." });
-    platformMode = "ok";
+    // A refusal the person can't fix points them to support.
+    expect(final.destinations[0]).toMatchObject({
+      status: "failed",
+      error_code: "meta_100",
+      error_message: "The platform refused the post: caption has a banned word. This isn't something you can fix from your side. Contact support and we'll look into it.",
+    });
   });
 
   it("never posts twice when the worker dies right after the platform accepted the post", async () => {
