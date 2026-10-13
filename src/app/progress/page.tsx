@@ -198,13 +198,13 @@ export default function ProgressPage() {
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
-                href="/app"
+                href="/beta"
                 className="grooved-accent inline-flex items-center gap-2 rounded-lg border border-accent-hover/50 px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:brightness-110"
               >
                 Open Post Social <ArrowRight className="h-4 w-4" />
               </Link>
               <Link
-                href="/app/reviewer"
+                href="/beta"
                 className="inline-flex items-center gap-2 rounded-lg border border-border-strong bg-surface px-4 py-2.5 text-sm font-semibold text-ink transition hover:border-accent/60 hover:bg-surface-raised"
               >
                 Reviewer path <ArrowUpRight className="h-4 w-4" />
@@ -288,7 +288,7 @@ export default function ProgressPage() {
 
           <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {[
-              "Signed-out visitors are redirected from /app to /login; private workspace content is not rendered.",
+              "Signed-out visitors are redirected from /beta to /beta/login; private workspace content is not rendered.",
               "/progress now returns 404 in production and is excluded from search indexing.",
               "The public data-deletion explanation remains available, but destructive workspace controls appear only for signed-in users; deletion attempts platform revocation first.",
               "Webhooks block private/internal network destinations; uploads validate type and size; public errors no longer expose stack traces or tokens.",

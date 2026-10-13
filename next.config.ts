@@ -19,7 +19,7 @@ const securityHeaders = [
     "font-src 'self' data:",
     "img-src 'self' data: blob: https:",
     "media-src 'self' blob: https:",
-    `connect-src 'self' ${mediaStorage} https://*.convex.cloud https://*.convex.site wss://*.convex.cloud wss://*.convex.site${developmentConnections}`,
+    `connect-src 'self' ${mediaStorage}${developmentConnections}`,
     "upgrade-insecure-requests",
   ].join("; ") },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
@@ -37,6 +37,14 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
+  },
+  // The old Convex app lived at /app and /login; old bookmarks and emails land on the web app.
+  async redirects() {
+    return [
+      { source: "/app", destination: "/beta", permanent: false },
+      { source: "/app/:path*", destination: "/beta", permanent: false },
+      { source: "/login", destination: "/beta/login", permanent: false },
+    ];
   },
   // The REST API and MCP server run as an InsForge function; this site gives them their
   // public addresses (/api/v1/..., /mcp).

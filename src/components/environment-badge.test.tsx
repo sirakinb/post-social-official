@@ -8,25 +8,10 @@ describe("EnvironmentBadge", () => {
       <EnvironmentBadge
         appEnv="development"
         insforgeUrl="https://syydd6ck-zqc.us-east.insforge.app"
-        convexUrl=""
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent(
       "development · InsForge syydd6ck-zqc.us-east.insforge.app",
-    );
-    expect(screen.getByRole("status")).not.toHaveTextContent("LIVE");
-  });
-
-  it("warns when the page runs on the live Convex deployment", () => {
-    render(
-      <EnvironmentBadge
-        appEnv="development"
-        insforgeUrl="https://syydd6ck-zqc.us-east.insforge.app"
-        convexUrl="https://example.convex.cloud"
-      />,
-    );
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "development · InsForge syydd6ck-zqc.us-east.insforge.app · LIVE Convex data",
     );
   });
 
@@ -38,12 +23,12 @@ describe("EnvironmentBadge", () => {
   });
 
   it("still renders when the InsForge URL is missing", () => {
-    render(<EnvironmentBadge appEnv="preview" insforgeUrl="" convexUrl="" />);
+    render(<EnvironmentBadge appEnv="preview" insforgeUrl="" />);
     expect(screen.getByRole("status")).toHaveTextContent("preview · InsForge not set");
   });
 
   it("shows a malformed URL as-is instead of crashing", () => {
-    render(<EnvironmentBadge appEnv="development" insforgeUrl="not a url" convexUrl="" />);
+    render(<EnvironmentBadge appEnv="development" insforgeUrl="not a url" />);
     expect(screen.getByRole("status")).toHaveTextContent("development · InsForge not a url");
   });
 

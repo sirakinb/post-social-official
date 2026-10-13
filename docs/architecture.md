@@ -29,8 +29,7 @@ connecting accounts stay with a person). Environments and promotion: `environmen
 | Piece | Where | What it does |
 |---|---|---|
 | Website | `src/app` | Landing and waitlist, legal pages, `/docs` and `/llms.txt` (generated from the operations list), the AI sign-in consent page (`/oauth/authorize`). |
-| Web app | `src/app/beta` | Set up (accounts, keys), Create, Calendar, Activity, Media, Stats, Usage. Runs at `/beta` until it replaces the old app at launch. |
-| Old app | `src/app/app`, `src/app/login`, `convex/` | The Convex version. Stays as a fallback for two weeks after launch, then is removed. |
+| Web app | `src/app/beta` | Set up (accounts, keys), Create, Calendar, Activity, Media, Stats, Usage. Runs at `/beta`; the old Convex app's addresses (`/app`, `/login`) redirect there. |
 | `api` function | `backend/functions/api` | REST `/v1/...`, MCP `/mcp`, OAuth for AI apps, API keys and connected apps, the waitlist, sign-in limit checks. |
 | `posts`, `media`, `connections` functions | `backend/functions/*` | The web app's routes: posts, uploads, and connecting social accounts (plus the Meta data-deletion and deauthorize callbacks). |
 | Shared logic | `backend/lib` | Everything the functions and worker share: `publishing/` (posts, approvals, checks per platform), `media/`, `connections/` (platform sign-in, encrypted tokens), `oauth/` (our OAuth server), `api/` (operations, REST, MCP, OpenAPI), `rate-limit.ts`, `telemetry.ts`. Runtime-neutral, so it runs in Deno (functions), Node (worker, tests) and later a mobile app. |

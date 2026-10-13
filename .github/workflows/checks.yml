@@ -20,7 +20,3 @@ jobs:
       - run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: "1"
-          # Placeholders so the Convex-era build compiles; CI never calls a backend.
-          NEXT_PUBLIC_CONVEX_URL: https://ci.convex.cloud
-          NEXT_PUBLIC_CONVEX_SITE_URL: https://ci.convex.site
-          CONVEX_SITE_URL: https://ci.convex.site
