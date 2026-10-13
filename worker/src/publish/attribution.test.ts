@@ -14,6 +14,17 @@ describe("publishAttribution", () => {
     expect(await publishAttribution(returning([{ kind: "api_key", user_id: "u3", client_name: "codex" }]), "d1")).toEqual({ userId: "u3", source: "api", aiApp: "codex" });
   });
 
+  it("falls back to the name a connected app registered with, so older connections are named too", async () => {
+    let query = "";
+    const sql = (async (text: string) => {
+      query = text;
+      return [{ kind: "oauth_grant", user_id: "u4", client_name: "Claude" }];
+    }) as unknown as Sql;
+    expect(await publishAttribution(sql, "d1")).toEqual({ userId: "u4", source: "ai_app", aiApp: "Claude" });
+    expect(query).toMatch(/coalesce\(a\.client_name, nullif\(c\.client_name, 'An AI app'\)\)/);
+    expect(query).toMatch(/JOIN public\.oauth_clients c ON c\.id = g\.oauth_client_id/);
+  });
+
   it("never throws, even when the lookup fails or finds nothing", async () => {
     expect(await publishAttribution(returning([]), "d1")).toEqual({ source: "unknown" });
     const failing = (async () => { throw new Error("db down"); }) as unknown as Sql;

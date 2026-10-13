@@ -10,11 +10,15 @@ const SOURCES: Record<string, Attribution["source"]> = { user: "app", api_key: "
 export async function publishAttribution(sql: Sql, destinationId: string): Promise<Attribution> {
   try {
     const [row] = await sql<{ kind: string; user_id: string | null; client_name: string | null }>(
-      `SELECT a.kind, coalesce(a.user_id, k.created_by, g.user_id) AS user_id, a.client_name
+      // An app learns its name when it connects over MCP; until then (e.g. a connection made
+      // before names were recorded) a connected app falls back to the name it registered with.
+      `SELECT a.kind, coalesce(a.user_id, k.created_by, g.user_id) AS user_id,
+              coalesce(a.client_name, nullif(c.client_name, 'An AI app')) AS client_name
          FROM public.destinations d
          JOIN public.actors a ON a.id = d.actor_id
          LEFT JOIN public.api_keys k ON k.id = a.api_key_id
          LEFT JOIN public.oauth_grants g ON g.id = a.oauth_grant_id
+         LEFT JOIN public.oauth_clients c ON c.id = g.oauth_client_id
         WHERE d.id = $1`,
       [destinationId],
     );
