@@ -550,7 +550,11 @@ function Finished({ done }: { done: Done }) {
       </p>
       {done.tiktokDirect && <p className="m-0 rounded-lg border border-white/[0.08] bg-ps-surface px-4 py-3 text-[13px] text-ps-muted">Your TikTok may take a few minutes to process before it appears on your profile.</p>}
       <div className="mt-2 flex gap-2">
-        <Link href="/beta" className="inline-flex h-9 items-center rounded-lg border border-white/[0.12] px-4 hover:border-white/25">Go to Home</Link>
+        {done.status === "draft" ? (
+          <Link href="/beta/drafts" className="inline-flex h-9 items-center rounded-lg border border-white/[0.12] px-4 hover:border-white/25">Go to Drafts</Link>
+        ) : (
+          <Link href="/beta" className="inline-flex h-9 items-center rounded-lg border border-white/[0.12] px-4 hover:border-white/25">Go to Home</Link>
+        )}
         <a href="/beta/create" className="inline-flex h-9 items-center rounded-lg bg-ps-plum px-4 font-medium text-ps-ground hover:bg-[#AD86FF]">Create another</a>
       </div>
     </div>
