@@ -5,6 +5,7 @@ import {
   LinkedInLogo,
   PlatformStrip,
   ThreadsLogo,
+  TikTokLogo,
   XLogo,
 } from "./platform-logos";
 
@@ -43,5 +44,14 @@ describe("new platform logos", () => {
     ["TikTok", "Instagram", "Facebook", "Threads", "YouTube", "LinkedIn", "Bluesky", "X"].forEach((name) => {
       expect(screen.getByRole("img", { name })).toBeInTheDocument();
     });
+  });
+});
+
+describe("TikTokLogo", () => {
+  it("draws its note in white by default and can follow the text colour for light tiles", () => {
+    const { container, rerender } = render(<TikTokLogo />);
+    expect(container.querySelectorAll("path")[2]).toHaveAttribute("fill", "white");
+    rerender(<TikTokLogo fill="currentColor" />);
+    expect(container.querySelectorAll("path")[2]).toHaveAttribute("fill", "currentColor");
   });
 });

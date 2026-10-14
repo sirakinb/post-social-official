@@ -172,7 +172,7 @@ export function Composer({ workspaceId, accounts, profiles = [], library: initia
 
   return (
     <div className="flex min-h-screen flex-wrap">
-      <section aria-label="Editor" className="flex min-w-0 flex-[1_1_520px] flex-col gap-6 border-r border-white/[0.06] px-8 pb-0 pt-6">
+      <section aria-label="Editor" className="flex min-w-0 flex-[1_1_520px] flex-col gap-6 border-r border-ps-fg/[0.06] px-8 pb-0 pt-6">
         <div className="flex items-center justify-between">
           <h1 className="m-0 text-lg font-medium">{editing ? "Edit post" : "New post"}</h1>
           {editing && <span className="text-xs text-ps-subtle">Changes apply when you save</span>}
@@ -184,7 +184,7 @@ export function Composer({ workspaceId, accounts, profiles = [], library: initia
             {profiles.length > 0 && (
               <div role="radiogroup" aria-label="Profile" className="flex flex-wrap gap-1">
                 {[{ id: "all", name: "All", color: "" }, ...profiles].map((p) => (
-                  <button key={p.id} type="button" role="radio" aria-checked={profileFilter === p.id} onClick={() => setProfileFilter(p.id)} className={cn("inline-flex h-6 items-center gap-1.5 rounded-md px-2 text-xs", profileFilter === p.id ? "bg-[#2A2142] text-ps-text" : "text-ps-muted hover:text-ps-text")}>
+                  <button key={p.id} type="button" role="radio" aria-checked={profileFilter === p.id} onClick={() => setProfileFilter(p.id)} className={cn("inline-flex h-6 items-center gap-1.5 rounded-md px-2 text-xs", profileFilter === p.id ? "bg-ps-segment text-ps-text" : "text-ps-muted hover:text-ps-text")}>
                     {p.color && <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: p.color }} />}
                     {p.name}
                   </button>
@@ -214,7 +214,7 @@ export function Composer({ workspaceId, accounts, profiles = [], library: initia
                       setSelected((s) => (on ? s.filter((x) => x !== a.id) : [...s, a.id]));
                       if (on && tab === a.id) setTab("all");
                     }}
-                    className={cn("inline-flex h-[38px] items-center gap-2.5 rounded-full border pl-1.5 pr-3 text-[13px] transition-colors", on ? "border-ps-plum/60 bg-ps-plum/[0.12] text-ps-text" : "border-white/[0.08] text-ps-subtle opacity-80 hover:opacity-100")}
+                    className={cn("inline-flex h-[38px] items-center gap-2.5 rounded-full border pl-1.5 pr-3 text-[13px] transition-colors", on ? "border-ps-plum/60 bg-ps-plum/[0.12] text-ps-text" : "border-ps-fg/[0.08] text-ps-subtle opacity-80 hover:opacity-100")}
                   >
                     <span className="relative">
                       <AccountMark platform={a.platform} avatarUrl={a.avatarUrl} size={26} badge={15} />
@@ -228,11 +228,11 @@ export function Composer({ workspaceId, accounts, profiles = [], library: initia
         </div>
 
         <div className="flex flex-col gap-2.5">
-          <div role="tablist" aria-label="Caption per platform" className="flex flex-wrap gap-0.5 border-b border-white/[0.06]">
+          <div role="tablist" aria-label="Caption per platform" className="flex flex-wrap gap-0.5 border-b border-ps-fg/[0.06]">
             {[{ id: "all", label: "All platforms", custom: false }, ...chosen.map((a) => ({ id: a.id, label: chosen.filter((x) => x.platform === a.platform).length > 1 ? `${NAMES[a.platform]} · ${a.handle}` : NAMES[a.platform], custom: choiceFor(a.id).caption !== undefined }))].map((t) => {
               const over = limits.some((l) => l.accountId === t.id && l.over);
               return (
-                <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)} className={cn("inline-flex h-[34px] items-center gap-1.5 px-3", tab === t.id ? "text-ps-text shadow-[inset_0_-2px_0_#9B6CFF]" : "text-ps-muted hover:text-ps-text")}>
+                <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)} className={cn("inline-flex h-[34px] items-center gap-1.5 px-3", tab === t.id ? "text-ps-text shadow-[inset_0_-2px_0_rgb(var(--ps-plum))]" : "text-ps-muted hover:text-ps-text")}>
                   {t.label}
                   {over && <span className="h-1.5 w-1.5 rounded-full bg-ps-failed" aria-label="over the limit" />}
                   {!over && t.custom && <span className="h-1.5 w-1.5 rounded-full bg-ps-plum" aria-label="own caption" />}
@@ -255,12 +255,12 @@ export function Composer({ workspaceId, accounts, profiles = [], library: initia
             value={tabAccount ? effectiveCaption(caption, choiceFor(tabAccount.id)) : caption}
             onChange={(e) => (tabAccount ? setChoice(tabAccount.id, { caption: e.target.value }) : setCaption(e.target.value))}
             placeholder="Write a caption…"
-            className="w-full resize-y rounded-[10px] border border-white/10 bg-ps-surface px-4 py-3.5 text-sm leading-relaxed text-ps-text placeholder:text-ps-subtle focus:border-ps-plum/60 focus:outline-none"
+            className="w-full resize-y rounded-[10px] border border-ps-fg/10 bg-ps-surface px-4 py-3.5 text-sm leading-relaxed text-ps-text placeholder:text-ps-subtle focus:border-ps-plum/60 focus:outline-none"
           />
           {limits.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {limits.map((l) => (
-                <span key={l.accountId} className={cn("rounded-md px-2 py-0.5 font-mono text-[11px]", l.over ? "bg-ps-failed/[0.12] text-[#FF8A8E]" : "bg-white/[0.04] text-ps-muted")}>
+                <span key={l.accountId} className={cn("rounded-md px-2 py-0.5 font-mono text-[11px]", l.over ? "bg-ps-failed/[0.12] text-ps-failed-text" : "bg-ps-fg/[0.04] text-ps-muted")}>
                   {l.label} {l.used.toLocaleString("en-US")} / {l.max.toLocaleString("en-US")}
                 </span>
               ))}
@@ -274,28 +274,28 @@ export function Composer({ workspaceId, accounts, profiles = [], library: initia
             {media.map((m, i) => (
               <div key={m.id} className="group relative">
                 <Thumb url={m.type === "image" ? m.url : (m.poster ?? null)} isVideo={m.type === "video"} size={84} />
-                {media.length > 1 && <span className="absolute left-1 top-1 rounded bg-black/60 px-1 font-mono text-[10px]">{i + 1}</span>}
-                {m.duration && <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 font-mono text-[10px]">{Math.floor(m.duration / 60)}:{String(Math.round(m.duration % 60)).padStart(2, "0")}</span>}
+                {media.length > 1 && <span className="absolute left-1 top-1 rounded bg-black/60 text-white px-1 font-mono text-[10px]">{i + 1}</span>}
+                {m.duration && <span className="absolute bottom-1 right-1 rounded bg-black/60 text-white px-1 font-mono text-[10px]">{Math.floor(m.duration / 60)}:{String(Math.round(m.duration % 60)).padStart(2, "0")}</span>}
                 <div className="absolute inset-x-1 top-1 hidden justify-end gap-1 group-hover:flex group-focus-within:flex">
-                  {i > 0 && <button type="button" aria-label={`Move ${m.name} earlier`} onClick={() => setMediaIds((ids) => swap(ids, i, i - 1))} className="rounded bg-black/70 px-1 text-[11px]">←</button>}
-                  <button type="button" aria-label={`Remove ${m.name}`} onClick={() => setMediaIds((ids) => ids.filter((x) => x !== m.id))} className="rounded bg-black/70 px-1 text-[11px]">✕</button>
+                  {i > 0 && <button type="button" aria-label={`Move ${m.name} earlier`} onClick={() => setMediaIds((ids) => swap(ids, i, i - 1))} className="rounded bg-black/70 text-white px-1 text-[11px]">←</button>}
+                  <button type="button" aria-label={`Remove ${m.name}`} onClick={() => setMediaIds((ids) => ids.filter((x) => x !== m.id))} className="rounded bg-black/70 text-white px-1 text-[11px]">✕</button>
                 </div>
               </div>
             ))}
             {uploads.map((u) => (
-              <div key={u.key} className="flex h-[84px] w-[200px] flex-col justify-center gap-1.5 rounded-[10px] border border-white/[0.08] bg-ps-surface px-3">
+              <div key={u.key} className="flex h-[84px] w-[200px] flex-col justify-center gap-1.5 rounded-[10px] border border-ps-fg/[0.08] bg-ps-surface px-3">
                 <span className="truncate text-xs">{u.name}</span>
                 {u.error ? (
-                  <span className="text-xs text-[#FF8A8E]">{u.error} <button type="button" onClick={() => dismiss(u.key)} className="underline">Dismiss</button></span>
+                  <span className="text-xs text-ps-failed-text">{u.error} <button type="button" onClick={() => dismiss(u.key)} className="underline">Dismiss</button></span>
                 ) : (
                   <>
-                    <span className="h-[3px] rounded bg-white/[0.06]"><span className="block h-full rounded bg-ps-plum" style={{ width: `${Math.round(u.progress * 100)}%` }} /></span>
+                    <span className="h-[3px] rounded bg-ps-fg/[0.06]"><span className="block h-full rounded bg-ps-plum" style={{ width: `${Math.round(u.progress * 100)}%` }} /></span>
                     <span className="text-[11px] text-ps-subtle">{u.status === "checking" ? "Checking the file…" : `Uploading ${Math.round(u.progress * 100)}%`}</span>
                   </>
                 )}
               </div>
             ))}
-            <button type="button" data-attr="add-media" onClick={() => setPicker(true)} className="h-[84px] w-[84px] rounded-[10px] border border-dashed border-white/[0.18] text-xs text-ps-muted hover:border-ps-plum/50 hover:text-ps-text">
+            <button type="button" data-attr="add-media" onClick={() => setPicker(true)} className="h-[84px] w-[84px] rounded-[10px] border border-dashed border-ps-fg/[0.18] text-xs text-ps-muted hover:border-ps-plum/50 hover:text-ps-text">
               Add media
             </button>
           </div>
@@ -334,14 +334,14 @@ export function Composer({ workspaceId, accounts, profiles = [], library: initia
         <div>
           <Label className="mb-2.5">When</Label>
           <div className="flex flex-wrap items-center gap-3">
-            <div className="inline-flex rounded-[9px] border border-white/[0.08] bg-ps-ground p-[3px]" role="radiogroup" aria-label="When to post">
+            <div className="inline-flex rounded-[9px] border border-ps-fg/[0.08] bg-ps-ground p-[3px]" role="radiogroup" aria-label="When to post">
               {(
                 [
                   ["now", "Now"],
                   ["later", "Schedule"],
                 ] as const
               ).map(([id, text]) => (
-                <button key={id} type="button" role="radio" aria-checked={when === id} onClick={() => setWhen(id)} className={cn("h-7 rounded-md px-3 text-xs", when === id ? "bg-[#2A2142] text-ps-text" : "text-ps-muted hover:text-ps-text")}>
+                <button key={id} type="button" role="radio" aria-checked={when === id} onClick={() => setWhen(id)} className={cn("h-7 rounded-md px-3 text-xs", when === id ? "bg-ps-segment text-ps-text" : "text-ps-muted hover:text-ps-text")}>
                   {text}
                 </button>
               ))}
@@ -349,22 +349,22 @@ export function Composer({ workspaceId, accounts, profiles = [], library: initia
             {when === "later" && (
               <label className="flex items-center gap-2">
                 <span className="sr-only">Date and time</span>
-                <input type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} className="h-9 rounded-lg border border-ps-line-strong bg-ps-ground px-2.5 text-[13px] text-ps-text [color-scheme:dark]" />
+                <input type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} className="h-9 rounded-lg border border-ps-line-strong bg-ps-ground px-2.5 text-[13px] text-ps-text" />
                 <span className="text-xs text-ps-subtle">your time</span>
               </label>
             )}
           </div>
         </div>
 
-        <div className="sticky bottom-0 -mx-8 mt-auto flex flex-col gap-2.5 border-t border-white/[0.06] bg-ps-ground/95 px-8 py-3.5 backdrop-blur">
+        <div className="sticky bottom-0 -mx-8 mt-auto flex flex-col gap-2.5 border-t border-ps-fg/[0.06] bg-ps-ground/95 px-8 py-3.5 backdrop-blur">
           {directTikTok && <TikTokConsent brandedContent={brandedTikTok} />}
-          {error && <p role="alert" className="m-0 text-[13px] text-[#FF8A8E]">{error}</p>}
+          {error && <p role="alert" className="m-0 text-[13px] text-ps-failed-text">{error}</p>}
           <div className="flex flex-wrap items-center justify-between gap-2.5">
             <div className="min-w-0 flex-1 text-[13px]">
               {problems.length > 0 ? (
                 <ul className="m-0 list-none space-y-1 p-0">
                   {problems.slice(0, 2).map((p) => (
-                    <li key={p} className="flex gap-2 text-[#FF8A8E]"><span className="mt-1.5 h-1.5 w-1.5 flex-none rounded-full bg-ps-failed" />{p}</li>
+                    <li key={p} className="flex gap-2 text-ps-failed-text"><span className="mt-1.5 h-1.5 w-1.5 flex-none rounded-full bg-ps-failed" />{p}</li>
                   ))}
                   {problems.length > 2 && <li className="pl-3.5 text-ps-subtle">and {problems.length - 2} more</li>}
                 </ul>
@@ -374,11 +374,11 @@ export function Composer({ workspaceId, accounts, profiles = [], library: initia
             </div>
             <div className="flex gap-2">
               {(!editing || editing.status === "draft") && (
-                <button type="button" disabled={busy !== null || chosen.length === 0} onClick={() => save(false)} data-attr="save-draft" className="h-[34px] rounded-lg border border-white/[0.12] px-3.5 text-ps-text hover:border-white/25 disabled:opacity-50">
+                <button type="button" disabled={busy !== null || chosen.length === 0} onClick={() => save(false)} data-attr="save-draft" className="h-[34px] rounded-lg border border-ps-fg/[0.12] px-3.5 text-ps-text hover:border-ps-fg/25 disabled:opacity-50">
                   {busy === "draft" ? "Saving…" : "Save draft"}
                 </button>
               )}
-              <button type="button" disabled={busy !== null || problems.length > 0} onClick={() => save(true)} data-attr={when === "later" ? "schedule-post" : "publish-now"} className="h-[34px] rounded-lg bg-ps-plum px-4 font-medium text-ps-ground hover:bg-[#AD86FF] disabled:cursor-not-allowed disabled:bg-ps-plum/40 disabled:text-ps-ground/80">
+              <button type="button" disabled={busy !== null || problems.length > 0} onClick={() => save(true)} data-attr={when === "later" ? "schedule-post" : "publish-now"} className="h-[34px] rounded-lg bg-ps-plum px-4 font-medium text-ps-ground hover:bg-ps-plum-hover disabled:cursor-not-allowed disabled:bg-ps-plum/40 disabled:text-ps-ground/80">
                 {busy === "send" ? "Sending…" : primaryLabel}
               </button>
             </div>
@@ -391,9 +391,9 @@ export function Composer({ workspaceId, accounts, profiles = [], library: initia
           <>
             <div className="flex flex-col items-center gap-4 md:sticky md:top-6">
             {chosen.length > 1 && (
-              <div className="inline-flex flex-wrap rounded-[9px] border border-white/[0.08] bg-ps-ground p-[3px]" role="tablist" aria-label="Preview">
+              <div className="inline-flex flex-wrap rounded-[9px] border border-ps-fg/[0.08] bg-ps-ground p-[3px]" role="tablist" aria-label="Preview">
                 {chosen.map((a) => (
-                  <button key={a.id} type="button" role="tab" aria-selected={previewAccount.id === a.id} onClick={() => setPreviewId(a.id)} className={cn("h-7 rounded-md px-3 text-xs", previewAccount.id === a.id ? "bg-[#2A2142] text-ps-text" : "text-ps-muted hover:text-ps-text")}>
+                  <button key={a.id} type="button" role="tab" aria-selected={previewAccount.id === a.id} onClick={() => setPreviewId(a.id)} className={cn("h-7 rounded-md px-3 text-xs", previewAccount.id === a.id ? "bg-ps-segment text-ps-text" : "text-ps-muted hover:text-ps-text")}>
                     {NAMES[a.platform]}
                   </button>
                 ))}
@@ -431,7 +431,7 @@ function PlatformOptions({ account, choice, media, caption, onChange, creator, c
   const types = MEDIA_TYPES[account.platform];
   const mediaType = choice.mediaType ?? defaultMediaType(account.platform, media);
   return (
-    <div className="flex flex-col gap-3 rounded-[10px] border border-white/[0.08] bg-ps-surface px-4 py-3.5">
+    <div className="flex flex-col gap-3 rounded-[10px] border border-ps-fg/[0.08] bg-ps-surface px-4 py-3.5">
       <div className="flex items-center gap-2">
         <PlatformMark platform={account.platform} />
         <span className="font-medium">{NAMES[account.platform]}</span>
@@ -440,9 +440,9 @@ function PlatformOptions({ account, choice, media, caption, onChange, creator, c
       {types && (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-ps-muted">Post type</span>
-          <span className="inline-flex flex-wrap rounded-[9px] border border-white/[0.08] bg-ps-ground p-[3px]" role="radiogroup" aria-label={`${NAMES[account.platform]} post type`}>
+          <span className="inline-flex flex-wrap rounded-[9px] border border-ps-fg/[0.08] bg-ps-ground p-[3px]" role="radiogroup" aria-label={`${NAMES[account.platform]} post type`}>
             {types.map((t) => (
-              <button key={t.id} type="button" role="radio" aria-checked={mediaType === t.id} onClick={() => onChange({ mediaType: t.id })} className={cn("h-7 rounded-md px-2.5 text-xs", mediaType === t.id ? "bg-[#2A2142] text-ps-text" : "text-ps-muted hover:text-ps-text")}>
+              <button key={t.id} type="button" role="radio" aria-checked={mediaType === t.id} onClick={() => onChange({ mediaType: t.id })} className={cn("h-7 rounded-md px-2.5 text-xs", mediaType === t.id ? "bg-ps-segment text-ps-text" : "text-ps-muted hover:text-ps-text")}>
                 {t.label}
               </button>
             ))}
@@ -463,9 +463,9 @@ function PlatformOptions({ account, choice, media, caption, onChange, creator, c
           </label>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-ps-muted">Visibility</span>
-            <span className="inline-flex rounded-[9px] border border-white/[0.08] bg-ps-ground p-[3px]" role="radiogroup" aria-label="YouTube visibility">
+            <span className="inline-flex rounded-[9px] border border-ps-fg/[0.08] bg-ps-ground p-[3px]" role="radiogroup" aria-label="YouTube visibility">
               {(["public", "unlisted", "private"] as const).map((p) => (
-                <button key={p} type="button" role="radio" aria-checked={(choice.privacy ?? "public") === p} onClick={() => onChange({ privacy: p })} className={cn("h-7 rounded-md px-2.5 text-xs capitalize", (choice.privacy ?? "public") === p ? "bg-[#2A2142] text-ps-text" : "text-ps-muted hover:text-ps-text")}>
+                <button key={p} type="button" role="radio" aria-checked={(choice.privacy ?? "public") === p} onClick={() => onChange({ privacy: p })} className={cn("h-7 rounded-md px-2.5 text-xs capitalize", (choice.privacy ?? "public") === p ? "bg-ps-segment text-ps-text" : "text-ps-muted hover:text-ps-text")}>
                   {p}
                 </button>
               ))}
@@ -497,14 +497,14 @@ function MediaPicker({ library, selected, onClose, onToggle, onFiles }: { librar
   const input = useRef<HTMLInputElement>(null);
   return (
     <div role="dialog" aria-modal="true" aria-label="Add media" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div className="flex max-h-[80vh] w-full max-w-3xl flex-col rounded-2xl border border-white/10 bg-[#161126] shadow-[0_24px_60px_rgba(0,0,0,0.55)]" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-3.5">
+      <div className="flex max-h-[80vh] w-full max-w-3xl flex-col rounded-2xl border border-ps-fg/10 bg-ps-dialog shadow-[0_24px_60px_rgba(0,0,0,0.55)]" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-ps-fg/[0.06] px-5 py-3.5">
           <h2 className="m-0 text-sm font-medium">Add media</h2>
           <div className="flex items-center gap-2">
             <Link href="/beta/media" className="px-2 text-xs text-ps-subtle hover:text-ps-text">Manage library</Link>
             <input ref={input} type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime" multiple className="sr-only" onChange={(e) => onFiles(Array.from(e.target.files ?? []))} />
-            <button type="button" data-attr="upload-media" onClick={() => input.current?.click()} className="h-8 rounded-lg bg-ps-plum px-3.5 font-medium text-ps-ground hover:bg-[#AD86FF]">Upload from computer</button>
-            <button type="button" onClick={onClose} className="h-8 rounded-lg border border-white/[0.12] px-3">Done</button>
+            <button type="button" data-attr="upload-media" onClick={() => input.current?.click()} className="h-8 rounded-lg bg-ps-plum px-3.5 font-medium text-ps-ground hover:bg-ps-plum-hover">Upload from computer</button>
+            <button type="button" onClick={onClose} className="h-8 rounded-lg border border-ps-fg/[0.12] px-3">Done</button>
           </div>
         </div>
         <div className="grid gap-3 overflow-y-auto p-5 [grid-template-columns:repeat(auto-fill,minmax(120px,1fr))]">
@@ -512,7 +512,7 @@ function MediaPicker({ library, selected, onClose, onToggle, onFiles }: { librar
           {library.map((m) => {
             const on = selected.includes(m.id);
             return (
-              <button key={m.id} type="button" aria-pressed={on} onClick={() => onToggle(m.id)} className={cn("rounded-xl border p-1.5 text-left", on ? "border-ps-plum/70 bg-ps-plum/[0.1]" : "border-white/[0.06] bg-ps-surface hover:border-white/20")}>
+              <button key={m.id} type="button" aria-pressed={on} onClick={() => onToggle(m.id)} className={cn("rounded-xl border p-1.5 text-left", on ? "border-ps-plum/70 bg-ps-plum/[0.1]" : "border-ps-fg/[0.06] bg-ps-surface hover:border-ps-fg/20")}>
                 <span className="relative block aspect-square overflow-hidden rounded-lg bg-ps-raised">
                   {m.url && m.type === "image" ? (
                     // eslint-disable-next-line @next/next/no-img-element -- signed link
@@ -548,14 +548,14 @@ function Finished({ done }: { done: Done }) {
             ? `It goes out ${new Date(done.scheduledAt).toLocaleString("en-US", { weekday: "long", hour: "numeric", minute: "2-digit" })}.`
             : "Live links show up on Home as each platform confirms."}
       </p>
-      {done.tiktokDirect && <p className="m-0 rounded-lg border border-white/[0.08] bg-ps-surface px-4 py-3 text-[13px] text-ps-muted">Your TikTok may take a few minutes to process before it appears on your profile.</p>}
+      {done.tiktokDirect && <p className="m-0 rounded-lg border border-ps-fg/[0.08] bg-ps-surface px-4 py-3 text-[13px] text-ps-muted">Your TikTok may take a few minutes to process before it appears on your profile.</p>}
       <div className="mt-2 flex gap-2">
         {done.status === "draft" ? (
-          <Link href="/beta/drafts" className="inline-flex h-9 items-center rounded-lg border border-white/[0.12] px-4 hover:border-white/25">Go to Drafts</Link>
+          <Link href="/beta/drafts" className="inline-flex h-9 items-center rounded-lg border border-ps-fg/[0.12] px-4 hover:border-ps-fg/25">Go to Drafts</Link>
         ) : (
-          <Link href="/beta" className="inline-flex h-9 items-center rounded-lg border border-white/[0.12] px-4 hover:border-white/25">Go to Home</Link>
+          <Link href="/beta" className="inline-flex h-9 items-center rounded-lg border border-ps-fg/[0.12] px-4 hover:border-ps-fg/25">Go to Home</Link>
         )}
-        <a href="/beta/create" className="inline-flex h-9 items-center rounded-lg bg-ps-plum px-4 font-medium text-ps-ground hover:bg-[#AD86FF]">Create another</a>
+        <a href="/beta/create" className="inline-flex h-9 items-center rounded-lg bg-ps-plum px-4 font-medium text-ps-ground hover:bg-ps-plum-hover">Create another</a>
       </div>
     </div>
   );

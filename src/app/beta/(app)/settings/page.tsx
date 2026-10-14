@@ -18,7 +18,7 @@ const ROLE: Record<string, string> = {
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-6 gap-y-1 border-b border-white/[0.05] px-4 py-3 last:border-b-0">
+    <div className="flex flex-wrap items-center gap-x-6 gap-y-1 border-b border-ps-fg/[0.05] px-4 py-3 last:border-b-0">
       <span className="w-40 flex-none text-ps-subtle">{label}</span>
       <span className="min-w-0 flex-1 break-words">{children}</span>
     </div>
@@ -37,7 +37,7 @@ export default async function SettingsPage() {
 
       <Card aria-label="Your account">
         <CardHeader title="Your account" />
-        <div className="flex items-center gap-3 border-b border-white/[0.05] px-4 py-3.5">
+        <div className="flex items-center gap-3 border-b border-ps-fg/[0.05] px-4 py-3.5">
           <ActorMark kind="user" name={viewer.name} avatarUrl={viewer.avatarUrl} size={36} />
           <span className="flex min-w-0 flex-col">
             <span className="truncate text-sm">{viewer.name}</span>
@@ -50,7 +50,7 @@ export default async function SettingsPage() {
         </Row>
         <Row label="Session">
           <form action={signOut}>
-            <button type="submit" className="inline-flex h-[30px] items-center rounded-lg border border-white/[0.12] px-3 text-xs hover:border-white/25">Sign out</button>
+            <button type="submit" className="inline-flex h-[30px] items-center rounded-lg border border-ps-fg/[0.12] px-3 text-xs hover:border-ps-fg/25">Sign out</button>
           </form>
         </Row>
       </Card>

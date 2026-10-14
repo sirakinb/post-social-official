@@ -39,7 +39,7 @@ export default async function DraftsPage() {
 
       <Card>
         {failed ? (
-          <p role="alert" className="m-0 px-4 py-3 text-[#FF8A8E]">The drafts could not be loaded. Refresh the page to try again.</p>
+          <p role="alert" className="m-0 px-4 py-3 text-ps-failed-text">The drafts could not be loaded. Refresh the page to try again.</p>
         ) : (
           <DraftsList drafts={drafts} canEdit={workspace.role !== "reviewer"} />
         )}

@@ -73,7 +73,7 @@ export default async function BetaStatsPage({ searchParams }: { searchParams: Pr
         {!current ? (
           <p className="text-sm text-ps-muted">You are not a member of any workspace yet.</p>
         ) : !report ? (
-          <p role="alert" className="text-sm text-[#FF8A8E]">Stats could not be loaded. Refresh the page to try again.</p>
+          <p role="alert" className="text-sm text-ps-failed-text">Stats could not be loaded. Refresh the page to try again.</p>
         ) : (
           <>
             <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
@@ -84,7 +84,7 @@ export default async function BetaStatsPage({ searchParams }: { searchParams: Pr
               <div className="flex flex-wrap items-center gap-2">
                 <nav aria-label="Period" className="flex gap-1 rounded-lg border border-ps-line bg-ps-surface p-1 text-sm">
                   {PERIODS.map((p) => (
-                    <Link key={p.id} href={link({ period: p.id })} aria-current={p.id === period ? "page" : undefined} className={`rounded-md px-3 py-1 ${p.id === period ? "bg-[#2A2142] text-ps-text" : "text-ps-muted hover:text-ps-text"}`}>{p.label}</Link>
+                    <Link key={p.id} href={link({ period: p.id })} aria-current={p.id === period ? "page" : undefined} className={`rounded-md px-3 py-1 ${p.id === period ? "bg-ps-segment text-ps-text" : "text-ps-muted hover:text-ps-text"}`}>{p.label}</Link>
                   ))}
                 </nav>
                 <RefreshButton workspaceId={current.workspace_id} />

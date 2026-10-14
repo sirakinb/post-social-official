@@ -150,12 +150,12 @@ export function CalendarView({ posts, anchor, canEdit, initialView = "month" }: 
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex">
-            <button type="button" aria-label="Earlier" onClick={() => goTo(-1)} className="h-[30px] rounded-l-lg border border-white/[0.08] px-2.5 text-ps-muted hover:text-ps-text">‹</button>
-            <button type="button" onClick={goToday} className="h-[30px] border-y border-white/[0.08] px-3 text-xs text-ps-muted hover:text-ps-text">Today</button>
-            <button type="button" aria-label="Later" onClick={() => goTo(1)} className="h-[30px] rounded-r-lg border border-white/[0.08] px-2.5 text-ps-muted hover:text-ps-text">›</button>
+            <button type="button" aria-label="Earlier" onClick={() => goTo(-1)} className="h-[30px] rounded-l-lg border border-ps-fg/[0.08] px-2.5 text-ps-muted hover:text-ps-text">‹</button>
+            <button type="button" onClick={goToday} className="h-[30px] border-y border-ps-fg/[0.08] px-3 text-xs text-ps-muted hover:text-ps-text">Today</button>
+            <button type="button" aria-label="Later" onClick={() => goTo(1)} className="h-[30px] rounded-r-lg border border-ps-fg/[0.08] px-2.5 text-ps-muted hover:text-ps-text">›</button>
           </div>
           <span className="font-mono text-[11px] text-ps-subtle">{tz}</span>
-          <div className="inline-flex rounded-[9px] border border-white/[0.08] bg-ps-surface p-[3px]" role="radiogroup" aria-label="View">
+          <div className="inline-flex rounded-[9px] border border-ps-fg/[0.08] bg-ps-surface p-[3px]" role="radiogroup" aria-label="View">
             {(
               [
                 ["month", "Month"],
@@ -163,12 +163,12 @@ export function CalendarView({ posts, anchor, canEdit, initialView = "month" }: 
                 ["list", "List"],
               ] as const
             ).map(([id, text]) => (
-              <button key={id} type="button" role="radio" aria-checked={view === id} onClick={() => setView(id)} className={cn("h-[26px] rounded-md px-3 text-xs", view === id ? "bg-[#2A2142] text-ps-text" : "text-ps-muted hover:text-ps-text")}>
+              <button key={id} type="button" role="radio" aria-checked={view === id} onClick={() => setView(id)} className={cn("h-[26px] rounded-md px-3 text-xs", view === id ? "bg-ps-segment text-ps-text" : "text-ps-muted hover:text-ps-text")}>
                 {text}
               </button>
             ))}
           </div>
-          {canEdit && <Link href="/beta/create" className="inline-flex h-[30px] items-center rounded-lg bg-ps-plum px-3 font-medium text-ps-ground hover:bg-[#AD86FF]">New post</Link>}
+          {canEdit && <Link href="/beta/create" className="inline-flex h-[30px] items-center rounded-lg bg-ps-plum px-3 font-medium text-ps-ground hover:bg-ps-plum-hover">New post</Link>}
         </div>
       </div>
 
@@ -177,9 +177,9 @@ export function CalendarView({ posts, anchor, canEdit, initialView = "month" }: 
           {shown.length === 0 && <p className="m-0 px-4 py-10 text-center text-ps-muted">Nothing in these dates. Ask your AI to schedule a week of posts.</p>}
           {groupByDay(shown).map((g) => (
             <div key={g.day}>
-              <Label className="border-b border-white/[0.04] px-4 pb-1.5 pt-3">{dayLabel(g.day, today)}</Label>
+              <Label className="border-b border-ps-fg/[0.04] px-4 pb-1.5 pt-3">{dayLabel(g.day, today)}</Label>
               {g.posts.map((p) => (
-                <button key={p.id} type="button" onClick={() => setOpen(p.id)} className="flex w-full items-center gap-3 border-b border-white/[0.04] px-4 py-2.5 text-left hover:bg-white/[0.02]">
+                <button key={p.id} type="button" onClick={() => setOpen(p.id)} className="flex w-full items-center gap-3 border-b border-ps-fg/[0.04] px-4 py-2.5 text-left hover:bg-ps-fg/[0.02]">
                   <span className="w-16 flex-none font-mono text-xs text-ps-muted">{time(p.at)}</span>
                   <Thumb url={p.thumb?.url ?? null} isVideo={p.thumb?.isVideo ?? false} size={40} />
                   <span className="min-w-0 flex-1">
@@ -203,7 +203,7 @@ export function CalendarView({ posts, anchor, canEdit, initialView = "month" }: 
       ) : (
         <div className="overflow-x-auto rounded-xl border border-ps-line">
           <div className="grid min-w-[840px] [grid-template-columns:repeat(7,minmax(0,1fr))]">
-            {WEEKDAYS.map((w) => <Label key={w} className="border-b border-white/[0.06] bg-ps-surface px-3 py-2.5">{w}</Label>)}
+            {WEEKDAYS.map((w) => <Label key={w} className="border-b border-ps-fg/[0.06] bg-ps-surface px-3 py-2.5">{w}</Label>)}
             {Array.from({ length: range.days }, (_, i) => {
               const dayStart = new Date(range.start + i * DAY + 12 * 3600_000);
               const key = startOfDay(dayStart.getTime());
@@ -214,7 +214,7 @@ export function CalendarView({ posts, anchor, canEdit, initialView = "month" }: 
               const outside = view === "month" && dayStart.getMonth() !== shownMonth.getMonth();
               const limit = view === "month" ? 3 : 4;
               return (
-                <div key={key} className={cn("border-b border-r border-white/[0.05] p-2", view === "month" ? "min-h-[112px]" : "min-h-[160px]", weekend ? "bg-[#0E0A1A]" : "bg-ps-ground", (key < today || outside) && "opacity-60", isToday && "shadow-[inset_0_2px_0_#9B6CFF]")}>
+                <div key={key} className={cn("border-b border-r border-ps-fg/[0.05] p-2", view === "month" ? "min-h-[112px]" : "min-h-[160px]", weekend ? "bg-ps-weekend" : "bg-ps-ground", (key < today || outside) && "opacity-60", isToday && "shadow-[inset_0_2px_0_#9B6CFF]")}>
                   <div className="mb-1.5 flex items-center justify-between">
                     {isToday ? <span className="text-[11px] text-ps-plum-soft">Today</span> : <span />}
                     <span className={cn("font-mono text-[11px]", isToday ? "rounded-full bg-ps-plum px-1.5 text-ps-ground" : "text-ps-subtle")}>{dayStart.getDate()}</span>
@@ -225,7 +225,7 @@ export function CalendarView({ posts, anchor, canEdit, initialView = "month" }: 
                         key={p.id}
                         type="button"
                         onClick={() => setOpen(p.id)}
-                        className={cn("flex h-[26px] w-full items-center gap-1.5 rounded-md border bg-ps-raised px-1.5 text-left text-xs text-[#E9E4F5]", open === p.id ? "border-ps-plum/70" : "border-white/[0.06] hover:border-white/20")}
+                        className={cn("flex h-[26px] w-full items-center gap-1.5 rounded-md border bg-ps-raised px-1.5 text-left text-xs text-ps-text", open === p.id ? "border-ps-plum/70" : "border-ps-fg/[0.06] hover:border-ps-fg/20")}
                         style={{ boxShadow: `inset 2px 0 0 ${statusOf(p).bar}` }}
                         title={`${time(p.at)} · ${p.caption}`}
                       >
@@ -286,7 +286,7 @@ function PostCard({ post, canEdit, onClose }: { post: CalendarPost; canEdit: boo
   }
 
   return (
-    <div role="dialog" aria-label="Post" className="fixed bottom-6 right-6 z-40 w-[360px] overflow-hidden rounded-2xl border border-white/10 bg-[#161126] shadow-[0_24px_60px_rgba(0,0,0,0.55)]">
+    <div role="dialog" aria-label="Post" className="fixed bottom-6 right-6 z-40 w-[360px] overflow-hidden rounded-2xl border border-ps-fg/10 bg-ps-dialog shadow-[0_24px_60px_rgba(0,0,0,0.55)]">
       <div className="flex items-start gap-3 p-4">
         <Thumb url={post.thumb?.url ?? null} isVideo={post.thumb?.isVideo ?? false} size={56} />
         <div className="min-w-0 flex-1">
@@ -297,7 +297,7 @@ function PostCard({ post, canEdit, onClose }: { post: CalendarPost; canEdit: boo
           <p className="m-0 mt-1.5 line-clamp-3 leading-snug">{post.caption || "No caption"}</p>
         </div>
       </div>
-      <div className="flex flex-col gap-1.5 border-t border-white/[0.06] px-4 py-3">
+      <div className="flex flex-col gap-1.5 border-t border-ps-fg/[0.06] px-4 py-3">
         {post.destinations.map((d, i) => (
           <div key={i} className="flex items-center gap-2 text-xs">
             <PlatformMark platform={d.platform} size={18} />
@@ -313,22 +313,22 @@ function PostCard({ post, canEdit, onClose }: { post: CalendarPost; canEdit: boo
         )}
       </div>
       {moving && (
-        <div className="flex items-center gap-2 border-t border-white/[0.06] px-4 py-3">
+        <div className="flex items-center gap-2 border-t border-ps-fg/[0.06] px-4 py-3">
           <label className="sr-only" htmlFor="move-to">New time</label>
-          <input id="move-to" type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} className="h-8 flex-1 rounded-lg border border-ps-line-strong bg-ps-ground px-2 text-[13px] [color-scheme:dark]" />
+          <input id="move-to" type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} className="h-8 flex-1 rounded-lg border border-ps-line-strong bg-ps-ground px-2 text-[13px]" />
           <button type="button" data-attr="reschedule-post" disabled={busy} onClick={() => act(() => reschedule(post.id, new Date(when).toISOString()))} className="h-8 rounded-lg bg-ps-plum px-3 font-medium text-ps-ground disabled:opacity-60">Move</button>
         </div>
       )}
-      {error && <p role="alert" className="m-0 px-4 pb-2 text-xs text-[#FF8A8E]">{error}</p>}
-      <div className="flex gap-2 border-t border-white/[0.06] px-4 py-3">
-        {editable && <Link href={`/beta/create?post=${post.id}`} className="inline-flex h-8 flex-1 items-center justify-center rounded-lg bg-ps-plum font-medium text-ps-ground hover:bg-[#AD86FF]">Edit</Link>}
+      {error && <p role="alert" className="m-0 px-4 pb-2 text-xs text-ps-failed-text">{error}</p>}
+      <div className="flex gap-2 border-t border-ps-fg/[0.06] px-4 py-3">
+        {editable && <Link href={`/beta/create?post=${post.id}`} className="inline-flex h-8 flex-1 items-center justify-center rounded-lg bg-ps-plum font-medium text-ps-ground hover:bg-ps-plum-hover">Edit</Link>}
         {editable && post.status === "scheduled" && !moving && (
-          <button type="button" onClick={() => setMoving(true)} className="h-8 flex-1 rounded-lg border border-white/[0.12] hover:border-white/25">Move</button>
+          <button type="button" onClick={() => setMoving(true)} className="h-8 flex-1 rounded-lg border border-ps-fg/[0.12] hover:border-ps-fg/25">Move</button>
         )}
         {editable && (confirmCancel ? (
-          <button type="button" data-attr="cancel-post" disabled={busy} onClick={() => act(() => cancel(post.id))} className="h-8 flex-1 rounded-lg border border-ps-failed/40 text-[#FF8A8E]">Confirm cancel</button>
+          <button type="button" data-attr="cancel-post" disabled={busy} onClick={() => act(() => cancel(post.id))} className="h-8 flex-1 rounded-lg border border-ps-failed/40 text-ps-failed-text">Confirm cancel</button>
         ) : (
-          <button type="button" onClick={() => setConfirmCancel(true)} className="h-8 flex-1 rounded-lg border border-white/[0.12] text-[#FF8A8E] hover:border-ps-failed/40">Cancel post</button>
+          <button type="button" onClick={() => setConfirmCancel(true)} className="h-8 flex-1 rounded-lg border border-ps-fg/[0.12] text-ps-failed-text hover:border-ps-failed/40">Cancel post</button>
         ))}
         <button type="button" onClick={onClose} className="h-8 rounded-lg px-3 text-ps-subtle hover:text-ps-text">Close</button>
       </div>

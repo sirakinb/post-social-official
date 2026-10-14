@@ -58,7 +58,7 @@ function LimitCard({ title, limit, format }: { title: string; limit: Limit; form
       <p className="mt-1 text-lg font-semibold text-ps-text">
         {format(limit.used)} <span className="text-sm font-normal text-ps-subtle">of {format(limit.limit)}</span>
       </p>
-      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[0.06]" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100} aria-label={title}>
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-ps-fg/[0.06]" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100} aria-label={title}>
         <div className={`h-full ${tone}`} style={{ width: `${percent}%` }} />
       </div>
     </div>
@@ -95,7 +95,7 @@ export default async function BetaUsagePage({ searchParams }: { searchParams: Pr
         {!current ? (
           <p className="text-sm text-ps-muted">You are not a member of any workspace yet.</p>
         ) : !report ? (
-          <p role="alert" className="text-sm text-[#FF8A8E]">Usage could not be loaded. Refresh the page to try again.</p>
+          <p role="alert" className="text-sm text-ps-failed-text">Usage could not be loaded. Refresh the page to try again.</p>
         ) : (
           <>
             <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
@@ -109,7 +109,7 @@ export default async function BetaUsagePage({ searchParams }: { searchParams: Pr
                     key={p.id}
                     href={`/beta/usage?period=${p.id}${slug ? `&workspace=${encodeURIComponent(slug)}` : ""}`}
                     aria-current={p.id === period ? "page" : undefined}
-                    className={`rounded-md px-3 py-1 ${p.id === period ? "bg-[#2A2142] text-ps-text" : "text-ps-muted hover:text-ps-text"}`}
+                    className={`rounded-md px-3 py-1 ${p.id === period ? "bg-ps-segment text-ps-text" : "text-ps-muted hover:text-ps-text"}`}
                   >
                     {p.label}
                   </Link>
