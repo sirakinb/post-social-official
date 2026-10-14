@@ -4,9 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { forgetViewer } from "@/components/analytics/identify";
-import type { Theme } from "@/lib/beta/theme";
 import { ActorMark } from "./marks";
-import { ThemeToggle } from "./theme-toggle";
 
 type Item = { href: string; label: string; icon: React.ReactNode; match: (path: string) => boolean };
 
@@ -52,7 +50,6 @@ export function Sidebar(props: {
   viewer: { name: string; email: string; avatarUrl: string | null };
   plan: { name: string; used: number; limit: number; resets: string } | null;
   signOut: () => Promise<void>;
-  theme?: Theme;
 }) {
   const path = usePathname() ?? "/beta";
   const percent = props.plan && props.plan.limit > 0 ? Math.min(100, (props.plan.used / props.plan.limit) * 100) : 0;
@@ -65,7 +62,6 @@ export function Sidebar(props: {
           <span className="truncate text-[13px] font-medium text-ps-text">{props.viewer.name}</span>
           <span className="truncate text-[11px] text-ps-subtle">{props.viewer.email}</span>
         </span>
-        <ThemeToggle initial={props.theme ?? "dark"} />
       </div>
 
       <div className="flex flex-col gap-0.5">

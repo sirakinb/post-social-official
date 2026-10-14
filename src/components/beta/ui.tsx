@@ -37,7 +37,8 @@ export function PlatformMark({ platform, size = 20, className }: { platform: str
       style={{ width: size, height: size }}
       title={PLATFORM_NAMES[platform] ?? platform}
     >
-      {Logo ? <Logo className="h-[58%] w-[58%]" aria-label={PLATFORM_NAMES[platform]} /> : null}
+      {/* fill: TikTok's note follows the text colour, so it shows on light tiles too. */}
+      {Logo ? <Logo className="h-[58%] w-[58%]" aria-label={PLATFORM_NAMES[platform]} fill="currentColor" /> : null}
     </span>
   );
 }

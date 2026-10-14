@@ -26,9 +26,11 @@ const XLOGO_PATH =
 interface LogoProps {
   className?: string;
   "aria-label"?: string;
+  /** TikTok only: the note's main colour. White suits dark tiles; pass "currentColor" on light ones. */
+  fill?: string;
 }
 
-export function TikTokLogo({ className, "aria-label": ariaLabel }: LogoProps) {
+export function TikTokLogo({ className, "aria-label": ariaLabel, fill = "white" }: LogoProps) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -38,7 +40,7 @@ export function TikTokLogo({ className, "aria-label": ariaLabel }: LogoProps) {
     >
       <path fill="#25F4EE" d={TIKTOK_PATH} transform="translate(-0.3 -0.3)" />
       <path fill="#FE2C55" d={TIKTOK_PATH} transform="translate(0.3 0.3)" />
-      <path fill="white" d={TIKTOK_PATH} />
+      <path fill={fill} d={TIKTOK_PATH} />
     </svg>
   );
 }

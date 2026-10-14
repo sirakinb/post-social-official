@@ -17,7 +17,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     at: "2026-10-14T00:00:00-04:00",
     kind: "New",
     title: "Light mode",
-    body: "The app now has a light mode. Use the sun and moon switch next to your name in the sidebar to change between light and dark; your choice is remembered.",
+    body: "The app now has a light mode. Use the sun and moon switch at the top right of any page to change between light and dark; your choice is remembered.",
   },
   {
     at: "2026-10-13T13:06:00-04:00",

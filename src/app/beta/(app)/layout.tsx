@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { IdentifyViewer } from "@/components/analytics/identify";
 import { Sidebar } from "@/components/beta/sidebar";
+import { ThemeToggle } from "@/components/beta/theme-toggle";
 import { loadViewer } from "@/lib/beta/workspace";
 import { THEME_COOKIE, parseTheme } from "@/lib/beta/theme";
 import { signOut } from "../actions";
@@ -30,10 +31,15 @@ export default async function BetaAppLayout({ children }: { children: React.Reac
       <Sidebar
         viewer={{ name: viewer.name, email: viewer.email, avatarUrl: viewer.avatarUrl }}
         plan={plan}
-        theme={theme}
         signOut={signOut}
       />
-      <div className="min-w-0 flex-1">{children}</div>
+      <div className="min-w-0 flex-1">
+        {/* The light/dark switch, top right above every page. */}
+        <div className="flex justify-end px-8 pt-4">
+          <ThemeToggle initial={theme} />
+        </div>
+        {children}
+      </div>
     </div>
   );
 }
