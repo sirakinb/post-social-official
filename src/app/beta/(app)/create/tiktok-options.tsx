@@ -27,14 +27,14 @@ export function TikTokOptions({ value, onChange, info, infoError, accountName, p
           <input id="tiktok-photo-title" value={value.title ?? ""} maxLength={90} placeholder="Shown above the caption" onChange={(e) => set({ title: e.target.value })} className="h-9 rounded-lg border border-ps-line-strong bg-ps-ground px-2.5 text-[13px]" />
         </label>
       )}
-      <div className="inline-flex self-start rounded-[9px] border border-white/[0.08] bg-ps-ground p-[3px]" role="radiogroup" aria-label="How to send it">
+      <div className="inline-flex self-start rounded-[9px] border border-ps-fg/[0.08] bg-ps-ground p-[3px]" role="radiogroup" aria-label="How to send it">
         {(
           [
             ["direct", "Post directly"],
             ["inbox", "Send to TikTok inbox"],
           ] as const
         ).map(([mode, text]) => (
-          <button key={mode} type="button" role="radio" aria-checked={value.mode === mode} onClick={() => set({ mode })} className={cn("h-7 rounded-md px-3 text-xs", value.mode === mode ? "bg-[#2A2142] text-ps-text" : "text-ps-muted hover:text-ps-text")}>
+          <button key={mode} type="button" role="radio" aria-checked={value.mode === mode} onClick={() => set({ mode })} className={cn("h-7 rounded-md px-3 text-xs", value.mode === mode ? "bg-ps-segment text-ps-text" : "text-ps-muted hover:text-ps-text")}>
             {text}
           </button>
         ))}
@@ -43,7 +43,7 @@ export function TikTokOptions({ value, onChange, info, infoError, accountName, p
       {value.mode === "inbox" ? (
         <p className="m-0 text-xs leading-relaxed text-ps-muted">The {photo ? "photos land" : "video lands"} in your TikTok inbox. Open TikTok, add any sound or effects, and tap Post when you&apos;re ready.</p>
       ) : infoError ? (
-        <p role="alert" className="m-0 text-xs text-[#FF8A8E]">{infoError}</p>
+        <p role="alert" className="m-0 text-xs text-ps-failed-text">{infoError}</p>
       ) : !info ? (
         <p className="m-0 text-xs text-ps-subtle">Loading this account&apos;s TikTok settings…</p>
       ) : (
@@ -74,7 +74,7 @@ export function TikTokOptions({ value, onChange, info, infoError, accountName, p
             ))}
           </fieldset>
 
-          <div className="flex flex-col gap-2 rounded-lg border border-white/[0.06] p-3">
+          <div className="flex flex-col gap-2 rounded-lg border border-ps-fg/[0.06] p-3">
             <label className="flex items-center justify-between gap-3">
               <span>
                 Disclose video content

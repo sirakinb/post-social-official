@@ -24,7 +24,7 @@ export function CoverPicker({ video, images, cover, onChange, notes, onUpload, u
   const ms = cover.kind === "frame" ? cover.ms : 0;
 
   const picture = (shape: "tall" | "square") => (
-    <div className={cn("overflow-hidden rounded-lg border border-white/[0.08] bg-ps-ground", shape === "tall" ? "aspect-[9/16] w-[96px]" : "aspect-square w-[96px]")}>
+    <div className={cn("overflow-hidden rounded-lg border border-ps-fg/[0.08] bg-ps-ground", shape === "tall" ? "aspect-[9/16] w-[96px]" : "aspect-square w-[96px]")}>
       {image?.url ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={image.url} alt="" className="h-full w-full object-cover" />
@@ -35,10 +35,10 @@ export function CoverPicker({ video, images, cover, onChange, notes, onUpload, u
   );
 
   return (
-    <div className="flex flex-col gap-3 rounded-[10px] border border-white/[0.08] bg-ps-surface px-4 py-3.5">
+    <div className="flex flex-col gap-3 rounded-[10px] border border-ps-fg/[0.08] bg-ps-surface px-4 py-3.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="font-medium">Cover</span>
-        <span className="inline-flex rounded-[9px] border border-white/[0.08] bg-ps-ground p-[3px]" role="radiogroup" aria-label="Cover">
+        <span className="inline-flex rounded-[9px] border border-ps-fg/[0.08] bg-ps-ground p-[3px]" role="radiogroup" aria-label="Cover">
           {([["default", "First frame"], ["frame", "Pick a frame"], ["image", "Image"]] as const).map(([kind, text]) => (
             <button
               key={kind}
@@ -46,7 +46,7 @@ export function CoverPicker({ video, images, cover, onChange, notes, onUpload, u
               role="radio"
               aria-checked={cover.kind === kind}
               onClick={() => onChange(kind === "default" ? { kind } : kind === "frame" ? { kind, ms: cover.kind === "frame" ? cover.ms : 0 } : { kind, mediaId: cover.kind === "image" ? cover.mediaId : (images[0]?.id ?? "") })}
-              className={cn("h-7 rounded-md px-2.5 text-xs", cover.kind === kind ? "bg-[#2A2142] text-ps-text" : "text-ps-muted hover:text-ps-text")}
+              className={cn("h-7 rounded-md px-2.5 text-xs", cover.kind === kind ? "bg-ps-segment text-ps-text" : "text-ps-muted hover:text-ps-text")}
             >
               {text}
             </button>
@@ -71,7 +71,7 @@ export function CoverPicker({ video, images, cover, onChange, notes, onUpload, u
                 {m.url && <img src={m.url} alt="" className="h-full w-full object-cover" />}
               </button>
             ))}
-            <label className="flex h-14 cursor-pointer items-center rounded-md border border-dashed border-white/[0.18] px-3 text-xs text-ps-muted hover:text-ps-text">
+            <label className="flex h-14 cursor-pointer items-center rounded-md border border-dashed border-ps-fg/[0.18] px-3 text-xs text-ps-muted hover:text-ps-text">
               Upload image
               <input id="cover-upload" type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f); e.target.value = ""; }} />
             </label>

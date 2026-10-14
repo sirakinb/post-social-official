@@ -4,7 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { forgetViewer } from "@/components/analytics/identify";
+import type { Theme } from "@/lib/beta/theme";
 import { ActorMark } from "./marks";
+import { ThemeToggle } from "./theme-toggle";
 
 type Item = { href: string; label: string; icon: React.ReactNode; match: (path: string) => boolean };
 
@@ -37,7 +39,7 @@ function NavLink({ item, path }: { item: Item; path: string }) {
       aria-current={active ? "page" : undefined}
       className={cn(
         linkClass,
-        active ? "bg-ps-plum/[0.14] text-ps-text shadow-[inset_2px_0_0_#9B6CFF]" : "text-ps-muted hover:bg-white/[0.03] hover:text-ps-text",
+        active ? "bg-ps-nav-active text-ps-text shadow-ps-nav" : "text-ps-muted hover:bg-ps-fg/[0.03] hover:text-ps-text",
       )}
     >
       {item.icon}
@@ -50,6 +52,7 @@ export function Sidebar(props: {
   viewer: { name: string; email: string; avatarUrl: string | null };
   plan: { name: string; used: number; limit: number; resets: string } | null;
   signOut: () => Promise<void>;
+  theme?: Theme;
 }) {
   const path = usePathname() ?? "/beta";
   const percent = props.plan && props.plan.limit > 0 ? Math.min(100, (props.plan.used / props.plan.limit) * 100) : 0;
@@ -62,6 +65,7 @@ export function Sidebar(props: {
           <span className="truncate text-[13px] font-medium text-ps-text">{props.viewer.name}</span>
           <span className="truncate text-[11px] text-ps-subtle">{props.viewer.email}</span>
         </span>
+        <ThemeToggle initial={props.theme ?? "dark"} />
       </div>
 
       <div className="flex flex-col gap-0.5">
@@ -71,7 +75,7 @@ export function Sidebar(props: {
       <div className="hidden flex-1 md:block" />
 
       <div className="flex flex-col gap-0.5">
-        <a href={DOCS.href} target="_blank" rel="noopener" className={cn(linkClass, "text-ps-muted hover:bg-white/[0.03] hover:text-ps-text")}>
+        <a href={DOCS.href} target="_blank" rel="noopener" className={cn(linkClass, "text-ps-muted hover:bg-ps-fg/[0.03] hover:text-ps-text")}>
           {DOCS.icon}
           <span className="flex-1">{DOCS.label}</span>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" className="text-ps-subtle"><path d="M7 17 17 7M8 7h9v9" /></svg>
@@ -86,7 +90,7 @@ export function Sidebar(props: {
             <span className="text-ps-muted">Posts this month</span>
             <span className="font-mono text-ps-text">{props.plan.used.toLocaleString("en-US")} / {props.plan.limit.toLocaleString("en-US")}</span>
           </div>
-          <div className="mt-2 h-1 overflow-hidden rounded bg-white/[0.06]">
+          <div className="mt-2 h-1 overflow-hidden rounded bg-ps-fg/[0.06]">
             <div className="h-full bg-ps-plum" style={{ width: `${percent}%` }} />
           </div>
           <div className="mt-2 text-[11px] text-ps-subtle">{props.plan.name} plan · resets {props.plan.resets}</div>
@@ -94,7 +98,7 @@ export function Sidebar(props: {
       )}
 
       <form action={props.signOut} onSubmit={forgetViewer}>
-        <button type="submit" className={cn(linkClass, "w-full text-ps-muted hover:bg-white/[0.03] hover:text-ps-text")}>
+        <button type="submit" className={cn(linkClass, "w-full text-ps-muted hover:bg-ps-fg/[0.03] hover:text-ps-text")}>
           {icon(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /></>)}
           <span>Sign out</span>
         </button>

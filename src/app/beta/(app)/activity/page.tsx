@@ -53,7 +53,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
           sources={Object.entries(SOURCES).map(([value, label]) => ({ value, label }))}
           people={((actors ?? []) as Array<{ id: string; display_name: string }>).map((a) => ({ value: a.id, label: a.display_name }))}
         />
-        {failed ? <p role="alert" className="m-0 px-4 py-3 text-[#FF8A8E]">The logs could not be loaded. Refresh the page to try again.</p> : <LogsTable rows={logs} />}
+        {failed ? <p role="alert" className="m-0 px-4 py-3 text-ps-failed-text">The logs could not be loaded. Refresh the page to try again.</p> : <LogsTable rows={logs} />}
       </Card>
       <div className="flex justify-between text-xs">
         {filters.before ? <Link href={href({})} className="text-ps-plum-soft hover:text-ps-text">Back to newest</Link> : <span />}

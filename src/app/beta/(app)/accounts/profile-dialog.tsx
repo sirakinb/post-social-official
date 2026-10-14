@@ -64,13 +64,13 @@ export function ProfileDialog(props: {
         role="dialog"
         aria-modal="true"
         aria-labelledby="profile-dialog-h"
-        className="w-full max-w-[440px] overflow-hidden rounded-2xl border border-white/10 bg-[#161126] shadow-[0_24px_60px_rgba(0,0,0,0.55)]"
+        className="w-full max-w-[440px] overflow-hidden rounded-2xl border border-ps-fg/10 bg-ps-dialog shadow-[0_24px_60px_rgba(0,0,0,0.55)]"
         onSubmit={(e) => {
           e.preventDefault();
           void act(() => props.onSave({ name, description, color, timezone }));
         }}
       >
-        <div className="border-b border-white/[0.06] px-5 py-4">
+        <div className="border-b border-ps-fg/[0.06] px-5 py-4">
           <h2 id="profile-dialog-h" className="m-0 text-[15px] font-medium">{props.profile ? "Edit profile" : "New profile"}</h2>
           <p className="m-0 mt-1 text-xs text-ps-subtle">A profile groups the accounts of one business, organisation or client.</p>
         </div>
@@ -94,7 +94,7 @@ export function ProfileDialog(props: {
                   aria-checked={color === c}
                   aria-label={c}
                   onClick={() => setColor(c)}
-                  className={cn("h-7 w-7 rounded-full border-2", color === c ? "border-ps-text" : "border-transparent hover:border-white/30")}
+                  className={cn("h-7 w-7 rounded-full border-2", color === c ? "border-ps-text" : "border-transparent hover:border-ps-fg/30")}
                   style={{ backgroundColor: c }}
                 />
               ))}
@@ -102,24 +102,24 @@ export function ProfileDialog(props: {
           </fieldset>
           <label className="flex flex-col gap-1.5">
             <span className="text-xs text-ps-muted">Time zone</span>
-            <select value={timezone} onChange={(e) => setTimezone(e.target.value)} className={cn(field, "[color-scheme:dark]")}>
+            <select value={timezone} onChange={(e) => setTimezone(e.target.value)} className={cn(field, "")}>
               {zones.map((z) => <option key={z} value={z}>{z.replace(/_/g, " ")}</option>)}
             </select>
           </label>
-          {error && <p role="alert" className="m-0 text-xs text-[#FF8A8E]">{error}</p>}
+          {error && <p role="alert" className="m-0 text-xs text-ps-failed-text">{error}</p>}
         </div>
-        <div className="flex items-center gap-2 border-t border-white/[0.06] px-5 py-3">
+        <div className="flex items-center gap-2 border-t border-ps-fg/[0.06] px-5 py-3">
           {props.onDelete &&
             (confirmDelete ? (
-              <button type="button" disabled={busy} onClick={() => act(props.onDelete!)} className="h-8 rounded-lg border border-ps-failed/40 px-3 text-xs text-[#FF8A8E]">
+              <button type="button" disabled={busy} onClick={() => act(props.onDelete!)} className="h-8 rounded-lg border border-ps-failed/40 px-3 text-xs text-ps-failed-text">
                 {props.accountCount ? `Delete, keep its ${props.accountCount} account${props.accountCount === 1 ? "" : "s"}` : "Confirm delete"}
               </button>
             ) : (
-              <button type="button" onClick={() => setConfirmDelete(true)} className="h-8 rounded-lg px-2 text-xs text-[#FF8A8E] hover:underline">Delete profile</button>
+              <button type="button" onClick={() => setConfirmDelete(true)} className="h-8 rounded-lg px-2 text-xs text-ps-failed-text hover:underline">Delete profile</button>
             ))}
           <span className="flex-1" />
           <button type="button" onClick={props.onClose} className="h-8 rounded-lg px-3 text-xs text-ps-subtle hover:text-ps-text">Cancel</button>
-          <button type="submit" disabled={busy || !name.trim()} className="h-8 rounded-lg bg-ps-plum px-3.5 text-[13px] font-medium text-ps-ground hover:bg-[#AD86FF] disabled:opacity-60">
+          <button type="submit" disabled={busy || !name.trim()} className="h-8 rounded-lg bg-ps-plum px-3.5 text-[13px] font-medium text-ps-ground hover:bg-ps-plum-hover disabled:opacity-60">
             {busy ? "Saving…" : props.profile ? "Save" : "Create profile"}
           </button>
         </div>

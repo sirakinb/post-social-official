@@ -76,24 +76,24 @@ function DraftLine({ draft: d, canEdit }: { draft: DraftItem; canEdit: boolean }
   );
 
   return (
-    <li className={cn("flex items-center border-b border-white/[0.05] last:border-b-0", busy && "opacity-60")}>
+    <li className={cn("flex items-center border-b border-ps-fg/[0.05] last:border-b-0", busy && "opacity-60")}>
       {canEdit ? (
-        <Link href={`/beta/create?post=${d.id}`} data-attr="open-draft" className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 hover:bg-white/[0.02]">{body}</Link>
+        <Link href={`/beta/create?post=${d.id}`} data-attr="open-draft" className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 hover:bg-ps-fg/[0.02]">{body}</Link>
       ) : (
         <div className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3">{body}</div>
       )}
       {canEdit && (
         <div className="flex flex-none items-center gap-2 pr-4">
-          {error && <span role="alert" className="max-w-[180px] truncate text-xs text-[#FF8A8E]" title={error}>{error}</span>}
+          {error && <span role="alert" className="max-w-[180px] truncate text-xs text-ps-failed-text" title={error}>{error}</span>}
           {confirming ? (
             <>
-              <button type="button" data-attr="delete-draft" disabled={busy} onClick={remove} className="h-7 rounded-md border border-ps-failed/40 px-2.5 text-xs text-[#FF8A8E]">
+              <button type="button" data-attr="delete-draft" disabled={busy} onClick={remove} className="h-7 rounded-md border border-ps-failed/40 px-2.5 text-xs text-ps-failed-text">
                 {busy ? "Deleting…" : "Delete"}
               </button>
               <button type="button" disabled={busy} onClick={() => setConfirming(false)} className="h-7 px-1.5 text-xs text-ps-subtle hover:text-ps-text">Keep</button>
             </>
           ) : (
-            <button type="button" aria-label={`Delete draft: ${d.caption || "No caption"}`} onClick={() => setConfirming(true)} className="flex h-7 w-7 items-center justify-center rounded-md text-ps-subtle hover:bg-white/[0.04] hover:text-[#FF8A8E]">
+            <button type="button" aria-label={`Delete draft: ${d.caption || "No caption"}`} onClick={() => setConfirming(true)} className="flex h-7 w-7 items-center justify-center rounded-md text-ps-subtle hover:bg-ps-fg/[0.04] hover:text-ps-failed-text">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M6 6l1 14h10l1-14" /></svg>
             </button>
           )}

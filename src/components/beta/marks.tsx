@@ -79,7 +79,7 @@ export function ActorMark({ kind, name, avatarUrl, size = 22, className, fallbac
   }
   const placeholder =
     kind === "oauth_grant" ? (
-      <span className={cn(box, "bg-[#2A2142] text-[10px] font-semibold text-ps-plum-soft")} style={style} title={name}>
+      <span className={cn(box, "bg-ps-segment text-[10px] font-semibold text-ps-plum-soft")} style={style} title={name}>
         <span aria-hidden="true">›_</span>
       </span>
     ) : (

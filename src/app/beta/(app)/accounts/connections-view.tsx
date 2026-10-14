@@ -28,7 +28,7 @@ const PLATFORMS = [
 const KIND: Record<string, string> = { instagram: "Instagram", facebook: "Facebook Page", threads: "Threads", youtube: "YouTube channel", tiktok: "TikTok", linkedin: "LinkedIn", bluesky: "Bluesky", x: "X" };
 
 
-const btn = "inline-flex h-[30px] items-center rounded-lg border border-white/[0.12] px-3 text-xs hover:border-white/25 disabled:opacity-50";
+const btn = "inline-flex h-[30px] items-center rounded-lg border border-ps-fg/[0.12] px-3 text-xs hover:border-ps-fg/25 disabled:opacity-50";
 
 export function ConnectionsView(props: {
   workspaceId: string;
@@ -132,7 +132,7 @@ export function ConnectionsView(props: {
 
 
   const row = (a: SocialAccount) => (
-    <div key={a.id} className="flex flex-wrap items-center gap-3 border-b border-white/[0.05] px-4 py-3 last:border-b-0">
+    <div key={a.id} className="flex flex-wrap items-center gap-3 border-b border-ps-fg/[0.05] px-4 py-3 last:border-b-0">
       <span className="relative">
         <AccountMark platform={a.platform} avatarUrl={a.avatarUrl} size={32} badge={16} />
       </span>
@@ -152,7 +152,7 @@ export function ConnectionsView(props: {
               const next = e.target.value as "direct" | "inbox";
               run(a.id, () => setTiktokDelivery(a.id, next), next === "direct" ? `AI posts to ${a.name} now post directly.` : `AI posts to ${a.name} now go to your TikTok inbox first.`);
             }}
-            className="h-[30px] rounded-lg border border-white/[0.12] bg-transparent px-2 text-xs text-ps-muted [color-scheme:dark] hover:border-white/25"
+            className="h-[30px] rounded-lg border border-ps-fg/[0.12] bg-transparent px-2 text-xs text-ps-muted hover:border-ps-fg/25"
           >
             <option value="direct">Post directly</option>
             <option value="inbox">Inbox first</option>
@@ -166,7 +166,7 @@ export function ConnectionsView(props: {
             value={a.profileId && profileById.has(a.profileId) ? a.profileId : ""}
             disabled={busy !== null}
             onChange={(e) => run(a.id, () => moveAccount(a.id, e.target.value || null), e.target.value ? `Moved ${a.name} to ${profileById.get(e.target.value)?.name}.` : `Took ${a.name} out of its profile.`)}
-            className="h-[30px] max-w-[160px] rounded-lg border border-white/[0.12] bg-transparent px-2 text-xs text-ps-muted [color-scheme:dark] hover:border-white/25"
+            className="h-[30px] max-w-[160px] rounded-lg border border-ps-fg/[0.12] bg-transparent px-2 text-xs text-ps-muted hover:border-ps-fg/25"
           >
             <option value="">No profile</option>
             {props.profiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -176,7 +176,7 @@ export function ConnectionsView(props: {
       {canEdit &&
         (confirming === a.id ? (
           <span className="flex gap-1.5">
-            <button type="button" data-attr="disconnect-account" disabled={busy !== null} onClick={() => run(a.id, () => disconnect(a.id), `Disconnected ${a.name}. Scheduled posts for it were cancelled.`)} className={cn(btn, "border-ps-failed/40 text-[#FF8A8E]")}>{busy === a.id ? "Disconnecting…" : "Confirm disconnect"}</button>
+            <button type="button" data-attr="disconnect-account" disabled={busy !== null} onClick={() => run(a.id, () => disconnect(a.id), `Disconnected ${a.name}. Scheduled posts for it were cancelled.`)} className={cn(btn, "border-ps-failed/40 text-ps-failed-text")}>{busy === a.id ? "Disconnecting…" : "Confirm disconnect"}</button>
             <button type="button" onClick={() => setConfirming(null)} className={btn}>Keep</button>
           </span>
         ) : (
@@ -195,7 +195,7 @@ export function ConnectionsView(props: {
       role="tab"
       aria-selected={filter === id}
       onClick={() => setFilter(id)}
-      className={cn("inline-flex h-[30px] flex-none items-center gap-2 rounded-lg border px-3 text-xs", filter === id ? "border-ps-plum/60 bg-ps-plum/[0.14] text-ps-text" : "border-white/[0.08] text-ps-muted hover:border-white/20 hover:text-ps-text")}
+      className={cn("inline-flex h-[30px] flex-none items-center gap-2 rounded-lg border px-3 text-xs", filter === id ? "border-ps-plum/60 bg-ps-plum/[0.14] text-ps-text" : "border-ps-fg/[0.08] text-ps-muted hover:border-ps-fg/20 hover:text-ps-text")}
     >
       {color && <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />}
       {label}
@@ -212,9 +212,9 @@ export function ConnectionsView(props: {
         </div>
       </div>
 
-      {message && <p role={message.kind === "error" ? "alert" : "status"} className={cn("m-0 rounded-[10px] border px-3.5 py-2.5", message.kind === "error" ? "border-ps-failed/30 bg-ps-failed/[0.08] text-[#FF8A8E]" : "border-ps-line bg-ps-surface text-ps-muted")}>{message.text}</p>}
+      {message && <p role={message.kind === "error" ? "alert" : "status"} className={cn("m-0 rounded-[10px] border px-3.5 py-2.5", message.kind === "error" ? "border-ps-failed/30 bg-ps-failed/[0.08] text-ps-failed-text" : "border-ps-line bg-ps-surface text-ps-muted")}>{message.text}</p>}
       {attention.map((a) => (
-        <div key={a.id} role="status" className="flex flex-wrap items-center gap-2.5 rounded-[10px] border border-ps-attention/30 bg-ps-attention/[0.07] px-3.5 py-2.5 text-[#F5D49A]">
+        <div key={a.id} role="status" className="flex flex-wrap items-center gap-2.5 rounded-[10px] border border-ps-attention/30 bg-ps-attention/[0.07] px-3.5 py-2.5 text-ps-attention-text">
           <span className="h-1.5 w-1.5 rounded-full bg-ps-attention" />
           <span className="flex-1">{a.name} on {KIND[a.platform]} needs to be reconnected{a.reason ? `: ${a.reason}` : "."}</span>
           {canEdit && <button type="button" disabled={busy !== null} onClick={() => connect(a.platform, a.platform === "bluesky" ? a.handle : undefined)} className={btn} data-attr="reconnect-account">Reconnect</button>}
@@ -230,7 +230,7 @@ export function ConnectionsView(props: {
             {props.profiles.length > 0 && pill("none", "No profile", active.filter((a) => !a.profileId || !profileById.has(a.profileId)).length)}
           </div>
           {canEdit && (
-            <button type="button" data-attr="new-profile" onClick={() => setEditing("new")} className="inline-flex h-[30px] flex-none items-center rounded-lg border border-dashed border-white/[0.16] px-3 text-xs text-ps-muted hover:border-ps-plum/60 hover:text-ps-text">
+            <button type="button" data-attr="new-profile" onClick={() => setEditing("new")} className="inline-flex h-[30px] flex-none items-center rounded-lg border border-dashed border-ps-fg/[0.16] px-3 text-xs text-ps-muted hover:border-ps-plum/60 hover:text-ps-text">
               + New profile
             </button>
           )}
@@ -239,7 +239,7 @@ export function ConnectionsView(props: {
         <p role="status" className="m-0 rounded-[10px] border border-ps-line bg-ps-surface px-3.5 py-2.5 text-ps-muted">Profiles aren&apos;t switched on in this environment yet, so accounts can&apos;t be grouped here.</p>
       )}
 
-      {props.loadError && <p role="alert" className="m-0 rounded-xl border border-ps-line bg-ps-surface px-4 py-3 text-[#FF8A8E]">Your accounts could not be loaded. Refresh the page to try again.</p>}
+      {props.loadError && <p role="alert" className="m-0 rounded-xl border border-ps-line bg-ps-surface px-4 py-3 text-ps-failed-text">Your accounts could not be loaded. Refresh the page to try again.</p>}
 
       {groups.map(({ profile, accounts }) => (
         <section key={profile?.id ?? "none"} aria-label={profile?.name ?? "No profile"}>
@@ -251,7 +251,7 @@ export function ConnectionsView(props: {
               <span className="flex-1" />
               {profile?.timezone && <span className="font-mono text-[11px] text-ps-subtle">{profile.timezone.replace(/_/g, " ")}</span>}
               <span className="text-xs text-ps-subtle">{accounts.length} connected</span>
-              {profile && canEdit && <button type="button" onClick={() => setEditing(profile)} className="h-[26px] rounded-md px-2 text-xs text-ps-subtle hover:bg-white/[0.04] hover:text-ps-text">Edit</button>}
+              {profile && canEdit && <button type="button" onClick={() => setEditing(profile)} className="h-[26px] rounded-md px-2 text-xs text-ps-subtle hover:bg-ps-fg/[0.04] hover:text-ps-text">Edit</button>}
             </div>
           )}
           <div className="rounded-xl border border-ps-line bg-ps-surface">
@@ -268,13 +268,13 @@ export function ConnectionsView(props: {
 
       {canEdit && (
         <section aria-labelledby="connect-h" className="rounded-xl border border-ps-line bg-ps-surface">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-white/[0.05] px-4 py-3">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-ps-fg/[0.05] px-4 py-3">
             <h2 id="connect-h" className="m-0 text-sm font-medium">Connect an account</h2>
             <span className="flex-1" />
             {props.profilesReady && props.profiles.length > 0 && (
               <label className="flex items-center gap-2 text-xs text-ps-subtle">
                 Add to
-                <select value={target} onChange={(e) => setTarget(e.target.value)} className="h-[30px] rounded-lg border border-white/[0.12] bg-transparent px-2 text-xs text-ps-text [color-scheme:dark]">
+                <select value={target} onChange={(e) => setTarget(e.target.value)} className="h-[30px] rounded-lg border border-ps-fg/[0.12] bg-transparent px-2 text-xs text-ps-text">
                   <option value="">No profile</option>
                   {props.profiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>

@@ -8,7 +8,7 @@ describe("ChangelogPage", () => {
     render(<ChangelogPage />);
     expect(screen.getByRole("heading", { level: 1, name: "Changelog" })).toBeInTheDocument();
     const days = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
-    expect(days[0]).toBe("October 13, 2026");
+    expect(days[0]).toBe("October 14, 2026");
     expect(days.at(-1)).toBe("October 4, 2026");
     expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(CHANGELOG.length);
 

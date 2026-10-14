@@ -110,9 +110,9 @@ export function MediaView({ workspaceId, items, showHidden, loadError, canEdit }
             <Link href={showHidden ? "/beta/media" : "/beta/media?hidden=1"} className="text-xs text-ps-muted hover:text-ps-text">{showHidden ? "Back to library" : "Hidden"}</Link>
             {canEdit && !showHidden && (
               <>
-                <button type="button" data-attr="import-media-link" onClick={() => setImportOpen((v) => !v)} className="h-8 rounded-lg border border-white/[0.12] px-3 hover:border-white/25">From a link</button>
+                <button type="button" data-attr="import-media-link" onClick={() => setImportOpen((v) => !v)} className="h-8 rounded-lg border border-ps-fg/[0.12] px-3 hover:border-ps-fg/25">From a link</button>
                 <input ref={file} type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm" multiple className="sr-only" onChange={(e) => { for (const f of Array.from(e.target.files ?? [])) void upload(f); e.target.value = ""; }} />
-                <button type="button" data-attr="upload-media" onClick={() => file.current?.click()} className="h-8 rounded-lg bg-ps-plum px-3.5 font-medium text-ps-ground hover:bg-[#AD86FF]">Upload</button>
+                <button type="button" data-attr="upload-media" onClick={() => file.current?.click()} className="h-8 rounded-lg bg-ps-plum px-3.5 font-medium text-ps-ground hover:bg-ps-plum-hover">Upload</button>
               </>
             )}
           </div>
@@ -125,8 +125,8 @@ export function MediaView({ workspaceId, items, showHidden, loadError, canEdit }
             <button type="submit" disabled={importing} className="h-9 rounded-lg bg-ps-plum px-3.5 font-medium text-ps-ground disabled:opacity-60">{importing ? "Starting…" : "Import"}</button>
           </form>
         )}
-        {message && <p role={message.kind === "error" ? "alert" : "status"} className={cn("m-0 rounded-lg border px-3 py-2", message.kind === "error" ? "border-ps-failed/30 bg-ps-failed/[0.08] text-[#FF8A8E]" : "border-ps-line bg-ps-surface text-ps-muted")}>{message.text}</p>}
-        {loadError && <p role="alert" className="m-0 text-[#FF8A8E]">Your media could not be loaded. Refresh the page to try again.</p>}
+        {message && <p role={message.kind === "error" ? "alert" : "status"} className={cn("m-0 rounded-lg border px-3 py-2", message.kind === "error" ? "border-ps-failed/30 bg-ps-failed/[0.08] text-ps-failed-text" : "border-ps-line bg-ps-surface text-ps-muted")}>{message.text}</p>}
+        {loadError && <p role="alert" className="m-0 text-ps-failed-text">Your media could not be loaded. Refresh the page to try again.</p>}
 
         <div className="flex flex-wrap gap-1.5" role="toolbar" aria-label="Filter">
           {(
@@ -137,7 +137,7 @@ export function MediaView({ workspaceId, items, showHidden, loadError, canEdit }
               ["unused", "Not used yet"],
             ] as const
           ).map(([id, text]) => (
-            <button key={id} type="button" aria-pressed={filter === id} onClick={() => setFilter(id)} className={cn("h-7 rounded-full border px-3 text-xs", filter === id ? "border-ps-plum/50 bg-ps-plum/[0.14] text-ps-text" : "border-white/[0.08] text-ps-muted hover:text-ps-text")}>
+            <button key={id} type="button" aria-pressed={filter === id} onClick={() => setFilter(id)} className={cn("h-7 rounded-full border px-3 text-xs", filter === id ? "border-ps-plum/50 bg-ps-plum/[0.14] text-ps-text" : "border-ps-fg/[0.08] text-ps-muted hover:text-ps-text")}>
               {text}
             </button>
           ))}
@@ -149,10 +149,10 @@ export function MediaView({ workspaceId, items, showHidden, loadError, canEdit }
               <div key={u.key} className="flex w-[220px] flex-col gap-1.5 rounded-xl border border-ps-line bg-ps-surface px-3 py-2.5">
                 <span className="truncate text-xs">{u.name}</span>
                 {u.error ? (
-                  <span className="text-xs text-[#FF8A8E]">{u.error} <button type="button" onClick={() => dismiss(u.key)} className="underline">Dismiss</button></span>
+                  <span className="text-xs text-ps-failed-text">{u.error} <button type="button" onClick={() => dismiss(u.key)} className="underline">Dismiss</button></span>
                 ) : (
                   <>
-                    <span className="h-[3px] rounded bg-white/[0.06]"><span className="block h-full rounded bg-ps-plum" style={{ width: `${Math.round(u.progress * 100)}%` }} /></span>
+                    <span className="h-[3px] rounded bg-ps-fg/[0.06]"><span className="block h-full rounded bg-ps-plum" style={{ width: `${Math.round(u.progress * 100)}%` }} /></span>
                     <span className="text-[11px] text-ps-subtle">{u.status === "checking" ? "Checking the file…" : `Uploading ${Math.round(u.progress * 100)}%`}</span>
                   </>
                 )}
@@ -171,7 +171,7 @@ export function MediaView({ workspaceId, items, showHidden, loadError, canEdit }
               const picture = m.type === "image" ? m.url : m.poster;
               const bad = m.status === "failed" || m.status === "expired";
               return (
-                <button key={m.id} type="button" onClick={() => setSelectedId(m.id)} aria-pressed={selected?.id === m.id} className={cn("rounded-xl border p-2 text-left text-[12.5px]", selected?.id === m.id ? "border-ps-plum/65 bg-ps-plum/[0.08]" : bad ? "border-ps-failed/35 bg-ps-surface" : "border-white/[0.06] bg-ps-surface hover:border-white/20")}>
+                <button key={m.id} type="button" onClick={() => setSelectedId(m.id)} aria-pressed={selected?.id === m.id} className={cn("rounded-xl border p-2 text-left text-[12.5px]", selected?.id === m.id ? "border-ps-plum/65 bg-ps-plum/[0.08]" : bad ? "border-ps-failed/35 bg-ps-surface" : "border-ps-fg/[0.06] bg-ps-surface hover:border-ps-fg/20")}>
                   <span className="relative mx-auto block max-h-[220px] max-w-full overflow-hidden rounded-lg bg-ps-raised" style={{ aspectRatio: m.width && m.height ? `${m.width} / ${m.height}` : "1 / 1" }}>
                     {picture ? (
                       // eslint-disable-next-line @next/next/no-img-element -- signed link to private storage
@@ -179,13 +179,13 @@ export function MediaView({ workspaceId, items, showHidden, loadError, canEdit }
                     ) : (
                       <span className="flex h-full w-full items-center justify-center text-ps-subtle">{m.type === "video" ? "▶" : ""}</span>
                     )}
-                    {m.duration !== null && m.status === "ready" && <span className="absolute bottom-1.5 right-1.5 rounded bg-black/60 px-1.5 font-mono text-[10px]">{duration(m.duration)}</span>}
-                    {m.status === "processing" && <span className="absolute inset-x-2 bottom-2 text-[11px]">Checking…<span className="mt-1 block h-[3px] overflow-hidden rounded bg-white/15"><span className="block h-full w-1/2 animate-pulse rounded bg-ps-plum" /></span></span>}
+                    {m.duration !== null && m.status === "ready" && <span className="absolute bottom-1.5 right-1.5 rounded bg-black/60 text-white px-1.5 font-mono text-[10px]">{duration(m.duration)}</span>}
+                    {m.status === "processing" && <span className="absolute inset-x-2 bottom-2 text-[11px]">Checking…<span className="mt-1 block h-[3px] overflow-hidden rounded bg-ps-fg/15"><span className="block h-full w-1/2 animate-pulse rounded bg-ps-plum" /></span></span>}
                   </span>
                   <span className="mt-2 block truncate">{m.name}</span>
                   <span className="mt-0.5 flex justify-between gap-1.5 font-mono text-[10.5px] text-ps-subtle">
                     <span className="truncate">{kind(m.mime)} · {formatBytes(m.size)}</span>
-                    {bad && <span className="text-[#FF8A8E]">{m.status === "expired" ? "Expired" : "Can't use"}</span>}
+                    {bad && <span className="text-ps-failed-text">{m.status === "expired" ? "Expired" : "Can't use"}</span>}
                   </span>
                 </button>
               );
@@ -195,8 +195,8 @@ export function MediaView({ workspaceId, items, showHidden, loadError, canEdit }
       </section>
 
       {selected && (
-        <aside aria-label="Details" className="flex min-w-[280px] flex-[0_1_340px] flex-col gap-3.5 border-l border-white/[0.06] bg-ps-sidebar px-6 py-5">
-          <div className="overflow-hidden rounded-[10px] border border-white/[0.08] bg-ps-raised" style={{ aspectRatio: selected.width && selected.height ? `${selected.width} / ${selected.height}` : "1 / 1", maxHeight: 380 }}>
+        <aside aria-label="Details" className="flex min-w-[280px] flex-[0_1_340px] flex-col gap-3.5 border-l border-ps-fg/[0.06] bg-ps-sidebar px-6 py-5">
+          <div className="overflow-hidden rounded-[10px] border border-ps-fg/[0.08] bg-ps-raised" style={{ aspectRatio: selected.width && selected.height ? `${selected.width} / ${selected.height}` : "1 / 1", maxHeight: 380 }}>
             {selected.type === "video" && selected.url ? (
               <video key={selected.id} src={selected.url} poster={selected.poster ?? undefined} controls preload="metadata" className="h-full w-full object-contain" />
             ) : selected.url ? (
@@ -216,7 +216,7 @@ export function MediaView({ workspaceId, items, showHidden, loadError, canEdit }
             <dt className="text-ps-subtle">Added</dt>
             <dd className="m-0">{new Date(selected.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</dd>
             <dt className="text-ps-subtle">Status</dt>
-            <dd className={cn("m-0", selected.status === "ready" ? "text-ps-live" : selected.status === "processing" ? "text-ps-plum-soft" : "text-[#FF8A8E]")}>
+            <dd className={cn("m-0", selected.status === "ready" ? "text-ps-live" : selected.status === "processing" ? "text-ps-plum-soft" : "text-ps-failed-text")}>
               {selected.status === "ready" ? "Ready" : selected.status === "processing" ? "Checking" : selected.status === "expired" ? "Expired (unused for 30 days)" : selected.failure ?? "Can't be used"}
             </dd>
             {selected.status === "ready" && (
@@ -231,9 +231,9 @@ export function MediaView({ workspaceId, items, showHidden, loadError, canEdit }
           {canEdit && (
             <div className="mt-1 flex gap-2">
               {selected.status === "ready" && !selected.hidden && (
-                <Link href={`/beta/create?media=${selected.id}`} className="inline-flex h-8 flex-1 items-center justify-center rounded-lg bg-ps-plum font-medium text-ps-ground hover:bg-[#AD86FF]">Use in a post</Link>
+                <Link href={`/beta/create?media=${selected.id}`} className="inline-flex h-8 flex-1 items-center justify-center rounded-lg bg-ps-plum font-medium text-ps-ground hover:bg-ps-plum-hover">Use in a post</Link>
               )}
-              <button type="button" onClick={() => act({ action: "set_hidden", media_id: selected.id, hidden: !selected.hidden }, selected.hidden ? "Back in your library." : "Hidden from your library.")} className="h-8 flex-1 rounded-lg border border-white/[0.12] hover:border-white/25">
+              <button type="button" onClick={() => act({ action: "set_hidden", media_id: selected.id, hidden: !selected.hidden }, selected.hidden ? "Back in your library." : "Hidden from your library.")} className="h-8 flex-1 rounded-lg border border-ps-fg/[0.12] hover:border-ps-fg/25">
                 {selected.hidden ? "Show in library" : "Hide"}
               </button>
             </div>

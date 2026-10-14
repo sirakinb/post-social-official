@@ -5,6 +5,68 @@
 :root {
   --background: #0C081A;
   --foreground: #F8F6FF;
+
+  /* The signed-in app's palette (tailwind ps-* colors), as RGB channels so Tailwind can
+     add alpha. Dark is the default; [data-theme="light"] below swaps in the light one. */
+  --ps-ground: 11 8 22;
+  --ps-sidebar: 14 10 27;
+  --ps-surface: 18 14 32;
+  --ps-raised: 26 20 48;
+  --ps-dialog: 22 17 38;
+  --ps-segment: 42 33 66;
+  --ps-weekend: 14 10 26;
+  --ps-nav-active: rgba(155, 108, 255, 0.14);
+  --ps-line: rgba(255, 255, 255, 0.07);
+  --ps-line-strong: rgba(255, 255, 255, 0.12);
+  --ps-fg: 255 255 255;
+  --ps-text: 244 241 251;
+  --ps-muted: 163 156 181;
+  --ps-subtle: 110 103 132;
+  --ps-plum: 155 108 255;
+  --ps-plum-hover: 173 134 255;
+  --ps-plum-soft: 205 184 255;
+  --ps-live: 61 214 140;
+  --ps-live-text: 127 230 177;
+  --ps-attention: 245 181 74;
+  --ps-attention-text: 245 212 154;
+  --ps-failed: 242 85 90;
+  --ps-failed-text: 255 138 142;
+  --ps-card-shadow: 0 0 #0000;
+  --ps-nav-active-shadow: inset 2px 0 0 #9B6CFF;
+}
+
+/* Light mode ("Soft cards"): a soft grey ground with white cards that float on a shadow. */
+[data-theme="light"] {
+  color-scheme: light;
+  --ps-ground: 242 242 246;
+  --ps-sidebar: 242 242 246;
+  --ps-surface: 255 255 255;
+  --ps-raised: 247 247 250;
+  --ps-dialog: 255 255 255;
+  --ps-segment: 233 233 240;
+  --ps-weekend: 234 234 240;
+  --ps-nav-active: #FFFFFF;
+  --ps-line: rgba(17, 17, 26, 0.08);
+  --ps-line-strong: rgba(17, 17, 26, 0.14);
+  --ps-fg: 17 17 26;
+  --ps-text: 28 28 34;
+  --ps-muted: 79 79 89;
+  --ps-subtle: 106 106 116;
+  --ps-plum: 109 63 230;
+  --ps-plum-hover: 90 47 208;
+  --ps-plum-soft: 84 40 207;
+  --ps-live: 31 157 92;
+  --ps-live-text: 21 115 71;
+  --ps-attention: 217 138 0;
+  --ps-attention-text: 122 74 0;
+  --ps-failed: 220 59 66;
+  --ps-failed-text: 180 35 42;
+  --ps-card-shadow: 0 1px 2px rgba(17, 17, 26, 0.05), 0 6px 20px rgba(17, 17, 26, 0.05);
+  --ps-nav-active-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
 }
 
 html {
@@ -372,4 +434,10 @@ body::after {
   .lp-lantern {
     animation: none;
   }
+}
+
+/* Light mode's cards float on a soft shadow instead of leaning on their borders. One rule
+   here rather than a class on every card: any rounded app surface panel picks it up. */
+[data-theme="light"] .bg-ps-surface:is(.rounded-xl, .rounded-2xl, .rounded-\[10px\]) {
+  box-shadow: var(--ps-card-shadow);
 }
