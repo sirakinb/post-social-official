@@ -3,7 +3,10 @@
 import { ApiError, membership, requireUuid, type Caller, type Sql } from "../access";
 import { withHandle } from "../connections/handles";
 import { DISPLAY_NAMES, PLATFORMS, type Platform } from "../connections/platforms";
+import { mediaForPosts } from "../media/links";
+import type { R2 } from "../media/r2";
 import { publicAsset, type AssetRow } from "../media/service";
+import { publishedAtSql } from "../publishing/published";
 
 const POST_STATUSES = ["draft", "awaiting_approval", "approved", "scheduled", "processing", "published", "partially_published", "failed", "cancelled"];
 
@@ -53,18 +56,23 @@ export async function listAccounts(sql: Sql, caller: Caller, input: { workspace_
   };
 }
 
-export async function listPosts(sql: Sql, caller: Caller, input: { workspace_id: string; status?: unknown; platform?: unknown; limit?: unknown; offset?: unknown }) {
+// Each post says when it first went out (published_at: its earliest destination's publish
+// time), each destination's live link and publish time, and the post's media with
+// temporary view links, so reports need no second lookup.
+export async function listPosts(sql: Sql, r2: Pick<R2, "presignGet">, caller: Caller, input: { workspace_id: string; status?: unknown; platform?: unknown; limit?: unknown; offset?: unknown }) {
   await membership(sql, caller, input.workspace_id, false);
   const { limit, offset } = page(input);
   const status = input.status === undefined || input.status === "" ? null : String(input.status);
   if (status && !POST_STATUSES.includes(status)) throw new ApiError(400, `status must be one of: ${POST_STATUSES.join(", ")}.`);
   const platform = platformFilter(input.platform);
-  const rows = await sql<Record<string, unknown>>(
+  const rows = await sql<Record<string, unknown> & { id: string }>(
     `SELECT p.id, p.status, left(p.caption, 280) AS caption, p.scheduled_at, p.created_at, p.updated_at,
             coalesce(act.display_name, 'Unknown') AS created_by, p.entry_point AS created_via,
+            (SELECT min(${publishedAtSql("d")}) FROM public.destinations d WHERE d.post_id = p.id) AS published_at,
             (SELECT coalesce(jsonb_agg(jsonb_build_object(
                 'id', d.id, 'account_id', d.connected_account_id, 'account', a.display_name, 'account_handle', a.handle, 'platform', d.platform,
-                'status', d.status, 'live_url', d.live_url, 'error', d.error_message) ORDER BY d.created_at), '[]'::jsonb)
+                'status', d.status, 'live_url', d.live_url, 'published_at', ${publishedAtSql("d")},
+                'error', d.error_message) ORDER BY d.created_at), '[]'::jsonb)
              FROM public.destinations d JOIN public.connected_accounts a ON a.id = d.connected_account_id
              WHERE d.post_id = p.id) AS destinations
      FROM public.posts p LEFT JOIN public.actors act ON act.id = p.actor_id
@@ -74,11 +82,14 @@ export async function listPosts(sql: Sql, caller: Caller, input: { workspace_id:
      LIMIT $4 OFFSET $5`,
     [input.workspace_id, status, platform, limit + 1, offset],
   );
-  const posts = rows.slice(0, limit).map((post) => ({
-    ...post,
-    destinations: (post.destinations as Array<Record<string, unknown>>).map(withHandle),
-  }));
-  return { posts, has_more: rows.length > limit, limit, offset };
+  const posts = rows.slice(0, limit);
+  const media = await mediaForPosts(sql, r2, input.workspace_id, posts.map((p) => p.id));
+  return {
+    posts: posts.map((p) => ({ ...p, destinations: (p.destinations as Array<Record<string, unknown>>).map(withHandle), media: media.get(p.id) ?? [] })),
+    has_more: rows.length > limit,
+    limit,
+    offset,
+  };
 }
 
 // Per-destination outcomes: one post's, or the most recent across the workspace.

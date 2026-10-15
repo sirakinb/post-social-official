@@ -5,6 +5,7 @@ import { ApiError, isAgentCaller, membership, requireUuid, type Caller, type Sql
 import { trackEvent, tracking } from "../telemetry";
 import { publicHandle, withHandle } from "../connections/handles";
 import { DISPLAY_NAMES, type Platform } from "../connections/platforms";
+import { firstPublishedAt, publishedAtSql } from "./published";
 import { captionFor, destinationProblems, normalizeOptions, type DestinationOptions, type MediaFacts } from "./validate";
 
 export type PostsDeps = { sql: Sql };
@@ -171,7 +172,7 @@ async function view(deps: PostsDeps, postId: string) {
   const [post] = await deps.sql<PostRow>(`SELECT * FROM public.posts WHERE id = $1`, [postId]);
   const destinations = await deps.sql<Record<string, unknown>>(
     `SELECT d.id, d.connected_account_id AS account_id, a.display_name AS account, a.handle AS account_handle, d.platform, d.status, d.options,
-            d.live_url, d.error_code, d.error_message
+            d.live_url, ${publishedAtSql("d")} AS published_at, d.error_code, d.error_message
      FROM public.destinations d JOIN public.connected_accounts a ON a.id = d.connected_account_id
      WHERE d.post_id = $1 ORDER BY d.created_at`,
     [postId],
@@ -187,6 +188,8 @@ async function view(deps: PostsDeps, postId: string) {
     status: post.status,
     caption: post.caption,
     scheduled_at: post.scheduled_at,
+    // When it first went out: the earliest destination's publish time (null until one is live).
+    published_at: firstPublishedAt(destinations as { published_at?: unknown }[]),
     media_ids: media.map((m) => m.media_asset_id),
     destinations: destinations.map(withHandle),
     approval: approval ?? null,
