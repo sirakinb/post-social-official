@@ -5,6 +5,7 @@ import { ApiError, requireUuid, type AgentCaller, type Sql } from "../access";
 import { DISPLAY_NAMES, PLATFORMS, type Platform } from "../connections/platforms";
 import { ANALYTICS_PERIODS, listAnalytics, postAnalytics, refreshAnalytics } from "../analytics";
 import { mediaActions, type MediaDeps } from "../media/service";
+import { mediaForPosts } from "../media/links";
 import type { R2 } from "../media/r2";
 import { postActions } from "../publishing/service";
 import { listAccounts, listMedia, listPosts, listResults } from "./reads";
@@ -77,6 +78,10 @@ const postBody = {
 };
 
 const mediaDeps = (deps: ApiDeps): MediaDeps => ({ sql: deps.sql, r2: deps.r2, newId: deps.newId });
+
+// What list_posts and get_post return for each post's media.
+const MEDIA_FIELDS =
+  "media (in order: id, media_type, mime_type, name, status, width, height, duration_seconds, url and thumbnail_url; url and thumbnail_url are temporary view links valid 1 hour, null until the item is ready; thumbnail_url is the image itself or a video's poster frame).";
 
 // A plain next step for an AI to relay, based on where the post ended up.
 function nextStep(post: { status: string; scheduled_at: string | null }) {
@@ -328,7 +333,7 @@ export const operations: Operation[] = [
   {
     name: "list_posts",
     title: "List posts",
-    description: "Lists posts, newest first, with each account's status and live link.",
+    description: `Lists posts, newest first. Each post has published_at (when it first went out on any account; null until then), its destinations (one per account: status, live_url, published_at, error) and ${MEDIA_FIELDS}`,
     method: "GET",
     path: "/v1/posts",
     input: {
@@ -339,17 +344,22 @@ export const operations: Operation[] = [
       },
     },
     readOnly: true,
-    run: (deps, caller, input) => listPosts(deps.sql, caller, { ...input, workspace_id: caller.workspaceId }),
+    run: (deps, caller, input) => listPosts(deps.sql, deps.r2, caller, { ...input, workspace_id: caller.workspaceId }),
   },
   {
     name: "get_post",
     title: "Get a post",
-    description: "Gets one post with its caption, media, each account's status, live links and errors, and its approval state.",
+    description: `Gets one post with its caption, published_at (when it first went out on any account; null until then), each account's status, live_url, published_at and errors, its approval state, media_ids and ${MEDIA_FIELDS}`,
     method: "GET",
     path: "/v1/posts/{post_id}",
     input: { properties: { post_id: id("post") }, required: ["post_id"] },
     readOnly: true,
-    run: async (deps, caller, input) => withNextStep(await postActions.get({ sql: deps.sql }, caller, input)),
+    run: async (deps, caller, input) => {
+      const post = await postActions.get({ sql: deps.sql }, caller, input);
+      // postActions.get has checked the caller belongs to the post's workspace.
+      const media = await mediaForPosts(deps.sql, deps.r2, post.workspace_id, [post.id]);
+      return withNextStep({ ...post, media: media.get(post.id) ?? [] });
+    },
   },
   {
     name: "update_post",

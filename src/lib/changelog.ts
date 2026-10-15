@@ -14,6 +14,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    at: "2026-10-15T09:00:00-04:00",
+    kind: "Improved",
+    title: "Posts from the API show when they went out",
+    body: "When an AI app or developer tool looks up your posts, each post now shows the time it was published, its live link on each account, and its pictures and videos, all in one place.",
+  },
+  {
     at: "2026-10-13T23:55:00-04:00",
     kind: "New",
     title: "Light mode",
