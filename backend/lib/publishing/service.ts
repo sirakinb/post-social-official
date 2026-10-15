@@ -3,6 +3,7 @@
 // membership and writes an audit entry naming the actor.
 import { ApiError, isAgentCaller, membership, requireUuid, type Caller, type Sql } from "../access";
 import { trackEvent, tracking } from "../telemetry";
+import { publicHandle, withHandle } from "../connections/handles";
 import { DISPLAY_NAMES, type Platform } from "../connections/platforms";
 import { firstPublishedAt, publishedAtSql } from "./published";
 import { captionFor, destinationProblems, normalizeOptions, type DestinationOptions, type MediaFacts } from "./validate";
@@ -38,13 +39,13 @@ function assertPerson(caller: Caller, action: string) {
   }
 }
 
-type AccountRow = { id: string; platform: Platform; display_name: string; health: string; capabilities: Record<string, unknown>; policy: Policy; tiktok_delivery: "direct" | "inbox" };
+type AccountRow = { id: string; platform: Platform; display_name: string; handle: string; health: string; capabilities: Record<string, unknown>; policy: Policy; tiktok_delivery: "direct" | "inbox" };
 type DestinationInput = { account_id: string; options: DestinationOptions };
 
 async function loadAccounts(deps: PostsDeps, workspaceId: string, ids: string[]) {
   if (!ids.length) return new Map<string, AccountRow>();
   const rows = await deps.sql<AccountRow>(
-    `SELECT a.id, a.platform, a.display_name, a.health, a.capabilities,
+    `SELECT a.id, a.platform, a.display_name, a.handle, a.health, a.capabilities,
             coalesce(a.approval_policy_override, w.default_approval_policy) AS policy, a.tiktok_delivery
      FROM public.connected_accounts a JOIN public.workspaces w ON w.id = a.workspace_id
      WHERE a.workspace_id = $1 AND a.id = ANY($2::uuid[])`,
@@ -129,7 +130,7 @@ function parseMediaIds(value: unknown) {
   return value.map((id) => requireUuid(id, "Media"));
 }
 
-export type CheckResult = { ok: boolean; problems: string[]; destinations: Array<{ account_id: string; account: string; platform: Platform; problems: string[] }> };
+export type CheckResult = { ok: boolean; problems: string[]; destinations: Array<{ account_id: string; account: string; account_handle: string | null; platform: Platform; problems: string[] }> };
 
 function check(caption: string, media: MediaFacts[], destinations: DestinationInput[], accounts: Map<string, AccountRow>, shapeProblems: string[], covers: Map<string, MediaFacts>): CheckResult {
   const per = destinations.map((d) => {
@@ -137,6 +138,7 @@ function check(caption: string, media: MediaFacts[], destinations: DestinationIn
     return {
       account_id: d.account_id,
       account: account.display_name,
+      account_handle: publicHandle(account.platform, account.handle),
       platform: account.platform,
       problems: destinationProblems({ options: d.options, caption, media, capabilities: account.capabilities as { video_max_seconds?: number }, cover: d.options.cover_media_id ? covers.get(d.options.cover_media_id) : undefined }).map(
         (p) => `${DISPLAY_NAMES[account.platform]} (${account.display_name}): ${p}`,
@@ -169,7 +171,7 @@ async function loadPost(deps: PostsDeps, caller: Caller, postId: string, write: 
 async function view(deps: PostsDeps, postId: string) {
   const [post] = await deps.sql<PostRow>(`SELECT * FROM public.posts WHERE id = $1`, [postId]);
   const destinations = await deps.sql<Record<string, unknown>>(
-    `SELECT d.id, d.connected_account_id AS account_id, a.display_name AS account, d.platform, d.status, d.options,
+    `SELECT d.id, d.connected_account_id AS account_id, a.display_name AS account, a.handle AS account_handle, d.platform, d.status, d.options,
             d.live_url, ${publishedAtSql("d")} AS published_at, d.error_code, d.error_message
      FROM public.destinations d JOIN public.connected_accounts a ON a.id = d.connected_account_id
      WHERE d.post_id = $1 ORDER BY d.created_at`,
@@ -189,7 +191,7 @@ async function view(deps: PostsDeps, postId: string) {
     // When it first went out: the earliest destination's publish time (null until one is live).
     published_at: firstPublishedAt(destinations as { published_at?: unknown }[]),
     media_ids: media.map((m) => m.media_asset_id),
-    destinations,
+    destinations: destinations.map(withHandle),
     approval: approval ?? null,
     created_at: post.created_at,
     updated_at: post.updated_at,

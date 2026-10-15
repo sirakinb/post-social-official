@@ -26,6 +26,12 @@ export const CHANGELOG: ChangelogEntry[] = [
     body: "When an AI app or developer tool looks up your posts, each post now shows the time it was published, its live link on each account, and its pictures and videos, all in one place.",
   },
   {
+    at: "2026-10-15T01:10:00-04:00",
+    kind: "Improved",
+    title: "Tell accounts with the same name apart",
+    body: "When two of your accounts share a name, like an Instagram and a LinkedIn that both say \"Emmanuel Jones\", Accounts now shows each one's @handle and platform under its name. AI apps and the API also get the platform and @handle for every account a post goes to, so they can say exactly where it went.",
+  },
+  {
     at: "2026-10-13T23:55:00-04:00",
     kind: "New",
     title: "Light mode",

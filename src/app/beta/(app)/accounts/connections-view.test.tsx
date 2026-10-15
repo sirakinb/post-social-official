@@ -81,3 +81,15 @@ describe("TikTok AI posts", () => {
     expect(screen.queryByLabelText("How AI posts reach Adzo")).toBeNull();
   });
 });
+
+describe("Accounts with the same name", () => {
+  const instagram: SocialAccount = { ...account("i1", "Emmanuel Jones", null), platform: "instagram", handle: "secondshootapp" };
+  const linkedin: SocialAccount = { ...account("l1", "Emmanuel Jones", null), platform: "linkedin", handle: "Emmanuel Jones" };
+
+  it("shows each account's @handle and platform under its name", () => {
+    render(<ConnectionsView {...base} accounts={[instagram, linkedin]} filter={null} />);
+    expect(screen.getByTestId("account-handle-i1").textContent).toBe("@secondshootapp · Instagram");
+    // LinkedIn shares no handle, so only the platform is shown.
+    expect(screen.getByTestId("account-handle-l1").textContent).toBe("LinkedIn");
+  });
+});

@@ -6,6 +6,7 @@ import { AccountMark } from "@/components/beta/avatar-img";
 import { PlatformMark, Status } from "@/components/beta/ui";
 import { ago, subscribe } from "@/lib/beta/ago";
 import { cn } from "@/lib/utils";
+import { publicHandle } from "../../../../../backend/lib/connections/handles";
 import { createProfile, deleteProfile, disconnect, moveAccount, setTiktokDelivery, startConnection, updateProfile, type ProfileInput } from "./actions";
 import { ProfileDialog, type Profile } from "./profile-dialog";
 
@@ -26,6 +27,12 @@ const PLATFORMS = [
   { id: "x", name: "X", note: "Your account" },
 ];
 const KIND: Record<string, string> = { instagram: "Instagram", facebook: "Facebook Page", threads: "Threads", youtube: "YouTube channel", tiktok: "TikTok", linkedin: "LinkedIn", bluesky: "Bluesky", x: "X" };
+
+// "@handle · Platform", or just the platform where it shares no handle (as in the API).
+function handleLine(a: SocialAccount) {
+  const handle = publicHandle(a.platform, a.handle);
+  return handle ? `@${handle} · ${KIND[a.platform]}` : KIND[a.platform];
+}
 
 
 const btn = "inline-flex h-[30px] items-center rounded-lg border border-ps-fg/[0.12] px-3 text-xs hover:border-ps-fg/25 disabled:opacity-50";
@@ -137,7 +144,9 @@ export function ConnectionsView(props: {
         <AccountMark platform={a.platform} avatarUrl={a.avatarUrl} size={32} badge={16} />
       </span>
       <span className="min-w-[180px] flex-1">
-        <span className="block">{a.name} <span className="text-ps-subtle">{a.platform === "youtube" || a.platform === "facebook" || a.platform === "linkedin" ? KIND[a.platform] : `@${a.handle} · ${KIND[a.platform]}`}</span></span>
+        <span className="block">{a.name}</span>
+        {/* Two accounts can share a name (an Instagram and a LinkedIn, say): the handle and platform tell them apart. */}
+        <span data-testid={`account-handle-${a.id}`} className="mt-0.5 block text-xs text-ps-muted">{handleLine(a)}</span>
         <span className="mt-0.5 block text-xs text-ps-subtle">{a.lastPostedAt ? `Last post ${ago(a.lastPostedAt, now)}` : `Connected ${ago(a.connectedAt, now)}`}</span>
       </span>
       {a.health === "needs_attention" ? <Status tone="attention" label="Needs attention" /> : <Status tone="live" label="Connected" />}

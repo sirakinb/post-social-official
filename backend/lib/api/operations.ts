@@ -332,7 +332,7 @@ export const operations: Operation[] = [
   {
     name: "validate_post",
     title: "Check a post before sending",
-    description: "Checks a proposed post against every chosen platform's rules (caption length, media shape and length, post types) without saving anything. Returns plain-language problems per account.",
+    description: "Checks a proposed post against every chosen platform's rules (caption length, media shape and length, post types) without saving anything. Returns plain-language problems per account. Each account is named by its profile name (account), its platform and its handle (account_handle, without the @; null for LinkedIn, Facebook Pages and YouTube, which share no handle with Post Social), so two accounts with the same name can be told apart.",
     method: "POST",
     path: "/v1/posts/validate",
     input: { properties: { caption: postBody.caption, media_ids: postBody.media_ids, destinations }, required: ["destinations"] },
@@ -378,7 +378,7 @@ export const operations: Operation[] = [
   {
     name: "list_posts",
     title: "List posts",
-    description: `Lists posts, newest first. Each post has published_at (when it first went out on any account; null until then), its destinations (one per account: status, live_url, published_at, error) and ${MEDIA_FIELDS}`,
+    description: `Lists posts, newest first. Each post has published_at (when it first went out on any account; null until then), its destinations (one per account: status, live_url, published_at, error) and ${MEDIA_FIELDS} Each account is named by its profile name (account), its platform and its handle (account_handle, without the @; null for LinkedIn, Facebook Pages and YouTube, which share no handle with Post Social), so two accounts with the same name can be told apart.`,
     method: "GET",
     path: "/v1/posts",
     input: {
@@ -394,7 +394,7 @@ export const operations: Operation[] = [
   {
     name: "get_post",
     title: "Get a post",
-    description: `Gets one post with its caption, published_at (when it first went out on any account; null until then), each account's status, live_url, published_at and errors, its approval state, media_ids and ${MEDIA_FIELDS}`,
+    description: `Gets one post with its caption, published_at (when it first went out on any account; null until then), each account's status, live_url, published_at and errors, its approval state, media_ids and ${MEDIA_FIELDS} Each account is named by its profile name (account), its platform and its handle (account_handle, without the @; null for LinkedIn, Facebook Pages and YouTube, which share no handle with Post Social), so two accounts with the same name can be told apart.`,
     method: "GET",
     path: "/v1/posts/{post_id}",
     input: { properties: { post_id: id("post") }, required: ["post_id"] },
@@ -508,7 +508,7 @@ export const operations: Operation[] = [
   {
     name: "list_post_results",
     title: "Publishing results",
-    description: "Shows each account's outcome: published (with the live link), failed (with the platform's reason in plain language), or still in progress. One post's results, or the most recent overall.",
+    description: "Shows each account's outcome: published (with the live link), failed (with the platform's reason in plain language), or still in progress. One post's results, or the most recent overall. Each account is named by its profile name (account), its platform and its handle (account_handle, without the @; null for LinkedIn, Facebook Pages and YouTube, which share no handle with Post Social), so two accounts with the same name can be told apart.",
     method: "GET",
     path: "/v1/results",
     input: { properties: { post_id: id("post"), ...paging } },
