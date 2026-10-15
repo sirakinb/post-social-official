@@ -52,6 +52,8 @@ function fakeSql(): Sql {
   }) as unknown as Sql;
 }
 
+const r2 = { presignGet: async () => "https://example.test/view" };
+
 const named = (list: Array<Record<string, unknown>>) => list.map((d) => ({ account: d.account, platform: d.platform, account_handle: d.account_handle }));
 const expected = [
   { account: "Emmanuel Jones", platform: "instagram", account_handle: "secondshootapp" },
@@ -74,7 +76,7 @@ describe("account handles in API results", () => {
   });
 
   it("names each account's platform and handle in post lists", async () => {
-    const { posts } = await listPosts(fakeSql(), caller, { workspace_id: WS });
+    const { posts } = await listPosts(fakeSql(), r2, caller, { workspace_id: WS });
     expect(named((posts[0] as { destinations: Array<Record<string, unknown>> }).destinations)).toEqual(expected);
   });
 
