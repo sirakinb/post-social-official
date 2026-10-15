@@ -43,7 +43,7 @@ export function llmsText() {
     "## How to post",
     "1. list_social_accounts for account ids and limits.",
     "2. Media must be in Post Social and ready: import_media from a public link (poll get_media), or upload with the CLI.",
-    "3. validate_post, then create_post (now, or scheduled_at in ISO 8601; one call per post for a series).",
+    "3. validate_post, then create_post with scheduled_at (ISO 8601; one call per post for a series), or publish: \"now\" to send right away. Without either, create_post only saves a draft and posts nothing.",
     "4. TikTok posts go direct by default (set privacy_level to the audience the person asked for), or to the creator's TikTok inbox: per post with delivery_mode, or per account with set_tiktok_delivery.",
     "5. A post is live only when list_post_results shows published with a live_url.",
     "",

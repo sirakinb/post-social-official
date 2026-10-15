@@ -12,7 +12,9 @@ export const SERVER_VERSION = "1.0.0";
 const INSTRUCTIONS = [
   "Post Social publishes to the person's connected social accounts (Instagram, Facebook Pages, Threads, YouTube Shorts, TikTok).",
   "Start with list_social_accounts to get account ids and limits. Media must be in Post Social first (import_media from a link), and ready, before it can be attached.",
-  "The person directs what to post and when: use validate_post to check a post, then create_post to publish it now or at a time (one call per post when scheduling a series). TikTok posts go to the creator's TikTok inbox to confirm. Never claim a post is live until list_post_results shows a live link.",
+  "The person directs what to post and when: use validate_post to check a post, then create_post with scheduled_at to publish at a time (one call per post when scheduling a series), or with publish: \"now\" only when the person asked for it to go out right away.",
+  "create_post without scheduled_at or publish: \"now\" only saves a draft and posts nothing: tell the person it is a draft, and use publish_post when they want it sent.",
+  "TikTok posts go to the creator's TikTok inbox to confirm. Never claim a post is live until list_post_results shows a live link.",
   "New accounts are connected by the person: give them the link from request_connect_link.",
 ].join(" ");
 
@@ -26,7 +28,12 @@ export function toolDefinition(operation: Operation) {
     name: operation.name,
     title: operation.title,
     description: operation.description,
-    inputSchema: { type: "object", properties: operation.input.properties, ...(operation.input.required?.length ? { required: operation.input.required } : {}) },
+    inputSchema: {
+      type: "object",
+      properties: operation.input.properties,
+      ...(operation.input.required?.length ? { required: operation.input.required } : {}),
+      ...(operation.strict ? { additionalProperties: false } : {}),
+    },
     annotations: {
       title: operation.title,
       readOnlyHint: Boolean(operation.readOnly),

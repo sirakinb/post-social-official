@@ -27,7 +27,7 @@ export function openApiDocument(serverUrl: string, ops: Operation[] = operations
       description: op.description,
       parameters,
       ...(!inQuery && Object.keys(bodyProps).length
-        ? { requestBody: { required: required.length > 0, content: { "application/json": { schema: { type: "object", properties: bodyProps, ...(required.length ? { required } : {}) } } } } }
+        ? { requestBody: { required: required.length > 0, content: { "application/json": { schema: { type: "object", properties: bodyProps, ...(required.length ? { required } : {}), ...(op.strict ? { additionalProperties: false } : {}) } } } } }
         : {}),
       responses: {
         [op.creates ? "201" : "200"]: { description: "Success", content: { "application/json": { schema: { type: "object" } } } },
