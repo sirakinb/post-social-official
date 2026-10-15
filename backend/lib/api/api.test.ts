@@ -278,3 +278,84 @@ describe("api function", () => {
     expect(response.status).toBe(401);
   });
 });
+
+describe("post reads", () => {
+  const ws = caller().workspaceId;
+  const postId = "00000000-0000-4000-8000-0000000000aa";
+  const r2 = { presignGet: vi.fn(async (key: string, seconds: number) => `https://r2.example/${key}?expires=${seconds}`) };
+  const mediaRows = [
+    { post_id: postId, id: "m1", media_type: "image", mime_type: "image/png", name: "a.png", status: "ready", width: 10, height: 10, duration_seconds: null, storage_key: "w/m1/a.png", poster_key: null },
+    { post_id: postId, id: "m2", media_type: "video", mime_type: "video/mp4", name: "b.mp4", status: "ready", width: 10, height: 10, duration_seconds: "3.5", storage_key: "w/m2/b.mp4", poster_key: "w/m2/poster.jpg" },
+    { post_id: postId, id: "m3", media_type: "image", mime_type: "image/png", name: "c.png", status: "processing", width: null, height: null, duration_seconds: null, storage_key: "w/m3/c.png", poster_key: null },
+  ];
+  const expectedMedia = [
+    { id: "m1", media_type: "image", mime_type: "image/png", name: "a.png", status: "ready", width: 10, height: 10, duration_seconds: null, url: "https://r2.example/w/m1/a.png?expires=3600", thumbnail_url: "https://r2.example/w/m1/a.png?expires=3600" },
+    { id: "m2", media_type: "video", mime_type: "video/mp4", name: "b.mp4", status: "ready", width: 10, height: 10, duration_seconds: 3.5, url: "https://r2.example/w/m2/b.mp4?expires=3600", thumbnail_url: "https://r2.example/w/m2/poster.jpg?expires=3600" },
+    { id: "m3", media_type: "image", mime_type: "image/png", name: "c.png", status: "processing", width: null, height: null, duration_seconds: null, url: null, thumbnail_url: null },
+  ];
+  const withR2 = (sql: Sql): ApiDeps => ({ ...deps(sql), r2: r2 as never });
+  const isMediaQuery = (text: string) => text.includes("JOIN public.media_assets");
+  type Call = [string, unknown[]];
+
+  it("list_posts shows when each post and destination went out, and its media, scoped to the caller's workspace", async () => {
+    const sql = vi.fn(async (text: string, _params?: unknown[]) => {
+      if (isMediaQuery(text)) return mediaRows;
+      return [{ id: postId, status: "published", published_at: "2026-10-15T10:00:00+00:00", destinations: [{ id: "d1", live_url: "https://x.com/1", published_at: "2026-10-15T10:00:00+00:00" }] }];
+    });
+    const op = operations.find((o) => o.name === "list_posts")!;
+    const result = (await op.run(withR2(sql as unknown as Sql), caller(), {})) as { posts: Record<string, unknown>[] };
+    const [postsQuery, postsParams] = sql.mock.calls[0] as unknown as Call;
+    expect(postsQuery).toContain("destination.published");
+    expect(postsQuery).toMatch(/'published_at'/);
+    expect(postsQuery).toMatch(/AS published_at/);
+    expect(postsParams[0]).toBe(ws);
+    const mediaCall = sql.mock.calls.find(([text]) => isMediaQuery(text)) as unknown as Call;
+    expect(mediaCall[0]).toMatch(/m\.workspace_id = \$1/);
+    expect(mediaCall[1]).toEqual([ws, [postId]]);
+    expect(result.posts[0]).toMatchObject({ published_at: "2026-10-15T10:00:00+00:00", media: expectedMedia });
+    expect((result.posts[0].destinations as Record<string, unknown>[])[0]).toMatchObject({ live_url: "https://x.com/1", published_at: "2026-10-15T10:00:00+00:00" });
+  });
+
+  it("list_posts skips the media lookup when there are no posts", async () => {
+    const sql = vi.fn(async () => []);
+    const op = operations.find((o) => o.name === "list_posts")!;
+    expect(await op.run(withR2(sql as unknown as Sql), caller(), {})).toMatchObject({ posts: [] });
+    expect(sql).toHaveBeenCalledTimes(1);
+  });
+
+  it("get_post shows the first published time, each destination's time and live link, and its media", async () => {
+    const post = { id: postId, workspace_id: ws, status: "partially_published", caption: "hi", scheduled_at: null, entry_point: "mcp", actor_id: null, created_at: "c", updated_at: "u" };
+    const sql = vi.fn(async (text: string, _params?: unknown[]) => {
+      if (isMediaQuery(text)) return mediaRows;
+      if (text.includes("FROM public.posts")) return [post];
+      if (text.includes("JOIN public.connected_accounts")) {
+        return [
+          { id: "d1", status: "published", live_url: "https://x.com/1", published_at: "2026-10-15T12:00:00.000Z" },
+          { id: "d2", status: "published", live_url: "https://bsky.app/2", published_at: "2026-10-15T09:30:00.000Z" },
+          { id: "d3", status: "failed", live_url: null, published_at: null },
+        ];
+      }
+      if (text.includes("FROM public.post_media")) return [{ media_asset_id: "m1" }];
+      return [];
+    });
+    const op = operations.find((o) => o.name === "get_post")!;
+    const result = (await op.run(withR2(sql as unknown as Sql), caller(), { post_id: postId })) as Record<string, unknown>;
+    const destQuery = sql.mock.calls.find(([text]) => text.includes("JOIN public.connected_accounts"))![0];
+    expect(destQuery).toContain("destination.published");
+    expect(result.published_at).toBe("2026-10-15T09:30:00.000Z");
+    expect(result.media_ids).toEqual(["m1"]);
+    expect(result.media).toEqual(expectedMedia);
+    expect((result.destinations as Record<string, unknown>[])[1]).toMatchObject({ live_url: "https://bsky.app/2", published_at: "2026-10-15T09:30:00.000Z" });
+    const mediaCall = sql.mock.calls.find(([text]) => isMediaQuery(text)) as unknown as Call;
+    expect(mediaCall[1]).toEqual([ws, [postId]]);
+  });
+
+  it("get_post has no published time before anything goes out", async () => {
+    const post = { id: postId, workspace_id: ws, status: "draft", caption: "hi", scheduled_at: null, entry_point: "mcp", actor_id: null, created_at: "c", updated_at: "u" };
+    const sql = vi.fn(async (text: string) => (text.includes("FROM public.posts") ? [post] : text.includes("JOIN public.connected_accounts") ? [{ id: "d1", status: "draft", live_url: null, published_at: null }] : []));
+    const op = operations.find((o) => o.name === "get_post")!;
+    const result = (await op.run(withR2(sql as unknown as Sql), caller(), { post_id: postId })) as Record<string, unknown>;
+    expect(result.published_at).toBeNull();
+    expect(result.media).toEqual([]);
+  });
+});

@@ -20,6 +20,12 @@ export const CHANGELOG: ChangelogEntry[] = [
     body: 'A post made through the API or an AI app without a time is now saved as a draft instead of going out straight away, and the app is told it is a draft. To post right away, an app now has to ask for it with publish: "now"; scheduled times work as before. Unknown or misspelled fields (like scheduledAt) are now refused with an error instead of being ignored. If a tool or script of yours relied on "no time means post now", add publish: "now". Posting from the Post Social app works as before.',
   },
   {
+    at: "2026-10-15T09:00:00-04:00",
+    kind: "Improved",
+    title: "Posts from the API show when they went out",
+    body: "When an AI app or developer tool looks up your posts, each post now shows the time it was published, its live link on each account, and its pictures and videos, all in one place.",
+  },
+  {
     at: "2026-10-13T23:55:00-04:00",
     kind: "New",
     title: "Light mode",
