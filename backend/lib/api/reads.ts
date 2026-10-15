@@ -1,6 +1,7 @@
 // Lists for API and MCP callers. (The web app reads these through row-level security; keys
 // have no database session, so the server reads on their behalf, scoped to the workspace.)
 import { ApiError, membership, requireUuid, type Caller, type Sql } from "../access";
+import { withHandle } from "../connections/handles";
 import { DISPLAY_NAMES, PLATFORMS, type Platform } from "../connections/platforms";
 import { publicAsset, type AssetRow } from "../media/service";
 
@@ -62,7 +63,7 @@ export async function listPosts(sql: Sql, caller: Caller, input: { workspace_id:
     `SELECT p.id, p.status, left(p.caption, 280) AS caption, p.scheduled_at, p.created_at, p.updated_at,
             coalesce(act.display_name, 'Unknown') AS created_by, p.entry_point AS created_via,
             (SELECT coalesce(jsonb_agg(jsonb_build_object(
-                'id', d.id, 'account_id', d.connected_account_id, 'account', a.display_name, 'platform', d.platform,
+                'id', d.id, 'account_id', d.connected_account_id, 'account', a.display_name, 'account_handle', a.handle, 'platform', d.platform,
                 'status', d.status, 'live_url', d.live_url, 'error', d.error_message) ORDER BY d.created_at), '[]'::jsonb)
              FROM public.destinations d JOIN public.connected_accounts a ON a.id = d.connected_account_id
              WHERE d.post_id = p.id) AS destinations
@@ -73,7 +74,11 @@ export async function listPosts(sql: Sql, caller: Caller, input: { workspace_id:
      LIMIT $4 OFFSET $5`,
     [input.workspace_id, status, platform, limit + 1, offset],
   );
-  return { posts: rows.slice(0, limit), has_more: rows.length > limit, limit, offset };
+  const posts = rows.slice(0, limit).map((post) => ({
+    ...post,
+    destinations: (post.destinations as Array<Record<string, unknown>>).map(withHandle),
+  }));
+  return { posts, has_more: rows.length > limit, limit, offset };
 }
 
 // Per-destination outcomes: one post's, or the most recent across the workspace.
@@ -81,7 +86,7 @@ export async function listResults(sql: Sql, caller: Caller, input: { workspace_i
   await membership(sql, caller, input.workspace_id, false);
   const { limit, offset } = page(input);
   const rows = await sql<Record<string, unknown>>(
-    `SELECT d.post_id, d.id AS destination_id, d.platform, a.display_name AS account, d.status, d.live_url,
+    `SELECT d.post_id, d.id AS destination_id, d.platform, a.display_name AS account, a.handle AS account_handle, d.status, d.live_url,
             d.error_code, d.error_message, d.updated_at
      FROM public.destinations d JOIN public.connected_accounts a ON a.id = d.connected_account_id
      WHERE d.workspace_id = $1 AND ($2::uuid IS NULL OR d.post_id = $2)
@@ -90,7 +95,7 @@ export async function listResults(sql: Sql, caller: Caller, input: { workspace_i
      LIMIT $3 OFFSET $4`,
     [input.workspace_id, input.post_id ?? null, limit + 1, offset],
   );
-  return { results: rows.slice(0, limit), has_more: rows.length > limit, limit, offset };
+  return { results: rows.slice(0, limit).map(withHandle), has_more: rows.length > limit, limit, offset };
 }
 
 export async function listMedia(sql: Sql, caller: Caller, input: { workspace_id: string; media_type?: unknown; include_hidden?: unknown; limit?: unknown; offset?: unknown }) {
