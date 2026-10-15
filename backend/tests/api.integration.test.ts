@@ -98,7 +98,10 @@ describe.skipIf(!enabled)("API keys, REST API and MCP on the dev backend (US-040
   });
 
   it("an AI's post goes out as directed", async () => {
-    const created = await call(liveKey, "POST", "/v1/posts", textPost(`Now from the API ${suffix}`));
+    const untimed = await call(liveKey, "POST", "/v1/posts", textPost(`No time from the API ${suffix}`, { scheduled_at: null }));
+    expect(untimed.status).toBe(201);
+    expect(untimed.body).toMatchObject({ status: "draft", next_step: expect.stringMatching(/^Saved as a draft because no time was given/) });
+    const created = await call(liveKey, "POST", "/v1/posts", textPost(`Now from the API ${suffix}`, { publish: "now" }));
     expect(created.status).toBe(201);
     expect(created.body).toMatchObject({ status: "processing", next_step: expect.stringMatching(/^Publishing now/) });
     const at = new Date(Date.now() + 2 * 3600_000).toISOString();
@@ -108,7 +111,7 @@ describe.skipIf(!enabled)("API keys, REST API and MCP on the dev backend (US-040
 
   it("an account set to ask first holds an AI's post, and the AI cannot approve it", async () => {
     await sql(`UPDATE public.connected_accounts SET approval_policy_override = 'confirm_each' WHERE id = $1`, [facebook]);
-    const created = await call(liveKey, "POST", "/v1/posts", textPost(`From the API ${suffix}`));
+    const created = await call(liveKey, "POST", "/v1/posts", textPost(`From the API ${suffix}`, { publish: "now" }));
     await sql(`UPDATE public.connected_accounts SET approval_policy_override = NULL WHERE id = $1`, [facebook]);
     expect(created.status).toBe(201);
     expect(created.body).toMatchObject({ status: "awaiting_approval", next_step: expect.stringMatching(/approval/) });
@@ -125,7 +128,7 @@ describe.skipIf(!enabled)("API keys, REST API and MCP on the dev backend (US-040
   });
 
   it("test keys can make drafts but never publish", async () => {
-    const refused = await call(testKey, "POST", "/v1/posts", textPost("Test key post"));
+    const refused = await call(testKey, "POST", "/v1/posts", textPost("Test key post", { publish: "now" }));
     expect(refused).toMatchObject({ status: 403, body: { error: { code: "forbidden", message: expect.stringMatching(/^Test keys cannot publish/) } } });
     const draft = await call(testKey, "POST", "/v1/posts", textPost("Test key draft", { draft: true }));
     expect(draft.body.status).toBe("draft");

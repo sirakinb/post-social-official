@@ -24,9 +24,15 @@ as the tools with hyphens, e.g. `create-post`).
 
 ## Posting
 
-- `create_post` publishes now, or at `scheduled_at` (ISO 8601 with a timezone). For a
-  series ("one a day for a week"), call `create_post` once per post with each time.
+- `create_post` with `scheduled_at` (ISO 8601 with a timezone) publishes at that time. For
+  a series ("one a day for a week"), call `create_post` once per post with each time.
+- `create_post` with `publish: "now"` publishes right away. Use it only when the person
+  asked for the post to go out now.
+- Without `scheduled_at` or `publish: "now"`, `create_post` only saves a draft and posts
+  nothing. Tell the person it is a draft; send it later with `publish_post`.
 - `draft: true` only saves it.
+- Unknown fields are refused with an error naming them (for example `scheduledAt`; the
+  field is `scheduled_at`).
 - Per-platform `options` in each destination:
   - instagram: `media_type` image | reel | carousel
   - facebook: `media_type` text | link | image | reel | video (`link` for link posts)
