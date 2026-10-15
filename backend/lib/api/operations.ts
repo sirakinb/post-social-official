@@ -31,6 +31,7 @@ export type Operation = {
   readOnly?: boolean;
   destructive?: boolean;
   creates?: boolean; // REST answers 201 Created
+  strict?: boolean; // unknown input fields are refused (400) instead of ignored
   analytics?: boolean; // only offered where stats are switched on
   run: (deps: ApiDeps, caller: AgentCaller, input: Record<string, unknown>) => Promise<unknown>;
 };
@@ -43,7 +44,7 @@ const paging = {
 const schedule: JsonSchema = {
   type: "string",
   format: "date-time",
-  description: "When to publish, in ISO 8601 with a timezone, e.g. 2026-10-05T15:00:00Z. Leave out to publish as soon as possible. Up to a year ahead.",
+  description: "When to publish, in ISO 8601 with a timezone, e.g. 2026-10-05T15:00:00Z. Up to a year ahead.",
 };
 
 const OPTIONS_HELP = [
@@ -76,6 +77,34 @@ const postBody = {
   destinations,
   scheduled_at: schedule,
 };
+
+// create_post never sends a post unless the request says when: a scheduled_at time, or
+// publish: "now". Without either it only saves a draft, so a missing or misspelled time can
+// never post by accident.
+const createPostInput = {
+  ...postBody,
+  scheduled_at: { ...schedule, description: `${schedule.description} Without scheduled_at (or publish: "now") the post is only saved as a draft.` },
+  publish: {
+    type: "string",
+    enum: ["now"],
+    description: 'Set to "now" to publish right away. Only use it when the person asked for the post to go out now. Not with scheduled_at or draft.',
+  },
+  draft: { type: "boolean", default: false, description: "Only save a draft; do not send or schedule." },
+};
+
+const normalized = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+// Refuses fields an operation does not know, naming them, so a typo (scheduledAt) is an
+// error instead of being quietly dropped.
+export function rejectUnknownFields(operation: Pick<Operation, "name" | "input">, input: Record<string, unknown>) {
+  const known = Object.keys(operation.input.properties);
+  const unknown = Object.keys(input).filter((name) => !Object.hasOwn(operation.input.properties, name));
+  if (!unknown.length) return;
+  const name = unknown[0];
+  const close = known.find((k) => normalized(k) === normalized(name));
+  const fields = unknown.length > 1 ? `Unknown fields ${unknown.map((n) => `"${n}"`).join(", ")}.` : `Unknown field "${name}".`;
+  throw new ApiError(400, `${fields}${close ? ` Did you mean "${close}"?` : ""} ${operation.name} accepts: ${known.join(", ")}.`.slice(0, 500));
+}
 
 const mediaDeps = (deps: ApiDeps): MediaDeps => ({ sql: deps.sql, r2: deps.r2, newId: deps.newId });
 
@@ -315,15 +344,31 @@ export const operations: Operation[] = [
     creates: true,
     title: "Create a post",
     description:
-      "Creates a post for one or more accounts and publishes it now, or at scheduled_at, unless draft is true. To schedule a series, call it once per post with each time. The result's next_step says what happens. If the post has problems it is saved as a draft and the problems are returned.",
+      'Creates a post for one or more accounts. It is sent only when you say when: scheduled_at publishes at that time, publish: "now" publishes right away. Without either (or with draft: true) it is only saved as a draft and nothing is posted; tell the person, and call publish_post when they want it sent. To schedule a series, call it once per post with each time. Unknown fields are refused. The result\'s next_step says what happens. If the post has problems it is saved as a draft and the problems are returned.',
     method: "POST",
     path: "/v1/posts",
-    input: { properties: { ...postBody, draft: { type: "boolean", default: false, description: "Only save a draft; do not send or schedule." } }, required: ["destinations"] },
+    input: { properties: createPostInput, required: ["destinations"] },
+    strict: true,
     run: async (deps, caller, input) => {
+      rejectUnknownFields({ name: "create_post", input: { properties: createPostInput } }, input);
+      if (input.publish !== undefined && input.publish !== "now") throw new ApiError(400, 'publish can only be "now". To publish later, use scheduled_at instead.');
       const draft = input.draft === true;
-      if (!draft && caller.mode === "test") throw new ApiError(403, "Test keys cannot publish or schedule. Pass draft: true, or use a live key.");
-      const created = await postActions.create({ sql: deps.sql }, caller, { ...input, workspace_id: caller.workspaceId });
+      const now = input.publish === "now";
+      const hasTime = input.scheduled_at !== undefined && input.scheduled_at !== null && input.scheduled_at !== "";
+      if (now && hasTime) throw new ApiError(400, 'Choose one: publish: "now" to send right away, or scheduled_at to send later.');
+      if (now && draft) throw new ApiError(400, 'Choose one: publish: "now" to send right away, or draft: true to only save it.');
+      const send = !draft && (now || hasTime);
+      if (send && caller.mode === "test") throw new ApiError(403, "Test keys cannot publish or schedule. Pass draft: true, or use a live key.");
+      const { publish: _publish, draft: _draft, ...fields } = input;
+      const created = await postActions.create({ sql: deps.sql }, caller, { ...fields, workspace_id: caller.workspaceId });
       if (draft) return withNextStep(created);
+      if (!send) {
+        const problems = created.check.ok ? "" : ` It also has problems to fix first with update_post: ${created.check.problems.join(" ")}`;
+        return {
+          ...created,
+          next_step: `Saved as a draft because no time was given. Nothing was posted. Tell the person; to send it, call publish_post (now, or with scheduled_at). Next time, pass scheduled_at, or publish: "now" when the person wants it out right away.${problems}`,
+        };
+      }
       if (!created.check.ok) {
         return { ...created, next_step: `Saved as a draft because of these problems: ${created.check.problems.join(" ")} Fix them with update_post, then call publish_post.` };
       }
@@ -377,7 +422,7 @@ export const operations: Operation[] = [
     description: "Publishes a draft now, or schedules it with scheduled_at.",
     method: "POST",
     path: "/v1/posts/{post_id}/publish",
-    input: { properties: { post_id: id("post"), scheduled_at: schedule }, required: ["post_id"] },
+    input: { properties: { post_id: id("post"), scheduled_at: { ...schedule, description: `${schedule.description} Leave out to publish now.` } }, required: ["post_id"] },
     run: async (deps, caller, input) => withNextStep(await postActions.submit({ sql: deps.sql }, caller, input)),
   },
   {

@@ -5,7 +5,8 @@ import { callerForKey, newKey } from "./keys";
 import { handleMcp, PROTOCOL_VERSIONS } from "./mcp";
 import { openApiDocument } from "./openapi";
 import { availableOperations, operations, type ApiDeps } from "./operations";
-import { matchRoute, queryInput } from "./rest";
+import { handleRest, matchRoute, queryInput } from "./rest";
+import { postActions } from "../publishing/service";
 
 const caller = (mode: "live" | "test" = "live"): AgentCaller => ({
   kind: "key",
@@ -117,7 +118,7 @@ describe("MCP", () => {
   });
 
   it("returns tool failures as readable results, not protocol errors", async () => {
-    const result = await call({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "create_post", arguments: { destinations: [] } } }, undefined, "test");
+    const result = await call({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "create_post", arguments: { destinations: [], publish: "now" } } }, undefined, "test");
     expect(result.result).toEqual({ content: [{ type: "text", text: expect.stringMatching(/^Test keys cannot publish/) }], isError: true });
     expect((await call({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "nope" } })).error.code).toBe(-32602);
   });
@@ -134,6 +135,90 @@ describe("MCP", () => {
     const { result } = await call({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "get_workspace" } });
     expect(result).toEqual({ content: [{ type: "text", text: "Something went wrong on our side. Try again in a moment." }], isError: true });
     spy.mockRestore();
+  });
+});
+
+describe("create_post: when it goes out", () => {
+  const createPost = operations.find((o) => o.name === "create_post")!;
+  const destinations = [{ account_id: "00000000-0000-4000-8000-000000000009", options: { media_type: "text" } }];
+  const saved = { id: "00000000-0000-4000-8000-0000000000aa", status: "draft", scheduled_at: null, check: { ok: true, problems: [] as string[] } };
+
+  const spies = () => {
+    const create = vi.spyOn(postActions, "create").mockResolvedValue(saved as never);
+    const submit = vi.spyOn(postActions, "submit").mockResolvedValue({ ...saved, status: "processing" } as never);
+    return { create, submit, restore: () => { create.mockRestore(); submit.mockRestore(); } };
+  };
+
+  it("saves a draft, and sends nothing, when no time is given", async () => {
+    for (const input of [{ destinations }, { destinations, scheduled_at: null }, { destinations, scheduled_at: "" }]) {
+      const { submit, restore } = spies();
+      const result = (await createPost.run(deps(), caller(), input)) as Record<string, unknown>;
+      expect(submit).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ status: "draft", next_step: expect.stringMatching(/^Saved as a draft because no time was given\. Nothing was posted\./) });
+      expect(result.next_step).toMatch(/publish: "now"/);
+      restore();
+    }
+  });
+
+  it("lets test keys save a draft when no time is given", async () => {
+    const { submit, restore } = spies();
+    expect(await createPost.run(deps(), caller("test"), { destinations })).toMatchObject({ status: "draft" });
+    expect(submit).not.toHaveBeenCalled();
+    restore();
+  });
+
+  it("sends right away only with publish: \"now\"", async () => {
+    const { submit, restore } = spies();
+    const result = await createPost.run(deps(), caller(), { destinations, publish: "now" });
+    expect(submit).toHaveBeenCalledWith(expect.anything(), expect.anything(), { post_id: saved.id });
+    expect(result).toMatchObject({ status: "processing", next_step: expect.stringMatching(/^Publishing now/) });
+    restore();
+  });
+
+  it("still schedules with scheduled_at, and still only saves with draft: true", async () => {
+    const at = new Date(Date.now() + 3600_000).toISOString();
+    let s = spies();
+    await createPost.run(deps(), caller(), { destinations, scheduled_at: at });
+    expect(s.submit).toHaveBeenCalledTimes(1);
+    s.restore();
+    s = spies();
+    expect(await createPost.run(deps(), caller(), { destinations, draft: true, scheduled_at: at })).toMatchObject({ status: "draft", next_step: expect.stringMatching(/^Saved as a draft\. Call publish_post/) });
+    expect(s.submit).not.toHaveBeenCalled();
+    s.restore();
+  });
+
+  it("refuses unclear or contradictory instructions before saving anything", async () => {
+    const { create, restore } = spies();
+    const at = new Date(Date.now() + 3600_000).toISOString();
+    await expect(createPost.run(deps(), caller(), { destinations, publish: "later" })).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/publish can only be "now"/) });
+    await expect(createPost.run(deps(), caller(), { destinations, publish: "now", scheduled_at: at })).rejects.toMatchObject({ status: 400 });
+    await expect(createPost.run(deps(), caller(), { destinations, publish: "now", draft: true })).rejects.toMatchObject({ status: 400 });
+    await expect(createPost.run(deps(), caller("test"), { destinations, publish: "now" })).rejects.toMatchObject({ status: 403 });
+    expect(create).not.toHaveBeenCalled();
+    restore();
+  });
+
+  it("rejects unknown fields by name, with a 400", async () => {
+    const { create, restore } = spies();
+    await expect(createPost.run(deps(), caller(), { destinations, scheduledAt: "2026-10-20T15:00:00Z" })).rejects.toMatchObject({
+      status: 400,
+      message: expect.stringMatching(/^Unknown field "scheduledAt"\. Did you mean "scheduled_at"\?/),
+    });
+    await expect(createPost.run(deps(), caller(), { destinations, publish_at: "2026-10-20T15:00:00Z" })).rejects.toMatchObject({ status: 400, message: expect.stringContaining('"publish_at"') });
+    expect(create).not.toHaveBeenCalled();
+    const rest = await handleRest(deps(), caller(), new Request("https://fn/v1/posts", { method: "POST", body: JSON.stringify({ destinations, publish_at: "x" }) }), "/v1/posts");
+    expect(rest.status).toBe(400);
+    expect(rest.body).toEqual({ error: { code: "invalid_request", message: expect.stringContaining('"publish_at"') } });
+    restore();
+  });
+
+  it("describes the new rules to AIs and in the API description", async () => {
+    expect(createPost.description).toMatch(/draft/);
+    expect(createPost.input.properties.publish).toMatchObject({ type: "string", enum: ["now"] });
+    const { result } = (await handleMcp(deps(), caller(), { jsonrpc: "2.0", id: 1, method: "tools/list" })) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(result.tools.find((t: { name: string }) => t.name === "create_post").inputSchema.additionalProperties).toBe(false);
+    const body = openApiDocument("https://x").paths["/v1/posts"] as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(body.post.requestBody.content["application/json"].schema.additionalProperties).toBe(false);
   });
 });
 
