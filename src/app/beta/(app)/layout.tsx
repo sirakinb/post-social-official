@@ -5,6 +5,7 @@ import { ThemeToggle } from "@/components/beta/theme-toggle";
 import { loadViewer } from "@/lib/beta/workspace";
 import { THEME_COOKIE, parseTheme } from "@/lib/beta/theme";
 import { signOut } from "../actions";
+import { analyticsEnabled } from "./stats-switch";
 
 // The signed-in app: the sidebar on every page, the page beside it.
 export default async function BetaAppLayout({ children }: { children: React.ReactNode }) {
@@ -32,6 +33,7 @@ export default async function BetaAppLayout({ children }: { children: React.Reac
         viewer={{ name: viewer.name, email: viewer.email, avatarUrl: viewer.avatarUrl }}
         plan={plan}
         signOut={signOut}
+        analytics={analyticsEnabled()}
       />
       <div className="min-w-0 flex-1">
         {/* The light/dark switch, top right above every page. */}

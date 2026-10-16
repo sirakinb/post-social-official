@@ -19,11 +19,18 @@ describe("Sidebar", () => {
     expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/beta/settings");
   });
 
+  it("shows Analytics after Calendar only where a stats source is on", () => {
+    render(<Sidebar {...props} analytics />);
+    const labels = screen.getAllByRole("link").map((l) => l.textContent);
+    expect(labels.slice(0, 5)).toEqual(["Accounts", "Create", "Drafts", "Calendar", "Analytics"]);
+    expect(screen.getByRole("link", { name: "Analytics" })).toHaveAttribute("href", "/beta/analytics");
+  });
+
   it("starts with Accounts then Create, with no Home, Media or Stats", () => {
     render(<Sidebar {...props} />);
     const labels = screen.getAllByRole("link").map((l) => l.textContent);
     expect(labels.slice(0, 2)).toEqual(["Accounts", "Create"]);
-    for (const gone of ["Home", "Media", "Stats"]) expect(screen.queryByRole("link", { name: gone })).toBeNull();
+    for (const gone of ["Home", "Media", "Stats", "Analytics"]) expect(screen.queryByRole("link", { name: gone })).toBeNull();
   });
 
   it("puts Drafts right after Create", () => {

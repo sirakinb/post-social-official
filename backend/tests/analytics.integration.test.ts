@@ -8,8 +8,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createSql } from "../lib/insforge-admin";
 import { importKey, seal } from "../lib/connections/crypto";
 import { listAnalytics, postAnalytics, refreshAnalytics } from "../lib/analytics";
+import { analyticsDashboard } from "../lib/analytics-dashboard";
 import type { Caller } from "../lib/access";
 import { runMetricsSweep } from "../../worker/src/analytics/runner";
+import { runFollowerSweep } from "../../worker/src/analytics/followers";
 import type { MetricsResult } from "../../worker/src/analytics/platforms";
 import { createAccount, resolveTarget, type AccountResult } from "../../scripts/lib/accounts";
 import { api, uniqueSuffix } from "./dev-backend";
@@ -124,5 +126,45 @@ describe.skipIf(!enabled)("post stats on the dev backend (US-068)", () => {
     expect(await sweep()).toBe(1);
     const [th] = await sql<{ likes: string }>(`SELECT likes FROM public.post_metrics WHERE post_id = $1`, [thPost]);
     expect(th.likes).toBe("15");
+  });
+  it("reads a platform from its public page when only the public source is on, and saves followers", async () => {
+    await sql(`UPDATE public.post_metrics SET next_fetch_at = now() WHERE post_id = $1`, [thPost]);
+    const n = await runMetricsSweep({
+      sql,
+      setting: () => "",
+      platforms: [],
+      publicPlatforms: ["threads"],
+      publicApiKey: "test",
+      onlyWorkspace: owner.workspaceId,
+      publicReaders: { threads: async (_c, url) => (expect(url).toBe("https://example.social/x"), { likes: 30, comments: 2, reposts: 1, extra: {}, unavailable: [], followers: 600 }) },
+    });
+    expect(n).toBe(1);
+    const [th] = await sql<{ likes: string; source: string }>(`SELECT likes, source FROM public.post_metrics WHERE post_id = $1`, [thPost]);
+    expect(th).toMatchObject({ likes: "30", source: "public" });
+    const [f] = await sql<{ followers: string; source: string }>(`SELECT followers, source FROM public.account_follower_days WHERE connected_account_id = $1`, [threads]);
+    expect(f).toMatchObject({ followers: "600", source: "public" });
+    // The daily follower sweep skips accounts already counted today.
+    const counted = await runFollowerSweep({ sql, platforms: [], publicPlatforms: ["threads"], publicApiKey: "test", onlyWorkspace: owner.workspaceId, readPublic: async () => 999 });
+    expect(counted).toBe(0);
+  });
+
+  it("builds the Analytics page's data for workspace members only", async () => {
+    const dash = await analyticsDashboard(sql, person(), ["facebook", "threads"], { workspace_id: owner.workspaceId, period: "last_30_days" });
+    expect(dash.summary.posts).toBe(2);
+    expect(dash.accounts.find((a) => a.id === threads)).toMatchObject({ followers: 600, posts: 1, source: "public" });
+    expect(dash.posts.find((p) => p.platform === "threads")!.engagement_rate).toBeCloseTo(33 / 600, 4);
+    const stranger: Caller = { userId: "00000000-0000-0000-0000-000000000000", displayName: "Nobody", entryPoint: "ui" };
+    await expect(analyticsDashboard(sql, stranger, ["facebook"], { workspace_id: owner.workspaceId })).rejects.toThrow();
+    await expect(analyticsDashboard(sql, person(), ["facebook"], { workspace_id: owner.workspaceId, period: "forever" })).rejects.toThrow(/period/);
+  });
+
+  it("allows 3 hand refreshes a day per workspace", async () => {
+    await sql(`DELETE FROM public.analytics_refreshes WHERE workspace_id = $1`, [owner.workspaceId]);
+    for (let i = 0; i < 3; i++) {
+      await sql(`UPDATE public.post_metrics SET fetched_at = now() - interval '2 hours' WHERE workspace_id = $1`, [owner.workspaceId]);
+      const r = await refreshAnalytics(sql, person(), ["facebook", "threads"], { workspace_id: owner.workspaceId });
+      expect(r.refreshes_left).toBe(2 - i);
+    }
+    await expect(refreshAnalytics(sql, person(), ["facebook", "threads"], { workspace_id: owner.workspaceId })).rejects.toThrow(/3 times a day/);
   });
 });

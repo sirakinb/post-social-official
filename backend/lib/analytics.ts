@@ -4,6 +4,7 @@
 import { ApiError, membership, requireUuid, type Caller, type Sql } from "./access";
 import { DISPLAY_NAMES, type Platform } from "./connections/platforms";
 import { page } from "./api/reads";
+import { REFRESHES_PER_DAY } from "./analytics-dashboard";
 
 const COUNTERS = ["views", "likes", "comments", "shares", "saves", "reposts", "quotes"] as const;
 export const ANALYTICS_PERIODS = ["last_7_days", "last_30_days", "last_90_days", "all"] as const;
@@ -22,7 +23,8 @@ function note(row: Row, missing: string[]) {
   if (row.last_error) return String(row.last_error);
   if (!row.fetched_at) return "Stats are being collected; check back in a few minutes.";
   // An account connected before stats were switched on has not granted the permission.
-  if (missing.length) return `Reconnect ${row.account} on ${DISPLAY_NAMES[row.platform]} to see ${missing.join(", ")}.`;
+  // (Public-page numbers have gaps no reconnect can fill, so those get no note.)
+  if (missing.length && row.source !== "public" && row.source !== "mixed") return `Reconnect ${row.account} on ${DISPLAY_NAMES[row.platform]} to see ${missing.join(", ")}.`;
   return null;
 }
 
@@ -126,6 +128,14 @@ export async function refreshAnalytics(sql: Sql, caller: Caller, platforms: Plat
   // It makes the worker call the platforms, so read-only members (reviewers) can't.
   await membership(sql, caller, input.workspace_id, true, "Reviewers can view stats but not refresh them.");
   const postId = input.post_id === undefined || input.post_id === "" ? null : requireUuid(input.post_id, "Post");
+  // Each refresh reads every recent post again (some of it paid), so a workspace gets a few a day.
+  const [{ used }] = await sql<{ used: string }>(
+    `SELECT count(*) AS used FROM public.analytics_refreshes WHERE workspace_id = $1 AND requested_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'`,
+    [input.workspace_id],
+  );
+  if (Number(used) >= REFRESHES_PER_DAY) {
+    throw new ApiError(429, `Stats can be refreshed by hand ${REFRESHES_PER_DAY} times a day, and today's are used. They keep updating on their own.`);
+  }
   const [result] = await sql<{ queued: string; cooling: string }>(
     `WITH candidates AS (
        SELECT destination_id, fetched_at FROM public.post_metrics
@@ -145,8 +155,10 @@ export async function refreshAnalytics(sql: Sql, caller: Caller, platforms: Plat
   );
   const queued = Number(result.queued);
   const cooling = Number(result.cooling);
+  if (queued) await sql(`INSERT INTO public.analytics_refreshes (workspace_id) VALUES ($1)`, [input.workspace_id]);
   return {
     queued,
+    refreshes_left: Math.max(0, REFRESHES_PER_DAY - Number(used) - (queued ? 1 : 0)),
     message: queued
       ? `Fetching fresh stats for ${queued} post${queued === 1 ? "" : "s"}; they update within a few minutes.`
       : cooling

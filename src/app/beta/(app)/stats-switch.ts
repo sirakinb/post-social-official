@@ -1,5 +1,6 @@
-// Post stats are switched on per environment (ANALYTICS_PLATFORMS). Where they are off, the
-// Stats page and its link do not exist, so nothing half-available is shown.
+// Post stats are switched on per environment: through each platform's own API
+// (ANALYTICS_PLATFORMS) or from public pages (ANALYTICS_PUBLIC_PLATFORMS). Where both are
+// off, the Analytics page and its link do not exist, so nothing half-available is shown.
 export function analyticsEnabled() {
-  return (process.env.ANALYTICS_PLATFORMS ?? "").split(",").some((p) => p.trim());
+  return [process.env.ANALYTICS_PLATFORMS, process.env.ANALYTICS_PUBLIC_PLATFORMS].some((list) => (list ?? "").split(",").some((p) => p.trim()));
 }

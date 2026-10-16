@@ -14,6 +14,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    at: "2026-10-16T15:00:00-04:00",
+    kind: "New",
+    title: "Analytics",
+    body: "A new Analytics page shows how your posts and accounts are doing: engagement and views by week, each account's followers and growth, every post's likes, comments, shares and more (only the numbers each platform reports), the days and times your posts do best, which formats work, and how often to post. Numbers update on their own, and you can refresh them by hand up to 3 times a day.",
+  },
+  {
     at: "2026-10-15T09:00:00-04:00",
     kind: "Fixed",
     title: "AI apps no longer post right away when no time is given",
