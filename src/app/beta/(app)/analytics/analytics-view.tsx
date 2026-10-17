@@ -8,31 +8,14 @@ import { useState, useSyncExternalStore } from "react";
 import { PlatformCardIcon } from "@/components/platform-logos";
 import { Card, CardHeader } from "@/components/beta/ui";
 import { cn } from "@/lib/utils";
-import { FORMAT_LABELS, PLATFORM_COLORS, count, localSlot, percent, resultsOf, signed } from "@/lib/beta/analytics-view";
+import { FORMAT_LABELS, PLATFORM_COLORS, POST_SORTS, TABS, count, localSlot, percent, resultsOf, signed, type Tab } from "@/lib/beta/analytics-view";
 import type { Dashboard } from "../../../../../backend/lib/analytics-dashboard";
 import type { Platform } from "../../../../../backend/lib/connections/platforms";
 
 export type AnalyticsData = Dashboard & { period: string; platforms: Array<{ platform: Platform; platform_name: string }> };
-export type Tab = "overview" | "posts" | "growth" | "best-times";
+export type { Tab };
 type Post = Dashboard["posts"][number];
 type Account = Dashboard["accounts"][number];
-
-export const TABS: Array<{ id: Tab; label: string }> = [
-  { id: "overview", label: "Overview" },
-  { id: "posts", label: "Posts" },
-  { id: "growth", label: "Growth" },
-  { id: "best-times", label: "Best times" },
-];
-export const PERIODS = [
-  { id: "last_7_days", label: "7 days" },
-  { id: "last_30_days", label: "30 days" },
-  { id: "last_90_days", label: "90 days" },
-];
-export const POST_SORTS = [
-  { id: "newest", label: "Newest" },
-  { id: "engagements", label: "Engagements" },
-  { id: "rate", label: "Engagement rate" },
-];
 
 const SOURCE_LABELS = { official: "Official", public: "Public", mixed: "Official + public" } as const;
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
