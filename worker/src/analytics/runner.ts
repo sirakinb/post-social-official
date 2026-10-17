@@ -84,7 +84,12 @@ async function fetchOne(deps: MetricsDeps, row: Claimed, now: () => number) {
   const official = deps.platforms.includes(row.platform);
   const reader = deps.publicReaders?.[row.platform] ?? PUBLIC_POST_READERS[row.platform];
   const canReadPublic = publicOn(deps).includes(row.platform) && Boolean(reader) && Boolean(target?.live_url);
-  const readPublic = () => reader!({ apiKey: deps.publicApiKey!, http: deps.http ?? fetch }, target!.live_url!);
+  let learnedHandle: string | undefined;
+  const readPublic = () =>
+    reader!({ apiKey: deps.publicApiKey!, http: deps.http ?? fetch }, target!.live_url!).then((pub) => {
+      learnedHandle = pub.handle;
+      return pub;
+    });
   const deleted = (message: string) => /does not exist|Unsupported get request|not found|video_not_found/i.test(message);
   const failed = (error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
@@ -171,6 +176,14 @@ async function fetchOne(deps: MetricsDeps, row: Claimed, now: () => number) {
      UPDATE public.destinations SET platform_request_id = coalesce($13, platform_request_id) WHERE id = $1 AND $13::text IS NOT NULL`,
     [row.destination_id, ...values, JSON.stringify(result.extra), result.unavailable, nextFetchAt(published, now(), source === "public" ? "public" : "official")?.toISOString() ?? null, row.workspace_id, result.resolvedId ?? null, source],
   );
+  // A YouTube account connected with upload permission only is saved with the placeholder
+  // handle "youtube"; its post's page names the channel, so its counts can be looked up.
+  if (learnedHandle && row.platform === "youtube") {
+    await deps.sql(
+      `UPDATE public.connected_accounts SET handle = $2 WHERE id = $1 AND platform = 'youtube' AND coalesce(handle, '') IN ('', 'youtube')`,
+      [row.connected_account_id, learnedHandle],
+    );
+  }
   // Public post pages also show the author's follower count: saved as today's count when
   // nothing better was saved today (LinkedIn's only source).
   if (followers !== undefined) {

@@ -14,6 +14,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    at: "2026-10-17T03:00:00-04:00",
+    kind: "Fixed",
+    title: "YouTube subscribers and engagement rate in Analytics",
+    body: "Analytics now finds your YouTube channel from your published videos, so your subscriber count, growth and engagement rate fill in, and your channel's @handle shows on Accounts and Analytics. No need to reconnect.",
+  },
+  {
     at: "2026-10-16T15:00:00-04:00",
     kind: "New",
     title: "Analytics",

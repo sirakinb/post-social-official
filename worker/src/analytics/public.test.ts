@@ -43,6 +43,8 @@ describe("public post numbers", () => {
 
   it("YouTube, Facebook and LinkedIn read what their pages show", async () => {
     expect(await PUBLIC_POST_READERS.youtube!(ctx({ viewCountInt: 100, likeCountInt: 9, commentCountInt: 1 }), "u")).toMatchObject({ views: 100, likes: 9, comments: 1 });
+    const yt = await PUBLIC_POST_READERS.youtube!(ctx({ viewCountInt: 5, channel: { id: "UCabc", handle: "@sirakinb" } }), "u");
+    expect(yt.handle).toBe("sirakinb");
     expect(await PUBLIC_POST_READERS.facebook!(ctx({ like_count: 4, comment_count: 1, share_count: 2 }), "u")).toMatchObject({ likes: 4, comments: 1, shares: 2, unavailable: ["views"] });
     expect(await PUBLIC_POST_READERS.linkedin!(ctx({ likeCount: 12, commentCount: 3, author: { followers: 880 } }), "u")).toMatchObject({ likes: 12, comments: 3, followers: 880 });
   });
@@ -65,6 +67,11 @@ describe("public follower counts", () => {
     const y = ctx({ subscriberCount: 450 });
     expect(await publicFollowers(y, { platform: "youtube", handle: null, externalId: "UC123" })).toBe(450);
     expect(y.calls[0].url.searchParams.get("channelId")).toBe("UC123");
+    // Connected with upload permission only: no channel id, so the handle learned from a post.
+    const h = ctx({ subscriberCount: 2910 });
+    expect(await publicFollowers(h, { platform: "youtube", handle: "maker", externalId: "workspace:w1" })).toBe(2910);
+    expect(h.calls[0].url.searchParams.get("handle")).toBe("maker");
+    expect(h.calls[0].url.searchParams.has("channelId")).toBe(false);
     const f = ctx({ followerCount: 77 });
     expect(await publicFollowers(f, { platform: "facebook", handle: null, externalId: "999" })).toBe(77);
     expect(f.calls[0].url.searchParams.get("url")).toBe("https://www.facebook.com/999");
@@ -73,6 +80,8 @@ describe("public follower counts", () => {
   it("returns null when the profile can't be looked up, without spending a read", async () => {
     const c = ctx({});
     expect(await publicFollowers(c, { platform: "linkedin", handle: "x", externalId: "1" })).toBeNull();
+    // A YouTube account whose channel isn't known yet (placeholder handle, no channel id).
+    expect(await publicFollowers(c, { platform: "youtube", handle: "youtube", externalId: "workspace:w1" })).toBeNull();
     expect(await publicFollowers(c, { platform: "instagram", handle: null, externalId: "1" })).toBeNull();
     expect(c.calls).toHaveLength(0);
   });
