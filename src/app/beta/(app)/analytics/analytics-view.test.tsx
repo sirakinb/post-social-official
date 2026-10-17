@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { buildDashboard, type PostRow } from "../../../../../backend/lib/analytics-dashboard";
-import { AnalyticsView, type AnalyticsData, type Tab } from "./analytics-view";
+import { AccountTable, AnalyticsView, type AnalyticsData, type Tab } from "./analytics-view";
 
 const NOW = Date.parse("2026-10-16T12:00:00Z");
 const DAY = 86_400_000;
@@ -61,6 +61,12 @@ describe("Analytics page", () => {
     expect(screen.getByText("@makerx")).toBeInTheDocument();
     expect(screen.getByText("Counting")).toBeInTheDocument(); // X has no follower count yet
     expect(container.textContent).not.toMatch(/—/);
+  });
+
+  it("says a YouTube channel is counted after its first video, until its channel is known", () => {
+    const yt = { ...data.accounts.find((a) => a.id === "x")!, id: "yt", platform: "youtube" as const, handle: null, followers: null };
+    render(<AccountTable accounts={[yt]} showSources={false} />);
+    expect(screen.getByText("After your first video")).toBeInTheDocument();
   });
 
   it("hides where numbers came from unless the viewer may see it", () => {

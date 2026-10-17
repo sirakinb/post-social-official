@@ -275,7 +275,7 @@ export function AccountTable({ accounts, showSources }: { accounts: Account[]; s
                     </span>
                   </div>
                 </td>
-                <td className="px-3 py-2.5 text-right tabular-nums text-ps-text">{a.followers !== null ? count(a.followers) : <span className="text-[11px] text-ps-subtle">Counting</span>}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums text-ps-text">{a.followers !== null ? count(a.followers) : <span className="text-[11px] text-ps-subtle">{a.platform === "youtube" && !a.handle ? "After your first video" : "Counting"}</span>}</td>
                 <td className="px-3 py-2.5 text-right tabular-nums">
                   {change !== null ? <span className={change > 0 ? "text-ps-live-text" : change < 0 ? "text-ps-failed-text" : "text-ps-muted"}>{signed(change)}</span> : <span className="text-[11px] text-ps-subtle">{a.tracking_since ? `Since ${day(a.tracking_since)}` : "Starting"}</span>}
                 </td>

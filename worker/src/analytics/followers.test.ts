@@ -46,11 +46,11 @@ describe("daily follower counts", () => {
     expect(await runFollowerSweep({ sql: db.sql, platforms: ["instagram"], publicPlatforms: ["tiktok"], publicApiKey: null })).toBe(0);
   });
 
-  it("leaves an account alone for a while after its count couldn't be read", async () => {
+  it("leaves an account alone for a while after its profile read failed", async () => {
     const db = fakeSql([{ id: "acct-backoff", workspace_id: "w", platform: "x", handle: "maker", external_account_id: "1" }]);
     let reads = 0;
     let now = Date.parse("2026-10-16T00:00:00Z");
-    const run = () => runFollowerSweep({ sql: db.sql, platforms: [], publicPlatforms: ["x"], publicApiKey: "k", now: () => now, readPublic: async () => (reads++, null) });
+    const run = () => runFollowerSweep({ sql: db.sql, platforms: [], publicPlatforms: ["x"], publicApiKey: "k", now: () => now, readPublic: async () => { reads++; throw new Error("The profile shows no follower count."); } });
     await run();
     await run();
     expect(reads).toBe(1);
@@ -58,5 +58,16 @@ describe("daily follower counts", () => {
     await run();
     expect(reads).toBe(2);
     expect(db.saved).toEqual([]);
+  });
+
+  it("keeps trying an account that can't be looked up yet, so a YouTube channel learned from a post is counted on the next sweep", async () => {
+    const account = { id: "acct-yt", workspace_id: "w", platform: "youtube", handle: "youtube", external_account_id: "workspace:w" };
+    const db = fakeSql([account]);
+    const readPublic = async (_c: unknown, target: { handle: string | null }) => (target.handle === "youtube" ? null : 2910);
+    await runFollowerSweep({ sql: db.sql, platforms: [], publicPlatforms: ["youtube"], publicApiKey: "k", readPublic });
+    expect(db.saved).toEqual([]);
+    account.handle = "sirakinb";
+    await runFollowerSweep({ sql: db.sql, platforms: [], publicPlatforms: ["youtube"], publicApiKey: "k", readPublic });
+    expect(db.saved).toEqual([["acct-yt", "w", 2910, "public"]]);
   });
 });
