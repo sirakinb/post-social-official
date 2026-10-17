@@ -140,3 +140,56 @@ describe("fillGaps", () => {
     expect(result).toMatchObject({ likes: 1, views: 9, unavailable: ["saves"] });
   });
 });
+
+describe("TikTok posts without a public link yet", () => {
+  const statusHttp = (data: Record<string, unknown>) => {
+    const calls: string[] = [];
+    const http = (async (url: string, init?: RequestInit) => {
+      calls.push(`${url} ${init?.body ?? ""}`);
+      return new Response(JSON.stringify({ data, error: { code: "ok" } }), { status: 200 });
+    }) as typeof fetch;
+    return { http, calls };
+  };
+  const base = { publicPlatforms: ["tiktok"] as never, publicApiKey: "k", token: async () => "tok" };
+
+  it("asks TikTok for the post's id, saves its link, then reads its stats", async () => {
+    const db = fakeSql("tiktok", { platform_request_id: "v_pub_file~v2-1", live_url: null });
+    const sql = db.sql;
+    db.sql = (async (q: string, p: unknown[]) => (q.includes("FROM public.destinations d JOIN") ? [{ platform_request_id: "v_pub_file~v2-1", live_url: null, media_type: null, display_name: "Maker", privacy_level: "PUBLIC_TO_EVERYONE", handle: "maker" }] : sql(q, p))) as Sql;
+    const { http, calls } = statusHttp({ status: "PUBLISH_COMPLETE", publicaly_available_post_id: [7123] });
+    let readUrl = "";
+    await runMetricsSweep(deps(db, { ...base, http, publicReaders: { tiktok: async (_c, url) => ((readUrl = url), publicResult({ views: 9 })) } }));
+    expect(calls[0]).toContain("/post/publish/status/fetch/");
+    expect(calls[0]).toContain("v_pub_file~v2-1");
+    expect(readUrl).toBe("https://www.tiktok.com/@maker/video/7123");
+    const link = db.writes.find((w) => w.query.includes("SET live_url"));
+    expect(link?.params).toEqual(["d1", "https://www.tiktok.com/@maker/video/7123", "7123"]);
+    expect(saved(db.writes)?.params[1]).toBe(9);
+  });
+
+  const stub = (target: Record<string, unknown>) => {
+    const db = fakeSql("tiktok", { platform_request_id: null, live_url: null });
+    const sql = db.sql;
+    db.sql = (async (q: string, p: unknown[]) => (q.includes("FROM public.destinations d JOIN") ? [{ platform_request_id: "v_inbox_file~1", live_url: null, media_type: null, display_name: "Maker", privacy_level: null, handle: "maker", ...target }] : sql(q, p))) as Sql;
+    return db;
+  };
+  const stopped = (db: ReturnType<typeof fakeSql>) => db.writes.find((w) => w.query.includes("SET next_fetch_at"))?.params;
+
+  it("keeps checking an inbox draft until the creator posts it", async () => {
+    const db = stub({});
+    await runMetricsSweep(deps(db, { ...base, http: statusHttp({ status: "SEND_TO_USER_INBOX" }).http, publicReaders: { tiktok: async () => { throw new Error("should not read"); } } }));
+    const [, at, error] = stopped(db)!;
+    expect(at).toBe(new Date(NOW + 6 * 3600_000).toISOString());
+    expect(error).toBe("Waiting for TikTok to make this post public.");
+  });
+
+  it("stops for private posts and placeholder usernames without asking TikTok", async () => {
+    for (const target of [{ privacy_level: "SELF_ONLY" }, { handle: "tiktok" }]) {
+      const db = stub(target);
+      const { http, calls } = statusHttp({});
+      await runMetricsSweep(deps(db, { ...base, http }));
+      expect(calls).toHaveLength(0);
+      expect(stopped(db)?.[1]).toBeNull();
+    }
+  });
+});

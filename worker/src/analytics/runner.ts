@@ -4,7 +4,7 @@ import type { Sql } from "../../../backend/lib/access";
 import { DISPLAY_NAMES as PLATFORM_NAMES, type Platform, type Settings } from "../../../backend/lib/connections/platforms";
 import { accountToken } from "../credentials";
 import { FETCHERS, type Counters, type FetchContext, type MetricsResult } from "./platforms";
-import { PUBLIC_POST_FIELDS, PUBLIC_POST_READERS, type PublicContext, type PublicPostResult } from "./public";
+import { PUBLIC_POST_FIELDS, PUBLIC_POST_READERS, realHandle, type PublicContext, type PublicPostResult } from "./public";
 
 export type MetricsDeps = {
   sql: Sql;
@@ -17,6 +17,7 @@ export type MetricsDeps = {
   publicReaders?: Partial<Record<Platform, (ctx: PublicContext, url: string) => Promise<PublicPostResult>>>;
   onlyWorkspace?: string; // tests and manual runs; otherwise every unpaused workspace
   http?: typeof fetch;
+  token?: (accountId: string) => Promise<string>; // tests; otherwise the account's saved access
   fetchers?: Partial<Record<Platform, (ctx: FetchContext) => Promise<MetricsResult>>>;
   now?: () => number;
   log?: (message: string, details?: Record<string, unknown>) => void;
@@ -43,7 +44,7 @@ export function nextFetchAt(publishedAt: number, now: number, source: "official"
 }
 
 type Claimed = { destination_id: string; workspace_id: string; connected_account_id: string; platform: Platform; published_at: string };
-type Target = { platform_request_id: string | null; media_type: string | null; display_name: string; live_url: string | null };
+type Target = { platform_request_id: string | null; media_type: string | null; display_name: string; live_url: string | null; privacy_level: string | null; handle: string | null };
 const COUNTER_KEYS: Array<keyof Counters> = ["views", "likes", "comments", "shares", "saves", "reposts", "quotes"];
 
 // Official numbers win; numbers the official read could not give are taken from the public
@@ -61,6 +62,22 @@ export function fillGaps(official: MetricsResult, pub: PublicPostResult): { resu
   return { result, filled };
 }
 
+type TikTokStatus = { state: string; postId: string | null };
+
+// Where a TikTok upload stands, by its publish id.
+export async function tiktokStatus(http: typeof fetch, token: string, publishId: string): Promise<TikTokStatus> {
+  const response = await http("https://open.tiktokapis.com/v2/post/publish/status/fetch/", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json; charset=UTF-8" },
+    body: JSON.stringify({ publish_id: publishId }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok || (body.error?.code && body.error.code !== "ok")) throw new Error(`TikTok status check failed: ${body.error?.message || body.error?.code || `HTTP ${response.status}`}`);
+  const raw = body.data?.publicaly_available_post_id ?? body.data?.publicly_available_post_id;
+  const postId = Array.isArray(raw) ? raw[0] : raw;
+  return { state: String(body.data?.status ?? ""), postId: postId ? String(postId) : null };
+}
+
 export async function runMetricsSweep(deps: MetricsDeps): Promise<number> {
   const all = [...new Set([...deps.platforms, ...publicOn(deps)])];
   if (!all.length) return 0;
@@ -75,12 +92,42 @@ const publicOn = (deps: MetricsDeps) => (deps.publicApiKey ? deps.publicPlatform
 
 async function fetchOne(deps: MetricsDeps, row: Claimed, now: () => number) {
   const [target] = await deps.sql<Target>(
-    `SELECT d.platform_request_id, d.options->>'media_type' AS media_type, a.display_name, d.live_url
+    `SELECT d.platform_request_id, d.options->>'media_type' AS media_type, a.display_name, d.live_url,
+       d.options->>'privacy_level' AS privacy_level, a.handle
      FROM public.destinations d JOIN public.connected_accounts a ON a.id = d.connected_account_id WHERE d.id = $1`,
     [row.destination_id],
   );
   const later = (at: Date | null, error: string | null) =>
     deps.sql(`UPDATE public.post_metrics SET next_fetch_at = $2, fetch_lease_until = NULL, last_error = $3 WHERE destination_id = $1`, [row.destination_id, at?.toISOString() ?? null, error]);
+  const published = Date.parse(row.published_at);
+  const token = () =>
+    deps.token ? deps.token(row.connected_account_id) : accountToken(deps, { id: row.connected_account_id, platform: row.platform, displayName: target.display_name }, now);
+
+  // TikTok names a post publicly only once it clears TikTok's review, or once the creator
+  // posts an inbox draft from the app, often after Post Social's publish step finished. Ask
+  // TikTok (free, the account's own access) until it does, then read it like any other post.
+  if (row.platform === "tiktok" && target && !target.live_url && target.platform_request_id && !/^\d+$/.test(target.platform_request_id)) {
+    const age = now() - published;
+    const retry = (error: string) => later(age < 7 * DAY ? new Date(now() + 6 * HOUR) : age < 30 * DAY ? new Date(now() + DAY) : null, error);
+    if (target.privacy_level === "SELF_ONLY") return later(null, "Posted privately on TikTok, so it has no public stats.");
+    const handle = realHandle("tiktok", target.handle);
+    if (!handle) return later(null, "TikTok didn't share this account's username, so its posts' stats can't be read. Reconnect TikTok to fix it.");
+    let found: TikTokStatus;
+    try {
+      found = await tiktokStatus(deps.http ?? fetch, await token(), target.platform_request_id);
+    } catch (error) {
+      return retry((error instanceof Error ? error.message : String(error)).slice(0, 500));
+    }
+    if (found.state === "FAILED") return later(null, "TikTok didn't publish this post, so it has no stats.");
+    if (!found.postId) {
+      return retry(age < 30 * DAY ? "Waiting for TikTok to make this post public." : "TikTok never made this post public, so its stats can't be read.");
+    }
+    const photo = target.platform_request_id.startsWith("p_") || target.media_type === "photo";
+    target.live_url = `https://www.tiktok.com/@${handle}/${photo ? "photo" : "video"}/${found.postId}`;
+    target.platform_request_id = found.postId;
+    await deps.sql(`UPDATE public.destinations SET live_url = $2, platform_request_id = $3 WHERE id = $1 AND live_url IS NULL`, [row.destination_id, target.live_url, found.postId]);
+  }
+
   const official = deps.platforms.includes(row.platform);
   const reader = deps.publicReaders?.[row.platform] ?? PUBLIC_POST_READERS[row.platform];
   const canReadPublic = publicOn(deps).includes(row.platform) && Boolean(reader) && Boolean(target?.live_url);
@@ -116,7 +163,7 @@ async function fetchOne(deps: MetricsDeps, row: Claimed, now: () => number) {
       result = await fetcher({
         platformId: target.platform_request_id,
         mediaType: target.media_type ?? undefined,
-        token: () => accountToken(deps, { id: row.connected_account_id, platform: row.platform, displayName: target.display_name }, now),
+        token,
         http: deps.http ?? fetch,
       });
     } catch (error) {
@@ -157,7 +204,6 @@ async function fetchOne(deps: MetricsDeps, row: Claimed, now: () => number) {
     }
   }
 
-  const published = Date.parse(row.published_at);
   if (result.notYetPosted) return later(now() - published < 30 * DAY ? new Date(now() + HOUR) : null, null);
 
   const values = [result.views, result.likes, result.comments, result.shares, result.saves, result.reposts, result.quotes].map((v) => (v === undefined ? null : v));

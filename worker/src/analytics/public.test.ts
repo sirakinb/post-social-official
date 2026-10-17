@@ -83,6 +83,9 @@ describe("public follower counts", () => {
     // A YouTube account whose channel isn't known yet (placeholder handle, no channel id).
     expect(await publicFollowers(c, { platform: "youtube", handle: "youtube", externalId: "workspace:w1" })).toBeNull();
     expect(await publicFollowers(c, { platform: "instagram", handle: null, externalId: "1" })).toBeNull();
+    // Placeholders saved when a platform shared no username are no one's handle.
+    expect(await publicFollowers(c, { platform: "tiktok", handle: "tiktok", externalId: "1" })).toBeNull();
+    expect(await publicFollowers(c, { platform: "instagram", handle: "@Instagram", externalId: "1" })).toBeNull();
     expect(c.calls).toHaveLength(0);
   });
 });

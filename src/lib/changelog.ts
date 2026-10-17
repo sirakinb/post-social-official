@@ -14,6 +14,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    at: "2026-10-17T03:30:00-04:00",
+    kind: "Fixed",
+    title: "TikTok post stats in Analytics",
+    body: "TikTok often makes a post public a little after it's published, and TikTok drafts go public only when you post them from the app. Analytics now keeps checking until TikTok makes the post public, then shows its stats. Earlier TikTok posts that were missing stats are being checked again. Private posts have no public stats.",
+  },
+  {
     at: "2026-10-17T03:00:00-04:00",
     kind: "Fixed",
     title: "YouTube subscribers and engagement rate in Analytics",

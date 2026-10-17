@@ -116,6 +116,13 @@ export const PUBLIC_POST_READERS: Partial<Record<Platform, PostReader>> = {
   },
 };
 
+// The account's real @handle. Accounts whose platform shared no username at connect time are
+// saved with the platform's own name ("tiktok", "youtube") as a stand-in, which is no one's.
+export function realHandle(platform: Platform, handle: string | null | undefined): string | null {
+  const h = handle?.replace(/^@/, "").trim() || null;
+  return h && h.toLowerCase() !== platform ? h : null;
+}
+
 // A profile that was read but shows no count is an error (the read was spent), unlike null.
 function counted(n: number | undefined): number {
   if (n === undefined) throw new Error("The profile shows no follower count.");
@@ -127,7 +134,7 @@ function counted(n: number | undefined): number {
 // no public address, their count is saved from their posts instead; a YouTube channel is
 // known only once a post's page has named it).
 export async function publicFollowers(ctx: PublicContext, target: FollowerTarget): Promise<number | null> {
-  const handle = target.handle?.replace(/^@/, "").trim() || null;
+  const handle = realHandle(target.platform, target.handle);
   switch (target.platform) {
     case "tiktok": {
       if (!handle) return null;
@@ -153,9 +160,8 @@ export async function publicFollowers(ctx: PublicContext, target: FollowerTarget
       // Accounts connected with upload permission only have no channel id ("UC..."); their
       // handle is learned from a post's page instead (until then it is the "youtube" placeholder).
       const channelId = /^UC[\w-]+$/.test(target.externalId) ? target.externalId : null;
-      const known = handle && handle !== "youtube" ? handle : null;
-      if (!channelId && !known) return null;
-      const body = await read(ctx, "/v1/youtube/channel", channelId ? { channelId } : { handle: known! });
+      if (!channelId && !handle) return null;
+      const body = await read(ctx, "/v1/youtube/channel", channelId ? { channelId } : { handle: handle! });
       return counted(num(body.subscriberCount));
     }
     case "facebook": {
