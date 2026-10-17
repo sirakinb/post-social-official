@@ -116,31 +116,38 @@ export const PUBLIC_POST_READERS: Partial<Record<Platform, PostReader>> = {
   },
 };
 
+// A profile that was read but shows no count is an error (the read was spent), unlike null.
+function counted(n: number | undefined): number {
+  if (n === undefined) throw new Error("The profile shows no follower count.");
+  return n;
+}
+
 // An account's follower count from its public profile. null: this platform's profile can't
-// be looked up from what Post Social knows (LinkedIn members share no public address; their
-// count is saved from their posts instead).
+// be looked up yet from what Post Social knows, and no read was spent (LinkedIn members share
+// no public address, their count is saved from their posts instead; a YouTube channel is
+// known only once a post's page has named it).
 export async function publicFollowers(ctx: PublicContext, target: FollowerTarget): Promise<number | null> {
   const handle = target.handle?.replace(/^@/, "").trim() || null;
   switch (target.platform) {
     case "tiktok": {
       if (!handle) return null;
       const body = await read(ctx, "/v1/tiktok/profile", { handle });
-      return num(body.statsV2?.followerCount ?? body.stats?.followerCount) ?? null;
+      return counted(num(body.statsV2?.followerCount ?? body.stats?.followerCount));
     }
     case "instagram": {
       if (!handle) return null;
       const body = await read(ctx, "/v1/instagram/profile", { handle });
-      return num(body.data?.user?.edge_followed_by?.count) ?? null;
+      return counted(num(body.data?.user?.edge_followed_by?.count));
     }
     case "threads": {
       if (!handle) return null;
       const body = await read(ctx, "/v1/threads/profile", { handle });
-      return num(body.follower_count) ?? null;
+      return counted(num(body.follower_count));
     }
     case "x": {
       if (!handle) return null;
       const body = await read(ctx, "/v1/twitter/profile", { handle });
-      return num(body.legacy?.followers_count) ?? null;
+      return counted(num(body.legacy?.followers_count));
     }
     case "youtube": {
       // Accounts connected with upload permission only have no channel id ("UC..."); their
@@ -149,15 +156,15 @@ export async function publicFollowers(ctx: PublicContext, target: FollowerTarget
       const known = handle && handle !== "youtube" ? handle : null;
       if (!channelId && !known) return null;
       const body = await read(ctx, "/v1/youtube/channel", channelId ? { channelId } : { handle: known! });
-      return num(body.subscriberCount) ?? null;
+      return counted(num(body.subscriberCount));
     }
     case "facebook": {
       const body = await read(ctx, "/v1/facebook/profile", { url: `https://www.facebook.com/${target.externalId}` });
-      return num(body.followerCount) ?? null;
+      return counted(num(body.followerCount));
     }
     case "bluesky": {
       const body = await read(ctx, "/v1/bluesky/profile", { handle: handle ?? target.externalId });
-      return num(body.followersCount) ?? null;
+      return counted(num(body.followersCount));
     }
     case "linkedin":
       return null;

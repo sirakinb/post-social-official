@@ -23,7 +23,7 @@ export type FollowerDeps = {
 type Account = { id: string; workspace_id: string; platform: Platform; handle: string | null; external_account_id: string };
 
 const HOUR = 3600_000;
-// Accounts whose count could not be read are left alone for a while, so a broken profile
+// Accounts whose profile read failed are left alone for a while, so a broken profile
 // doesn't cost a read every few minutes. Kept in memory: a restart just tries once more.
 const lastFailure = new Map<string, number>();
 
@@ -49,10 +49,9 @@ export async function runFollowerSweep(deps: FollowerDeps): Promise<number> {
       const followers = official
         ? await blueskyFollowers(deps.http ?? fetch, account.external_account_id)
         : await (deps.readPublic ?? publicFollowers)({ apiKey: deps.publicApiKey!, http: deps.http ?? fetch }, { platform: account.platform, handle: account.handle, externalId: account.external_account_id });
-      if (followers === null) {
-        lastFailure.set(account.id, now());
-        continue;
-      }
+      // Can't be looked up yet (nothing was read): try again on the next sweep, since what's
+      // missing (such as a YouTube channel's handle) can be learned at any time.
+      if (followers === null) continue;
       await deps.sql(
         `INSERT INTO public.account_follower_days (connected_account_id, workspace_id, day, followers, source)
          VALUES ($1, $2, (now() AT TIME ZONE 'UTC')::date, $3, $4)
