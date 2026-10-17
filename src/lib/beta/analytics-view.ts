@@ -2,6 +2,26 @@
 import { resolveAppEnv } from "@/components/environment-badge";
 import type { Platform } from "../../../backend/lib/connections/platforms";
 
+// The page reads these on the server and the tabs on the client, so they live here: values
+// exported from a "use client" file reach server code only as client references.
+export type Tab = "overview" | "posts" | "growth" | "best-times";
+export const TABS: Array<{ id: Tab; label: string }> = [
+  { id: "overview", label: "Overview" },
+  { id: "posts", label: "Posts" },
+  { id: "growth", label: "Growth" },
+  { id: "best-times", label: "Best times" },
+];
+export const PERIODS = [
+  { id: "last_7_days", label: "7 days" },
+  { id: "last_30_days", label: "30 days" },
+  { id: "last_90_days", label: "90 days" },
+];
+export const POST_SORTS = [
+  { id: "newest", label: "Newest" },
+  { id: "engagements", label: "Engagements" },
+  { id: "rate", label: "Engagement rate" },
+];
+
 // Where each number came from (the platform's own API, or its public page) is shown on dev,
 // and on production only to the people named in ADMIN_EMAILS; customers never see it.
 export function canSeeSources(email: string | null | undefined, appEnv = resolveAppEnv(), admins = process.env.ADMIN_EMAILS ?? "") {

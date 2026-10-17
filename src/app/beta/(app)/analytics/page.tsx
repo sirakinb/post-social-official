@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { canSeeSources, sortPosts } from "@/lib/beta/analytics-view";
+import { PERIODS, POST_SORTS, TABS, canSeeSources, sortPosts, type Tab } from "@/lib/beta/analytics-view";
 import { callServer, loadViewer } from "@/lib/beta/workspace";
 import { cn } from "@/lib/utils";
 import { analyticsEnabled } from "../stats-switch";
-import { AnalyticsView, PERIODS, POST_SORTS, TABS, type AnalyticsData, type Tab } from "./analytics-view";
+import { AnalyticsView, type AnalyticsData } from "./analytics-view";
 import { RefreshButton } from "./refresh-button";
 
 export const metadata = { title: "Analytics · Post Social" };
