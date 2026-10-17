@@ -34,6 +34,7 @@ import { mediaLinks } from "../../lib/media/links";
 import { tiktokCreatorInfo } from "../../lib/connections/tiktok-creator";
 import type { Settings } from "../../lib/connections/platforms";
 import { listAnalytics, postAnalytics, refreshAnalytics } from "../../lib/analytics";
+import { analyticsDashboard } from "../../lib/analytics-dashboard";
 import { originAllowed } from "../media/handler";
 import { joinWaitlist } from "../../lib/waitlist";
 import { reportError } from "../../lib/telemetry";
@@ -306,6 +307,7 @@ async function personRoute(deps: ApiHandlerDeps, request: Request) {
           analytics: (sql: Sql, caller: Caller, input: Record<string, unknown>) => listAnalytics(sql, caller, deps.analyticsPlatforms, input as { workspace_id: string }),
           post_analytics: (sql: Sql, caller: Caller, input: Record<string, unknown>) => postAnalytics(sql, caller, deps.analyticsPlatforms, input),
           refresh_analytics: (sql: Sql, caller: Caller, input: Record<string, unknown>) => refreshAnalytics(sql, caller, deps.analyticsPlatforms, input as { workspace_id: string }),
+          analytics_dashboard: (sql: Sql, caller: Caller, input: Record<string, unknown>) => analyticsDashboard(sql, caller, deps.analyticsPlatforms, input as { workspace_id: string }),
         }
       : {};
     const mediaActions = {

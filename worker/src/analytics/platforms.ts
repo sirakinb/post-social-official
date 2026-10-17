@@ -147,9 +147,14 @@ async function linkedin(): Promise<MetricsResult> {
   return { extra: {}, unavailable: ["views", "likes", "comments", "shares"] };
 }
 
-// Bluesky post stats aren't fetched yet.
-async function bluesky(): Promise<MetricsResult> {
-  return { extra: {}, unavailable: ["views", "likes", "comments", "shares"] };
+// Bluesky's public API is free and needs no permission: likes, replies, reposts, quotes
+// and bookmarks for the post's at:// address. Bluesky has no view counts.
+export const BLUESKY_APPVIEW = "https://public.api.bsky.app/xrpc";
+async function bluesky(ctx: FetchContext): Promise<MetricsResult> {
+  const body = await getJson(ctx, `${BLUESKY_APPVIEW}/app.bsky.feed.getPosts?uris=${encodeURIComponent(ctx.platformId)}`);
+  const post = body.posts?.[0];
+  if (!post) throw new Error("Post not found on Bluesky");
+  return { likes: num(post.likeCount), comments: num(post.replyCount), reposts: num(post.repostCount), quotes: num(post.quoteCount), saves: num(post.bookmarkCount), extra: {}, unavailable: [] };
 }
 
 // X charges for every read, so post stats aren't fetched.

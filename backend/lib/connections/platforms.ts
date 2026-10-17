@@ -78,6 +78,19 @@ export function analyticsPlatforms(setting: Settings): Platform[] {
   return raw.split(",").map((p) => p.trim()).filter((p): p is Platform => PLATFORMS.includes(p as Platform));
 }
 
+// Every platform with stats here: read through its own API (ANALYTICS_PLATFORMS) or, until
+// it approves Post Social, from its public pages (ANALYTICS_PUBLIC_PLATFORMS).
+export function statsPlatforms(setting: Settings): Platform[] {
+  let raw = "";
+  try {
+    raw = setting("ANALYTICS_PUBLIC_PLATFORMS");
+  } catch {
+    // not set
+  }
+  const extra = raw.split(",").map((p) => p.trim()).filter((p): p is Platform => PLATFORMS.includes(p as Platform));
+  return [...new Set([...analyticsPlatforms(setting), ...extra])];
+}
+
 export function scopesFor(platform: Platform, setting: Settings) {
   return analyticsPlatforms(setting).includes(platform) ? [...SCOPES[platform], ...ANALYTICS_SCOPES[platform]] : SCOPES[platform];
 }

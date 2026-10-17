@@ -35,6 +35,10 @@ trap 'rm -f "$env_file"' EXIT
   # Post stats only for platforms switched on in this environment (optional; none on prod
   # until each platform's review approves the read permissions).
   echo "ANALYTICS_PLATFORMS=$(secret ANALYTICS_PLATFORMS 2>/dev/null || true)"
+  # Platforms whose stats come from their public pages (ScrapeCreators) until they approve
+  # Post Social; optional, and off without the ScrapeCreators key.
+  echo "ANALYTICS_PUBLIC_PLATFORMS=$(secret ANALYTICS_PUBLIC_PLATFORMS 2>/dev/null || true)"
+  echo "SCRAPECREATORS_API_KEY=$(secret SCRAPECREATORS_API_KEY 2>/dev/null || true)"
   # Monitoring (PostHog): the project's public key; optional.
   echo "POSTHOG_KEY=$(secret POSTHOG_KEY 2>/dev/null || true)"
   # "production" or "dev", matching the website's labels in PostHog.

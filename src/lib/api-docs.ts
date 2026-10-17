@@ -8,7 +8,9 @@ export const MCP_URL = `${SITE}/mcp`;
 export const API_URL = `${SITE}/api/v1`;
 
 export function documentedOperations() {
-  const analyticsPlatforms = (process.env.ANALYTICS_PLATFORMS ?? "").split(",").map((p) => p.trim()).filter(Boolean) as Platform[];
+  // Stats operations are listed when either source is on: platforms' own APIs or public pages.
+  const list = (value: string | undefined) => (value ?? "").split(",").map((p) => p.trim()).filter(Boolean);
+  const analyticsPlatforms = [...new Set([...list(process.env.ANALYTICS_PLATFORMS), ...list(process.env.ANALYTICS_PUBLIC_PLATFORMS)])] as Platform[];
   return availableOperations({ analyticsPlatforms }).map((op) => ({
     name: op.name,
     title: op.title,

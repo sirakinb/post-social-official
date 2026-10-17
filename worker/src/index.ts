@@ -11,6 +11,7 @@ import { refreshDueTokens } from "./tokens";
 import { makePosters } from "./posters";
 import { syncAvatars } from "./avatars";
 import { runNextPublishJob } from "./publish/runner";
+import { runFollowerSweep } from "./analytics/followers";
 import { runMetricsSweep } from "./analytics/runner";
 import { PLATFORMS, type Platform } from "../../backend/lib/connections/platforms";
 import { createTelemetry } from "../../backend/lib/telemetry";
@@ -107,7 +108,15 @@ void every(6 * 60 * 60 * 1000, "orphan sweep", () => removeOrphanedFiles(sql, r2
 void every(60 * 60 * 1000, "sign-in sweep", () => removeExpiredSignIns(sql));
 void every(60 * 1000, "poster sweep", () => makePosters(sql, r2));
 void every(2 * 60 * 1000, "profile picture sweep", () => syncAvatars({ sql, r2, setting: (name) => setting(name), download: deps.download, log }));
-// Post stats, only for platforms switched on here (ANALYTICS_PLATFORMS, e.g. "instagram,threads").
-const analyticsPlatforms = (process.env.ANALYTICS_PLATFORMS ?? "").split(",").map((p) => p.trim()).filter((p): p is Platform => PLATFORMS.includes(p as Platform));
-if (analyticsPlatforms.length) void every(2 * 60 * 1000, "stats sweep", () => runMetricsSweep({ sql, setting: (name) => setting(name), platforms: analyticsPlatforms, log }));
+// Post stats, only for platforms switched on here: through the platform's own API
+// (ANALYTICS_PLATFORMS, e.g. "instagram,threads") and from public pages through
+// ScrapeCreators (ANALYTICS_PUBLIC_PLATFORMS, needs SCRAPECREATORS_API_KEY).
+const platformList = (raw: string | undefined) => (raw ?? "").split(",").map((p) => p.trim()).filter((p): p is Platform => PLATFORMS.includes(p as Platform));
+const analyticsPlatforms = platformList(process.env.ANALYTICS_PLATFORMS);
+const publicPlatforms = platformList(process.env.ANALYTICS_PUBLIC_PLATFORMS);
+const publicApiKey = process.env.SCRAPECREATORS_API_KEY || null;
+if (analyticsPlatforms.length || (publicApiKey && publicPlatforms.length)) {
+  void every(2 * 60 * 1000, "stats sweep", () => runMetricsSweep({ sql, setting: (name) => setting(name), platforms: analyticsPlatforms, publicPlatforms, publicApiKey, log }));
+  void every(10 * 60 * 1000, "follower sweep", () => runFollowerSweep({ sql, platforms: analyticsPlatforms, publicPlatforms, publicApiKey, log }));
+}
 void every(5 * 60 * 1000, "token refresh", () => refreshDueTokens({ sql, setting: (name) => setting(name) }));

@@ -94,3 +94,29 @@ describe("refresh schedule", () => {
     expect(nextFetchAt(now - 91 * 24 * h, now)).toBeNull();
   });
 });
+
+describe("Bluesky stats", () => {
+  it("reads likes, replies, reposts, quotes and bookmarks from Bluesky's public API by the post's address", async () => {
+    const c = ctx("at://did:plc:abc/app.bsky.feed.post/xyz", [
+      (url) => (url.pathname.endsWith("app.bsky.feed.getPosts") ? json({ posts: [{ likeCount: 9, replyCount: 2, repostCount: 3, quoteCount: 1, bookmarkCount: 4 }] }) : undefined),
+    ]);
+    expect(await FETCHERS.bluesky(c)).toMatchObject({ likes: 9, comments: 2, reposts: 3, quotes: 1, saves: 4, unavailable: [] });
+    expect(c.calls).toEqual(["GET /xrpc/app.bsky.feed.getPosts"]);
+  });
+
+  it("a post that's gone reads as not found", async () => {
+    const c = ctx("at://x", [(url) => (url.pathname.endsWith("getPosts") ? json({ posts: [] }) : undefined)]);
+    await expect(FETCHERS.bluesky(c)).rejects.toThrow(/not found/);
+  });
+});
+
+describe("public refresh schedule", () => {
+  it("reads public pages every 3 hours on day one, then daily, then weekly, and stops at 30 days", () => {
+    const now = Date.parse("2026-10-16T12:00:00Z");
+    const h = 3600_000;
+    expect(nextFetchAt(now - 2 * h, now, "public")!.getTime()).toBe(now + 3 * h);
+    expect(nextFetchAt(now - 3 * 24 * h, now, "public")!.getTime()).toBe(now + 24 * h);
+    expect(nextFetchAt(now - 10 * 24 * h, now, "public")!.getTime()).toBe(now + 7 * 24 * h);
+    expect(nextFetchAt(now - 31 * 24 * h, now, "public")).toBeNull();
+  });
+});
