@@ -133,12 +133,16 @@ export function buildDashboard(input: {
   const weekly = weeks.map((w) => {
     const inWeek = posts.filter((p) => weekStart(Date.parse(p.published_at)) === w);
     const total = (key: Counter) => inWeek.reduce((t, p) => t + (p.stats[key] ?? 0), 0);
+    const rate = mean(inWeek.map((p) => p.engagement_rate).filter((r): r is number => r !== null));
     return {
       week_start: isoDay(w),
       likes: total("likes"),
       comments: total("comments"),
       shares: total("shares") + total("reposts") + total("quotes"),
+      saves: total("saves"),
       views: total("views"),
+      // Mean of the week's rated posts, like the summary's; null when none are rated.
+      engagement_rate: rate === null ? null : round(rate),
       posts_by_platform: inWeek.reduce<Record<string, number>>((acc, p) => ((acc[p.platform] = (acc[p.platform] ?? 0) + 1), acc), {}),
     };
   });

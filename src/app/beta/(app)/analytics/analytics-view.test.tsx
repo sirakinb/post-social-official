@@ -56,7 +56,7 @@ describe("Analytics page", () => {
 
   it("overview shows totals and every account, with no dashes for missing numbers", () => {
     const { container } = view("overview");
-    expect(screen.getByText("Engagement rate")).toBeInTheDocument();
+    expect(screen.getAllByText("Engagement rate")[0]).toBeInTheDocument();
     expect(screen.getByText("Maker IG")).toBeInTheDocument();
     expect(screen.getByText("@makerx")).toBeInTheDocument();
     expect(screen.getByText("Counting")).toBeInTheDocument(); // X has no follower count yet
@@ -83,13 +83,17 @@ describe("Analytics page", () => {
     expect(within(x).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["900 views", "4 likes", "1 replies", "2 reposts", "3 bookmarks"]);
   });
 
-  it("engagement lines can be switched on and off", () => {
+  it("engagement shows one measure at a time as weekly bars, split by type", () => {
     view("overview");
-    const likes = screen.getByRole("button", { name: "Likes" });
-    expect(likes).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(likes);
-    expect(likes).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByRole("button", { name: "Views" })).toHaveAttribute("aria-pressed", "false");
+    const measures = screen.getByRole("group", { name: "Measure" });
+    expect(within(measures).getAllByRole("button").map((b) => b.textContent)).toEqual(["Engagements", "Views", "Engagement rate"]);
+    expect(within(measures).getByRole("button", { name: "Engagements" })).toHaveAttribute("aria-pressed", "true");
+    const chart = screen.getByRole("img", { name: "Engagements by week" });
+    // This week: Instagram 40 likes + 10 comments, X 4 likes + 1 reply + 2 reposts + 3 bookmarks.
+    expect(within(chart).getByLabelText(/^Week of Oct 12: 44 likes, 11 comments, 2 reposts & shares, 3 saves$/)).toBeInTheDocument();
+    fireEvent.click(within(measures).getByRole("button", { name: "Views" }));
+    expect(screen.getByRole("img", { name: "Views by week" })).toBeInTheDocument();
+    expect(screen.getByText("Highest week 900")).toBeInTheDocument();
   });
 
   it("growth shows accounts with counts, and best times fills in from rated posts", () => {

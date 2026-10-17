@@ -145,54 +145,78 @@ function Overview({ data, topPosts, showSources }: { data: AnalyticsData; topPos
   );
 }
 
-const LINES = [
+const PARTS = [
   { key: "likes", label: "Likes", color: "#E4579B" },
   { key: "comments", label: "Comments", color: "#4C8DF6" },
   { key: "shares", label: "Reposts & shares", color: "#2FC6B8" },
-  { key: "views", label: "Views", color: "#C9A227" },
+  { key: "saves", label: "Saves", color: "#9B7BF0" },
 ] as const;
 
-// Weekly totals with lines that can be switched on and off. Views (much larger numbers)
-// start hidden so the other lines stay readable.
+type Week = AnalyticsData["weekly"][number];
+type Measure = "engagements" | "views" | "rate";
+
+// One measure at a time, as weekly bars on its own scale: likes are usually many times
+// comments and shares, so on shared lines the smaller ones would flatten out. Engagement
+// bars are split by type, so the total and its mix show together.
 export function EngagementChart({ weekly, hasViews }: { weekly: AnalyticsData["weekly"]; hasViews: boolean }) {
-  const lines = LINES.filter((l) => l.key !== "views" || hasViews);
-  const [shown, setShown] = useState<Set<string>>(() => new Set(["likes", "comments", "shares"]));
-  const active = lines.filter((l) => shown.has(l.key));
-  const max = Math.max(1, ...weekly.flatMap((w) => active.map((l) => w[l.key])));
-  const W = 600;
-  const H = 180;
-  const x = (i: number) => (weekly.length <= 1 ? W / 2 : 30 + (i * (W - 60)) / (weekly.length - 1));
-  const y = (v: number) => H - 20 - (v / max) * (H - 40);
+  const hasRate = weekly.some((w) => w.engagement_rate !== null);
+  const measures: Array<{ id: Measure; label: string }> = [
+    { id: "engagements", label: "Engagements" },
+    ...(hasViews ? [{ id: "views" as const, label: "Views" }] : []),
+    ...(hasRate ? [{ id: "rate" as const, label: "Engagement rate" }] : []),
+  ];
+  const [measure, setMeasure] = useState<Measure>("engagements");
+  const parts = PARTS.filter((p) => p.key !== "saves" || weekly.some((w) => w.saves > 0));
+  const total = (w: Week) => (measure === "views" ? w.views : measure === "rate" ? (w.engagement_rate ?? 0) : parts.reduce((t, p) => t + w[p.key], 0));
+  const max = Math.max(...weekly.map(total));
+  const show = (n: number) => (measure === "rate" ? percent(n) : count(n));
+  const label = (w: Week) =>
+    `Week of ${day(w.week_start)}: ` +
+    (measure === "engagements"
+      ? parts.map((p) => `${count(w[p.key])} ${p.label.toLowerCase()}`).join(", ")
+      : measure === "views"
+        ? `${count(w.views)} views`
+        : w.engagement_rate === null ? "no rated posts" : `${percent(w.engagement_rate)} engagement rate`);
   return (
     <div className="px-4 py-3">
-      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Lines">
-        {lines.map((l) => (
-          <button
-            key={l.key}
-            type="button"
-            aria-pressed={shown.has(l.key)}
-            onClick={() => setShown((prev) => {
-              const next = new Set(prev);
-              if (next.has(l.key)) next.delete(l.key);
-              else next.add(l.key);
-              return next;
-            })}
-            className={cn("inline-flex h-6 items-center gap-1.5 rounded-full border px-2 text-[11px]", shown.has(l.key) ? "border-ps-line-strong text-ps-text" : "border-ps-line text-ps-subtle")}
-          >
-            <span className="h-2 w-2 rounded-full" style={{ background: shown.has(l.key) ? l.color : "transparent", border: `1.5px solid ${l.color}` }} />
-            {l.label}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex gap-1 rounded-lg border border-ps-line p-0.5 text-[11px]" role="group" aria-label="Measure">
+          {measures.map((m) => (
+            <button key={m.id} type="button" aria-pressed={measure === m.id} onClick={() => setMeasure(m.id)} className={cn("rounded-md px-2 py-0.5", measure === m.id ? "bg-ps-segment text-ps-text" : "text-ps-muted hover:text-ps-text")}>
+              {m.label}
+            </button>
+          ))}
+        </div>
+        {max > 0 && <span className="text-[11px] tabular-nums text-ps-subtle">Highest week {show(max)}</span>}
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="mt-2 h-auto w-full" role="img" aria-label="Engagement by week">
-        {[0.25, 0.5, 0.75, 1].map((f) => <line key={f} x1={20} x2={W - 20} y1={y(max * f)} y2={y(max * f)} className="stroke-ps-line" strokeWidth={1} />)}
-        {active.map((l) => (
-          <polyline key={l.key} fill="none" stroke={l.color} strokeWidth={2.25} strokeLinejoin="round" strokeLinecap="round" points={weekly.map((w, i) => `${x(i)},${y(w[l.key])}`).join(" ")} />
-        ))}
-        {weekly.map((w, i) => (weekly.length <= 8 || i % 2 === 0) && (
-          <text key={w.week_start} x={x(i)} y={H - 4} textAnchor="middle" className="fill-ps-subtle text-[10px]">{day(w.week_start)}</text>
-        ))}
-      </svg>
+      {max > 0 ? (
+        <div className="mt-3 flex h-36 items-end gap-1.5" role="img" aria-label={`${measures.find((m) => m.id === measure)!.label} by week`}>
+          {weekly.map((w) => (
+            <div key={w.week_start} className="flex h-full max-w-14 flex-1 flex-col justify-end mx-auto" title={label(w)} aria-label={label(w)}>
+              {measure === "engagements" ? (
+                parts.map((p) => (w[p.key] ? <div key={p.key} style={{ height: `${(w[p.key] / max) * 100}%`, background: p.color }} className="w-full first:rounded-t-sm" /> : null))
+              ) : (
+                <div style={{ height: `${(total(w) / max) * 100}%`, background: measure === "views" ? "#C9A227" : "#2FC6B8" }} className="w-full rounded-t-sm" />
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <Empty>No engagement in this period yet.</Empty>
+      )}
+      <div className="mt-1 flex gap-1.5 text-[10px] text-ps-subtle">
+        {weekly.map((w, i) => <span key={w.week_start} className="flex-1 text-center">{weekly.length <= 8 || i % 2 === 0 ? day(w.week_start) : ""}</span>)}
+      </div>
+      {measure === "engagements" && (
+        <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-ps-muted">
+          {parts.map((p) => (
+            <li key={p.key} className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full" style={{ background: p.color }} />
+              {p.label}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
