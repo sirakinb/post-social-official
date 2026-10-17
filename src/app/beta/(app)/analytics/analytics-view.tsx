@@ -145,54 +145,87 @@ function Overview({ data, topPosts, showSources }: { data: AnalyticsData; topPos
   );
 }
 
-const LINES = [
+// Engagement parts, stacked bottom to top. Likes far outnumber the rest, so they are shown
+// as parts of one weekly total rather than as separate lines on one scale.
+const PARTS = [
   { key: "likes", label: "Likes", color: "#E4579B" },
   { key: "comments", label: "Comments", color: "#4C8DF6" },
   { key: "shares", label: "Reposts & shares", color: "#2FC6B8" },
-  { key: "views", label: "Views", color: "#C9A227" },
+  { key: "saves", label: "Saves", color: "#9B7BEA" },
 ] as const;
+type Week = AnalyticsData["weekly"][number];
+const METRICS = [
+  { id: "engagements", label: "Engagements", title: "Engagements" },
+  { id: "views", label: "Views", title: "Views" },
+  { id: "rate", label: "Rate", title: "Engagement rate" },
+] as const;
+type Metric = (typeof METRICS)[number]["id"];
 
-// Weekly totals with lines that can be switched on and off. Views (much larger numbers)
-// start hidden so the other lines stay readable.
+// One measure at a time, as weekly bars on its own scale, so large numbers (likes, views)
+// never flatten small ones. Each bar's exact numbers show on hover.
 export function EngagementChart({ weekly, hasViews }: { weekly: AnalyticsData["weekly"]; hasViews: boolean }) {
-  const lines = LINES.filter((l) => l.key !== "views" || hasViews);
-  const [shown, setShown] = useState<Set<string>>(() => new Set(["likes", "comments", "shares"]));
-  const active = lines.filter((l) => shown.has(l.key));
-  const max = Math.max(1, ...weekly.flatMap((w) => active.map((l) => w[l.key])));
-  const W = 600;
-  const H = 180;
-  const x = (i: number) => (weekly.length <= 1 ? W / 2 : 30 + (i * (W - 60)) / (weekly.length - 1));
-  const y = (v: number) => H - 20 - (v / max) * (H - 40);
+  const metrics = METRICS.filter((m) => m.id !== "views" || hasViews);
+  const [metric, setMetric] = useState<Metric>("engagements");
+  const total = (w: Week) => PARTS.reduce((t, p) => t + w[p.key], 0);
+  const value = (w: Week) => (metric === "engagements" ? total(w) : metric === "views" ? w.views : w.engagement_rate ?? 0);
+  const max = Math.max(...weekly.map(value));
+  const show = (n: number) => (metric === "rate" ? percent(n) : count(n));
+  const tip = (w: Week) => {
+    const head = `Week of ${day(w.week_start)}`;
+    if (metric === "engagements") return [head, ...PARTS.map((p) => `${p.label}: ${count(w[p.key])}`), `Total: ${count(total(w))}`].join("\n");
+    if (metric === "views") return `${head}\nViews: ${count(w.views)}`;
+    return `${head}\n${w.engagement_rate === null ? "No rate yet" : `Engagement rate: ${percent(w.engagement_rate)}`}`;
+  };
   return (
     <div className="px-4 py-3">
-      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Lines">
-        {lines.map((l) => (
-          <button
-            key={l.key}
-            type="button"
-            aria-pressed={shown.has(l.key)}
-            onClick={() => setShown((prev) => {
-              const next = new Set(prev);
-              if (next.has(l.key)) next.delete(l.key);
-              else next.add(l.key);
-              return next;
-            })}
-            className={cn("inline-flex h-6 items-center gap-1.5 rounded-full border px-2 text-[11px]", shown.has(l.key) ? "border-ps-line-strong text-ps-text" : "border-ps-line text-ps-subtle")}
-          >
-            <span className="h-2 w-2 rounded-full" style={{ background: shown.has(l.key) ? l.color : "transparent", border: `1.5px solid ${l.color}` }} />
-            {l.label}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex gap-1 rounded-lg border border-ps-line bg-ps-surface p-1 text-[11px]" role="group" aria-label="Measure">
+          {metrics.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              aria-pressed={metric === m.id}
+              onClick={() => setMetric(m.id)}
+              className={cn("rounded-md px-2.5 py-1", metric === m.id ? "bg-ps-segment text-ps-text" : "text-ps-muted hover:text-ps-text")}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+        {metric === "engagements" && (
+          <ul className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-ps-muted" aria-label="Parts">
+            {PARTS.map((p) => (
+              <li key={p.key} className="inline-flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full" style={{ background: p.color }} />
+                {p.label}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="mt-2 h-auto w-full" role="img" aria-label="Engagement by week">
-        {[0.25, 0.5, 0.75, 1].map((f) => <line key={f} x1={20} x2={W - 20} y1={y(max * f)} y2={y(max * f)} className="stroke-ps-line" strokeWidth={1} />)}
-        {active.map((l) => (
-          <polyline key={l.key} fill="none" stroke={l.color} strokeWidth={2.25} strokeLinejoin="round" strokeLinecap="round" points={weekly.map((w, i) => `${x(i)},${y(w[l.key])}`).join(" ")} />
-        ))}
-        {weekly.map((w, i) => (weekly.length <= 8 || i % 2 === 0) && (
-          <text key={w.week_start} x={x(i)} y={H - 4} textAnchor="middle" className="fill-ps-subtle text-[10px]">{day(w.week_start)}</text>
-        ))}
-      </svg>
+      {max <= 0 ? (
+        <p className="py-14 text-center text-[13px] text-ps-subtle">{metric === "rate" ? "No engagement rates in this period yet." : "Nothing to show in this period yet."}</p>
+      ) : (
+        <div className="mt-3">
+          <p className="text-[10px] tabular-nums text-ps-subtle">{show(max)}</p>
+          <div className="flex h-40 items-end gap-1.5 border-b border-ps-line" role="img" aria-label={`${METRICS.find((m) => m.id === metric)!.title} by week`}>
+            {weekly.map((w) => (
+              <div key={w.week_start} className="flex h-full flex-1 flex-col justify-end" title={tip(w)} data-testid="week-bar">
+                {metric === "engagements" ? (
+                  [...PARTS].reverse().map((p) => w[p.key] ? <div key={p.key} style={{ height: `${(w[p.key] / max) * 100}%`, background: p.color }} className="w-full first:rounded-t-sm" /> : null)
+                ) : value(w) ? (
+                  <div style={{ height: `${(value(w) / max) * 100}%`, background: metric === "views" ? "#C9A227" : "#8B5CF6" }} className="w-full rounded-t-sm" />
+                ) : null}
+              </div>
+            ))}
+          </div>
+          <div className="mt-1 flex gap-1.5">
+            {weekly.map((w, i) => (
+              <span key={w.week_start} className="flex-1 text-center text-[10px] text-ps-subtle">{weekly.length <= 8 || i % 2 === 0 ? day(w.week_start) : ""}</span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

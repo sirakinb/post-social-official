@@ -1,9 +1,9 @@
 // The account's public @handle, as API results show it (without the @), or null when the
 // platform gives Post Social none: LinkedIn's sign-in shares only the member's name,
-// Facebook Pages are known by their name, and YouTube's upload permission can't read the
-// channel. A placeholder saved when a platform returned no username (its own name) is
-// not a handle either.
-const NO_HANDLE = new Set(["linkedin", "facebook", "youtube"]);
+// and Facebook Pages are known by their name. A placeholder saved when a platform returned
+// no username (its own name, such as "youtube" until a YouTube account's handle is learned
+// from its videos) is not a handle either.
+const NO_HANDLE = new Set(["linkedin", "facebook"]);
 
 export function publicHandle(platform: string, handle: string | null | undefined): string | null {
   if (NO_HANDLE.has(platform) || typeof handle !== "string") return null;

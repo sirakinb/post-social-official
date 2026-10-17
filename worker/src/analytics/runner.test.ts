@@ -52,6 +52,18 @@ describe("stats sweep sources", () => {
     expect(followers.params).toEqual(["a1", "w1", 900]);
   });
 
+  it("a YouTube video teaches its account the channel's @handle and name", async () => {
+    const db = fakeSql("youtube", { platform_request_id: "v1", live_url: "https://youtube.com/shorts/v1" });
+    await runMetricsSweep(deps(db, {
+      publicPlatforms: ["youtube"],
+      publicApiKey: "k",
+      publicReaders: { youtube: async () => publicResult({ views: 40, likes: 3, comments: 0, channel: { handle: "makerchannel", name: "Maker Channel" } }) },
+    }));
+    const update = db.writes.find((w) => w.query.includes("UPDATE public.connected_accounts SET handle"))!;
+    expect(update.params).toEqual(["a1", "makerchannel", "Maker Channel"]);
+    expect(update.query).toContain("platform = 'youtube'");
+  });
+
   it("without the ScrapeCreators key, public platforms aren't claimed at all", async () => {
     const db = fakeSql("instagram", { platform_request_id: "ig1", live_url: "u" });
     const n = await runMetricsSweep(deps(db, { publicPlatforms: ["instagram"], publicApiKey: null }));

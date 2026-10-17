@@ -68,7 +68,9 @@ describe("account handles in API results", () => {
     expect(publicHandle("bluesky", "name.bsky.social")).toBe("name.bsky.social");
     expect(publicHandle("linkedin", "Emmanuel Jones")).toBeNull();
     expect(publicHandle("facebook", "My Page")).toBeNull();
+    // YouTube's handle is learned from its videos; until then the placeholder is no handle.
     expect(publicHandle("youtube", "youtube")).toBeNull();
+    expect(publicHandle("youtube", "buildwithaiaki")).toBe("buildwithaiaki");
     // A placeholder saved when the platform returned no username.
     expect(publicHandle("tiktok", "tiktok")).toBeNull();
     expect(publicHandle("threads", "")).toBeNull();

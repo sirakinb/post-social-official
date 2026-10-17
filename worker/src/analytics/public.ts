@@ -12,7 +12,9 @@ export type PublicContext = {
   http: typeof fetch;
 };
 
-export type PublicPostResult = MetricsResult & { followers?: number };
+// channel: the YouTube channel a video belongs to. Upload-only access can't read the
+// channel, so this is how a YouTube account learns its own @handle and name.
+export type PublicPostResult = MetricsResult & { followers?: number; channel?: { handle: string; name: string | null } };
 
 export type FollowerTarget = { platform: Platform; handle: string | null; externalId: string };
 
@@ -95,7 +97,10 @@ export const PUBLIC_POST_READERS: Partial<Record<Platform, PostReader>> = {
   },
   async youtube(ctx, url) {
     const body = await read(ctx, "/v1/youtube/video", { url });
-    return result({ views: num(body.viewCountInt), likes: num(body.likeCountInt), comments: num(body.commentCountInt) });
+    const out = result({ views: num(body.viewCountInt), likes: num(body.likeCountInt), comments: num(body.commentCountInt) });
+    const handle = typeof body.channel?.handle === "string" ? body.channel.handle.replace(/^@/, "").trim() : "";
+    if (handle) out.channel = { handle, name: typeof body.channel?.title === "string" && body.channel.title.trim() ? body.channel.title.trim() : null };
+    return out;
   },
   async linkedin(ctx, url) {
     const body = await read(ctx, "/v1/linkedin/post", { url });
@@ -115,7 +120,9 @@ export const PUBLIC_POST_READERS: Partial<Record<Platform, PostReader>> = {
 // be looked up from what Post Social knows (LinkedIn members share no public address; their
 // count is saved from their posts instead).
 export async function publicFollowers(ctx: PublicContext, target: FollowerTarget): Promise<number | null> {
-  const handle = target.handle?.replace(/^@/, "").trim() || null;
+  // A placeholder saved in place of a handle (the platform's own name) is no handle.
+  const bare = target.handle?.replace(/^@/, "").trim() || null;
+  const handle = bare && bare !== target.platform ? bare : null;
   switch (target.platform) {
     case "tiktok": {
       if (!handle) return null;
@@ -138,7 +145,11 @@ export async function publicFollowers(ctx: PublicContext, target: FollowerTarget
       return num(body.legacy?.followers_count) ?? null;
     }
     case "youtube": {
-      const body = await read(ctx, "/v1/youtube/channel", { channelId: target.externalId });
+      // Accounts connected with upload-only access have no channel id, only the @handle
+      // learned from their videos (runner.ts); until then there is nothing to look up.
+      const by: Record<string, string> | null = handle ? { handle } : /^UC[\w-]{20,}$/.test(target.externalId) ? { channelId: target.externalId } : null;
+      if (!by) return null;
+      const body = await read(ctx, "/v1/youtube/channel", by);
       return num(body.subscriberCount) ?? null;
     }
     case "facebook": {

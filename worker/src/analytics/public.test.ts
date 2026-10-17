@@ -47,6 +47,12 @@ describe("public post numbers", () => {
     expect(await PUBLIC_POST_READERS.linkedin!(ctx({ likeCount: 12, commentCount: 3, author: { followers: 880 } }), "u")).toMatchObject({ likes: 12, comments: 3, followers: 880 });
   });
 
+  it("YouTube: a video names its channel's @handle and name", async () => {
+    const r = await PUBLIC_POST_READERS.youtube!(ctx({ viewCountInt: 5, channel: { id: "UCabc", handle: "@makerchannel", title: "Maker Channel" } }), "u");
+    expect(r.channel).toEqual({ handle: "makerchannel", name: "Maker Channel" });
+    expect((await PUBLIC_POST_READERS.youtube!(ctx({ viewCountInt: 5 }), "u")).channel).toBeUndefined();
+  });
+
   it("has no Bluesky reader (its own API is free and read directly)", () => {
     expect(PUBLIC_POST_READERS.bluesky).toBeUndefined();
   });
@@ -63,15 +69,25 @@ describe("public follower counts", () => {
     expect(await publicFollowers(c, { platform: "tiktok", handle: "@maker", externalId: "1" })).toBe(12000);
     expect(c.calls[0].url.searchParams.get("handle")).toBe("maker");
     const y = ctx({ subscriberCount: 450 });
-    expect(await publicFollowers(y, { platform: "youtube", handle: null, externalId: "UC123" })).toBe(450);
-    expect(y.calls[0].url.searchParams.get("channelId")).toBe("UC123");
+    expect(await publicFollowers(y, { platform: "youtube", handle: null, externalId: "UCWH3hing1Qb4LnkRfQdxsxQ" })).toBe(450);
+    expect(y.calls[0].url.searchParams.get("channelId")).toBe("UCWH3hing1Qb4LnkRfQdxsxQ");
     const f = ctx({ followerCount: 77 });
     expect(await publicFollowers(f, { platform: "facebook", handle: null, externalId: "999" })).toBe(77);
     expect(f.calls[0].url.searchParams.get("url")).toBe("https://www.facebook.com/999");
   });
 
+  it("looks a YouTube channel up by the @handle learned from its videos", async () => {
+    const y = ctx({ subscriberCount: 1200 });
+    expect(await publicFollowers(y, { platform: "youtube", handle: "makerchannel", externalId: "workspace-grant-key" })).toBe(1200);
+    expect(y.calls[0].url.searchParams.get("handle")).toBe("makerchannel");
+    expect(y.calls[0].url.searchParams.get("channelId")).toBeNull();
+  });
+
   it("returns null when the profile can't be looked up, without spending a read", async () => {
     const c = ctx({});
+    // Upload-only YouTube: a placeholder handle and no channel id.
+    expect(await publicFollowers(c, { platform: "youtube", handle: "youtube", externalId: "workspace-grant-key" })).toBeNull();
+    expect(await publicFollowers(c, { platform: "tiktok", handle: "tiktok", externalId: "1" })).toBeNull();
     expect(await publicFollowers(c, { platform: "linkedin", handle: "x", externalId: "1" })).toBeNull();
     expect(await publicFollowers(c, { platform: "instagram", handle: null, externalId: "1" })).toBeNull();
     expect(c.calls).toHaveLength(0);

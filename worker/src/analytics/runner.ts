@@ -97,6 +97,7 @@ async function fetchOne(deps: MetricsDeps, row: Claimed, now: () => number) {
   let result: MetricsResult;
   let source: "official" | "public" | "mixed" = "official";
   let followers: number | undefined;
+  let channel: PublicPostResult["channel"];
   if (official && (target?.platform_request_id || !canReadPublic)) {
     if (!target?.platform_request_id) return later(null, "The platform did not return an id for this post, so its stats cannot be read.");
     // Stats reads count against the account's platform limits like any other call.
@@ -121,7 +122,7 @@ async function fetchOne(deps: MetricsDeps, row: Claimed, now: () => number) {
       if (deleted(message) || !canReadPublic) return failed(error);
       try {
         const pub = await readPublic();
-        ({ followers } = pub);
+        ({ followers, channel } = pub);
         result = { ...pub, extra: {} };
         source = "public";
       } catch {
@@ -138,13 +139,14 @@ async function fetchOne(deps: MetricsDeps, row: Claimed, now: () => number) {
           source = "mixed";
         }
         followers = pub.followers;
+        channel = pub.channel;
       }
     }
   } else {
     if (!canReadPublic) return later(null, "This post has no public address, so its stats cannot be read.");
     try {
       const pub = await readPublic();
-      ({ followers } = pub);
+      ({ followers, channel } = pub);
       result = { ...pub, extra: {} };
       source = "public";
     } catch (error) {
@@ -171,6 +173,15 @@ async function fetchOne(deps: MetricsDeps, row: Claimed, now: () => number) {
      UPDATE public.destinations SET platform_request_id = coalesce($13, platform_request_id) WHERE id = $1 AND $13::text IS NOT NULL`,
     [row.destination_id, ...values, JSON.stringify(result.extra), result.unavailable, nextFetchAt(published, now(), source === "public" ? "public" : "official")?.toISOString() ?? null, row.workspace_id, result.resolvedId ?? null, source],
   );
+  // A YouTube video names its channel: the account takes the channel's @handle and name, which
+  // upload-only access can't read, so its subscriber count can be looked up (followers.ts).
+  if (channel && row.platform === "youtube") {
+    await deps.sql(
+      `UPDATE public.connected_accounts SET handle = $2, display_name = coalesce($3, display_name), updated_at = now()
+       WHERE id = $1 AND platform = 'youtube' AND (handle IS DISTINCT FROM $2 OR display_name IS DISTINCT FROM coalesce($3, display_name))`,
+      [row.connected_account_id, channel.handle, channel.name],
+    );
+  }
   // Public post pages also show the author's follower count: saved as today's count when
   // nothing better was saved today (LinkedIn's only source).
   if (followers !== undefined) {

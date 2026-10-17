@@ -83,13 +83,21 @@ describe("Analytics page", () => {
     expect(within(x).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["900 views", "4 likes", "1 replies", "2 reposts", "3 bookmarks"]);
   });
 
-  it("engagement lines can be switched on and off", () => {
+  it("the weekly chart shows one measure at a time, engagements split into their parts", () => {
     view("overview");
-    const likes = screen.getByRole("button", { name: "Likes" });
-    expect(likes).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(likes);
-    expect(likes).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByRole("button", { name: "Views" })).toHaveAttribute("aria-pressed", "false");
+    const engagements = screen.getByRole("button", { name: "Engagements" });
+    expect(engagements).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("img", { name: "Engagements by week" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Parts")).toHaveTextContent(/Likes.*Comments.*Reposts & shares.*Saves/);
+    const bars = screen.getAllByTestId("week-bar");
+    expect(bars.at(-1)!.getAttribute("title")).toMatch(/Likes: \d[\s\S]*Total: \d/);
+    fireEvent.click(screen.getByRole("button", { name: "Views" }));
+    expect(screen.getByRole("button", { name: "Views" })).toHaveAttribute("aria-pressed", "true");
+    expect(engagements).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("img", { name: "Views by week" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Parts")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Rate" }));
+    expect(screen.getByRole("img", { name: "Engagement rate by week" })).toBeInTheDocument();
   });
 
   it("growth shows accounts with counts, and best times fills in from rated posts", () => {
