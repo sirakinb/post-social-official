@@ -69,6 +69,8 @@ describe("account handles in API results", () => {
     expect(publicHandle("linkedin", "Emmanuel Jones")).toBeNull();
     expect(publicHandle("facebook", "My Page")).toBeNull();
     expect(publicHandle("youtube", "youtube")).toBeNull();
+    // Learned from a post's page once stats are read.
+    expect(publicHandle("youtube", "sirakinb")).toBe("sirakinb");
     // A placeholder saved when the platform returned no username.
     expect(publicHandle("tiktok", "tiktok")).toBeNull();
     expect(publicHandle("threads", "")).toBeNull();

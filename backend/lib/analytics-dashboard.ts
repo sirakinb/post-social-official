@@ -5,6 +5,7 @@
 // Only numbers a platform reported are used: a post or account with no number for
 // something adds nothing to it (no invented zeros), so totals cover what exists.
 import { ApiError, membership, type Caller, type Sql } from "./access";
+import { publicHandle } from "./connections/handles";
 import { DISPLAY_NAMES, type Platform } from "./connections/platforms";
 
 export const DASHBOARD_PERIODS = { last_7_days: 7, last_30_days: 30, last_90_days: 90 } as const;
@@ -132,12 +133,16 @@ export function buildDashboard(input: {
   const weekly = weeks.map((w) => {
     const inWeek = posts.filter((p) => weekStart(Date.parse(p.published_at)) === w);
     const total = (key: Counter) => inWeek.reduce((t, p) => t + (p.stats[key] ?? 0), 0);
+    const rate = mean(inWeek.map((p) => p.engagement_rate).filter((r): r is number => r !== null));
     return {
       week_start: isoDay(w),
       likes: total("likes"),
       comments: total("comments"),
       shares: total("shares") + total("reposts") + total("quotes"),
+      saves: total("saves"),
       views: total("views"),
+      // Mean of the week's rated posts, like the summary's; null when none are rated.
+      engagement_rate: rate === null ? null : round(rate),
       posts_by_platform: inWeek.reduce<Record<string, number>>((acc, p) => ((acc[p.platform] = (acc[p.platform] ?? 0) + 1), acc), {}),
     };
   });
@@ -165,7 +170,7 @@ export function buildDashboard(input: {
       platform: a.platform,
       platform_name: DISPLAY_NAMES[a.platform],
       name: a.display_name,
-      handle: a.handle,
+      handle: publicHandle(a.platform, a.handle),
       avatar_url: a.avatar_url,
       followers: current ?? null,
       change_7_days: change(now7),

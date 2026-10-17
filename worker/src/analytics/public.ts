@@ -12,7 +12,9 @@ export type PublicContext = {
   http: typeof fetch;
 };
 
-export type PublicPostResult = MetricsResult & { followers?: number };
+// handle: the author's public @handle, when the page shows it. YouTube's upload permission
+// can't read the channel, so a post's page is where Post Social learns which channel it is.
+export type PublicPostResult = MetricsResult & { followers?: number; handle?: string };
 
 export type FollowerTarget = { platform: Platform; handle: string | null; externalId: string };
 
@@ -95,7 +97,10 @@ export const PUBLIC_POST_READERS: Partial<Record<Platform, PostReader>> = {
   },
   async youtube(ctx, url) {
     const body = await read(ctx, "/v1/youtube/video", { url });
-    return result({ views: num(body.viewCountInt), likes: num(body.likeCountInt), comments: num(body.commentCountInt) });
+    const out = result({ views: num(body.viewCountInt), likes: num(body.likeCountInt), comments: num(body.commentCountInt) });
+    const handle = typeof body.channel?.handle === "string" ? body.channel.handle.replace(/^@/, "").trim() : "";
+    if (handle) out.handle = handle;
+    return out;
   },
   async linkedin(ctx, url) {
     const body = await read(ctx, "/v1/linkedin/post", { url });
@@ -138,7 +143,12 @@ export async function publicFollowers(ctx: PublicContext, target: FollowerTarget
       return num(body.legacy?.followers_count) ?? null;
     }
     case "youtube": {
-      const body = await read(ctx, "/v1/youtube/channel", { channelId: target.externalId });
+      // Accounts connected with upload permission only have no channel id ("UC..."); their
+      // handle is learned from a post's page instead (until then it is the "youtube" placeholder).
+      const channelId = /^UC[\w-]+$/.test(target.externalId) ? target.externalId : null;
+      const known = handle && handle !== "youtube" ? handle : null;
+      if (!channelId && !known) return null;
+      const body = await read(ctx, "/v1/youtube/channel", channelId ? { channelId } : { handle: known! });
       return num(body.subscriberCount) ?? null;
     }
     case "facebook": {
