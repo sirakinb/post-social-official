@@ -4,15 +4,16 @@ import { createAdminAlert } from "../alerts";
 import { runStatsHealthCheck, type HealthDeps } from "./health";
 import { publicFollowers } from "./public";
 
-type PostRow = { platform: string; tracked: number; failing: number; example: string | null };
+type PostRow = { platform: string; tracked: number; failing: number; example: string | null; overdue?: number };
+type AccountRow = { platform: string; handle: string | null; external_account_id: string };
 
-function setup(extra: Partial<HealthDeps> & { posts?: PostRow[] } = {}) {
+function setup(extra: Partial<HealthDeps> & { posts?: PostRow[]; noFollowers?: AccountRow[] } = {}) {
   const alerts: Array<{ subject: string; lines: string[] }> = [];
   const recorded: Array<Record<string, unknown>> = [];
   const queries: Array<{ query: string; params: unknown[] }> = [];
   const sql = (async (query: string, params: unknown[]) => {
     queries.push({ query, params });
-    return extra.posts ?? [];
+    return query.includes("account_follower_days") ? (extra.noFollowers ?? []) : (extra.posts ?? []);
   }) as Sql;
   const deps: HealthDeps = {
     sql,
@@ -84,6 +85,31 @@ describe("daily stats health check", () => {
     const { CANARY_PROFILES } = await import("./health");
     const { realHandle } = await import("./public");
     for (const target of Object.values(CANARY_PROFILES)) if (target!.handle) expect(realHandle(target!.platform, target!.handle)).toBeTruthy();
+  });
+
+  it("alerts when a recent post's stats stop updating", async () => {
+    const { deps, queries } = setup({ posts: [{ platform: "instagram", tracked: 10, failing: 0, example: null, overdue: 2 }] });
+    const result = await runStatsHealthCheck(deps);
+    expect(result.problems).toEqual(["Instagram: stats for 2 recent posts haven't updated in over 6 hours."]);
+    expect(queries[0].query).toMatch(/NOT w\.publishing_paused/); // paused workspaces aren't swept
+  });
+
+  it("alerts on accounts with no follower count for two days, skipping LinkedIn and accounts that can't be looked up yet", async () => {
+    const { deps, queries } = setup({
+      publicPlatforms: ["instagram", "youtube", "facebook", "linkedin"],
+      noFollowers: [
+        { platform: "instagram", handle: "adzoai", external_account_id: "1789" },
+        { platform: "youtube", handle: "youtube", external_account_id: "" }, // handle not learned yet
+        { platform: "facebook", handle: null, external_account_id: "61550" },
+      ],
+    });
+    const result = await runStatsHealthCheck(deps);
+    expect(result.problems).toEqual([
+      "Instagram: 1 connected account has no follower count for 2 days (@adzoai).",
+      "Facebook Pages: 1 connected account has no follower count for 2 days (id 61550).",
+    ]);
+    const followerQuery = queries.find((q) => q.query.includes("account_follower_days"))!;
+    expect(followerQuery.params[0]).toEqual(["instagram", "youtube", "facebook"]);
   });
 
   it("says so when public stats are on but the ScrapeCreators key is missing", async () => {
