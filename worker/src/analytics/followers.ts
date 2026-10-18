@@ -68,7 +68,7 @@ export async function runFollowerSweep(deps: FollowerDeps): Promise<number> {
   return saved;
 }
 
-async function blueskyFollowers(http: typeof fetch, did: string): Promise<number | null> {
+export async function blueskyFollowers(http: typeof fetch, did: string): Promise<number | null> {
   const response = await http(`${BLUESKY_APPVIEW}/app.bsky.actor.getProfile?actor=${encodeURIComponent(did)}`);
   if (!response.ok) throw new Error(`Bluesky profile: HTTP ${response.status}`);
   const body = (await response.json()) as { followersCount?: unknown };

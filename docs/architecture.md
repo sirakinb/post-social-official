@@ -71,7 +71,12 @@ connecting accounts stay with a person). Environments and promotion: `environmen
    where both are on, official numbers win, gaps are filled from the public page, and a
    failed official read falls back to it. Follower counts are saved once a day per account
    (`account_follower_days`). Production shows where numbers came from only to the emails in
-   the website's `ADMIN_EMAILS`.
+   the website's `ADMIN_EMAILS`. Once a day (and 10 minutes after each worker start) a stats
+   health check (`worker/src/analytics/health.ts`) reads one well-known public profile per
+   switched-on platform, looks for a platform where many of every user's recent posts can't
+   be read, and warns when ScrapeCreators credits drop below `ALERT_CREDITS_BELOW` (default
+   1000). Problems go to the admin only: an error in PostHog and an email to `ALERT_EMAIL`
+   (sent through Resend, `RESEND_API_KEY`). Users are never emailed.
 
 Supported now: Instagram (image, Reel, carousel), Facebook Pages (text, link, image, Reel,
 video), Threads (text, image, video, carousel), YouTube (video), TikTok (video and photos, posted
