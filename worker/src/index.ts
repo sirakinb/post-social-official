@@ -13,6 +13,8 @@ import { syncAvatars } from "./avatars";
 import { runNextPublishJob } from "./publish/runner";
 import { runFollowerSweep } from "./analytics/followers";
 import { runMetricsSweep } from "./analytics/runner";
+import { runStatsHealthCheck } from "./analytics/health";
+import { createAdminAlert } from "./alerts";
 import { PLATFORMS, type Platform } from "../../backend/lib/connections/platforms";
 import { createTelemetry } from "../../backend/lib/telemetry";
 
@@ -118,5 +120,20 @@ const publicApiKey = process.env.SCRAPECREATORS_API_KEY || null;
 if (analyticsPlatforms.length || (publicApiKey && publicPlatforms.length)) {
   void every(2 * 60 * 1000, "stats sweep", () => runMetricsSweep({ sql, setting: (name) => setting(name), platforms: analyticsPlatforms, publicPlatforms, publicApiKey, log }));
   void every(10 * 60 * 1000, "follower sweep", () => runFollowerSweep({ sql, platforms: analyticsPlatforms, publicPlatforms, publicApiKey, log }));
+}
+// Daily stats health check for every switched-on platform, alerting only the admin
+// (ALERT_EMAIL, plus PostHog). First run 10 minutes after start, so a deploy is checked.
+if (analyticsPlatforms.length || publicPlatforms.length) {
+  const alert = createAdminAlert({ to: process.env.ALERT_EMAIL || null, resendKey: process.env.RESEND_API_KEY || null, environment: process.env.APP_ENV ?? "dev", telemetry, log });
+  const check = async () => {
+    const result = await runStatsHealthCheck({
+      sql, platforms: analyticsPlatforms, publicPlatforms, publicApiKey, alert,
+      creditsWarnBelow: Number(process.env.ALERT_CREDITS_BELOW ?? 1000),
+      record: (properties) => telemetry.capture("stats health check", properties),
+    });
+    log("stats health check", { problems: result.problems.length, creditsLeft: result.creditsLeft });
+    return 0;
+  };
+  setTimeout(() => void every(24 * 60 * 60 * 1000, "stats health check", check), 10 * 60 * 1000).unref();
 }
 void every(5 * 60 * 1000, "token refresh", () => refreshDueTokens({ sql, setting: (name) => setting(name) }));

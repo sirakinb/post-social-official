@@ -10,6 +10,7 @@ export const SCRAPECREATORS_BASE = "https://api.scrapecreators.com";
 export type PublicContext = {
   apiKey: string;
   http: typeof fetch;
+  onCredits?: (remaining: number) => void; // told the account's credits left after each read
 };
 
 // handle: the author's public @handle, when the page shows it. YouTube's upload permission
@@ -35,6 +36,8 @@ async function read(ctx: PublicContext, path: string, params: Record<string, str
   } catch {
     // keep empty
   }
+  const left = num(body.credits_remaining);
+  if (left !== undefined) ctx.onCredits?.(left);
   if (!response.ok || body.success === false) {
     const message = String(body.message ?? body.error ?? `HTTP ${response.status}`);
     // A post that's gone (deleted or made private) reads as "not found".

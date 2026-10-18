@@ -39,6 +39,11 @@ trap 'rm -f "$env_file"' EXIT
   # Post Social; optional, and off without the ScrapeCreators key.
   echo "ANALYTICS_PUBLIC_PLATFORMS=$(secret ANALYTICS_PUBLIC_PLATFORMS 2>/dev/null || true)"
   echo "SCRAPECREATORS_API_KEY=$(secret SCRAPECREATORS_API_KEY 2>/dev/null || true)"
+  # Daily stats health check alerts, for the admin only: the address, the Resend key to
+  # email it, and the ScrapeCreators credit level to warn below. All optional.
+  echo "ALERT_EMAIL=$(secret ALERT_EMAIL 2>/dev/null || true)"
+  echo "RESEND_API_KEY=$(secret RESEND_API_KEY 2>/dev/null || true)"
+  echo "ALERT_CREDITS_BELOW=$(secret ALERT_CREDITS_BELOW 2>/dev/null || echo 1000)"
   # Monitoring (PostHog): the project's public key; optional.
   echo "POSTHOG_KEY=$(secret POSTHOG_KEY 2>/dev/null || true)"
   # "production" or "dev", matching the website's labels in PostHog.
