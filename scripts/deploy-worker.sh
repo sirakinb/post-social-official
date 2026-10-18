@@ -47,6 +47,14 @@ trap 'rm -f "$env_file"' EXIT
   echo "WORKER_CONCURRENCY=3"
 } > "$env_file"
 
+# A secret that can't be read lands empty and quietly switches stats off, so say what's on.
+setting_of() { grep "^$1=" "$env_file" | cut -d= -f2-; }
+echo "Analytics: official=[$(setting_of ANALYTICS_PLATFORMS)] public=[$(setting_of ANALYTICS_PUBLIC_PLATFORMS)] ScrapeCreators key: $([[ -n "$(setting_of SCRAPECREATORS_API_KEY)" ]] && echo set || echo MISSING)"
+if [[ "$target" == "prod" && ( -z "$(setting_of ANALYTICS_PUBLIC_PLATFORMS)" || -z "$(setting_of SCRAPECREATORS_API_KEY)" ) ]]; then
+  echo "Post stats would be off on prod: a secret above could not be read. Try again." >&2
+  exit 1
+fi
+
 scripts/insforge-env.sh "$target" compute deploy worker --name post-social-worker \
   --port 8080 --cpu shared-1x --memory 1024 --region iad --env-file "$env_file" \
   --always-on  # it polls for jobs and gets no web traffic to wake it
