@@ -117,6 +117,8 @@ const platformList = (raw: string | undefined) => (raw ?? "").split(",").map((p)
 const analyticsPlatforms = platformList(process.env.ANALYTICS_PLATFORMS);
 const publicPlatforms = platformList(process.env.ANALYTICS_PUBLIC_PLATFORMS);
 const publicApiKey = process.env.SCRAPECREATORS_API_KEY || null;
+// Said at every start, so a deploy that lost these settings shows up in the logs.
+log("analytics", { official: analyticsPlatforms, public: publicApiKey ? publicPlatforms : [], publicKey: Boolean(publicApiKey) });
 if (analyticsPlatforms.length || (publicApiKey && publicPlatforms.length)) {
   void every(2 * 60 * 1000, "stats sweep", () => runMetricsSweep({ sql, setting: (name) => setting(name), platforms: analyticsPlatforms, publicPlatforms, publicApiKey, log }));
   void every(10 * 60 * 1000, "follower sweep", () => runFollowerSweep({ sql, platforms: analyticsPlatforms, publicPlatforms, publicApiKey, log }));
