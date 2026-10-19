@@ -58,9 +58,17 @@ describe("LandingPage", () => {
     expect(document.body.textContent).not.toMatch(/\d+%|free trial|testimonial|eight destinations/i);
   });
 
-  it("keeps a place for the product video above the problem section", () => {
+  it("plays the product video above the problem section, with captions", () => {
     render(<LandingPage />);
-    const video = screen.getByRole("img", { name: "Product video coming soon" });
+    const video = document.querySelector("#demo video") as HTMLVideoElement;
+    expect(video).not.toBeNull();
+    expect(video).toHaveAttribute("controls");
+    expect(video).toHaveAttribute("preload", "none");
+    expect(video).toHaveAttribute("poster", "/landing/product-video-poster.webp");
+    expect(video.querySelector("source")).toHaveAttribute("src", "/landing/product-video.mp4");
+    expect(video.querySelector("track")).toHaveAttribute("src", "/landing/product-video.vtt");
+    expect(video.getAttribute("aria-label")?.length).toBeGreaterThan(10);
+    expect(screen.queryByRole("img", { name: "Product video coming soon" })).toBeNull();
     const problem = screen.getByRole("heading", { name: "Stop rebuilding the same post five times." });
     expect(video.compareDocumentPosition(problem) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
