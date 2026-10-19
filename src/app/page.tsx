@@ -10,22 +10,24 @@ import { cn } from "@/lib/utils";
 import { Fraunces, GeistPixelGrid } from "./fonts";
 
 // The landing. It opens at dusk (lanterns leaving the lake the way posts leave for every
-// platform), then walks through what Post Social does, with real screens from the app.
+// platform) with the product video, then keeps to a few short sections: posting from your AI,
+// three steps, the dashboard, platforms and questions. Light on app screens on purpose.
 
 type Platform = "tiktok" | "instagram" | "facebook" | "threads" | "youtube" | "linkedin" | "bluesky" | "x";
 
-
-
-const PLATFORMS: { platform: Platform; name: string; text: string }[] = [
-  { platform: "tiktok", name: "TikTok", text: "Videos and photo posts, or send a draft to your TikTok inbox to finish in the app." },
-  { platform: "instagram", name: "Instagram", text: "Photos, Reels and carousels of up to 10 for professional accounts." },
-  { platform: "facebook", name: "Facebook Pages", text: "Text, links, photos, Reels and videos on the Pages you manage." },
-  { platform: "threads", name: "Threads", text: "Text, photos, videos and carousels of up to 20." },
-  { platform: "youtube", name: "YouTube", text: "Shorts uploaded straight to your channel." },
-  { platform: "linkedin", name: "LinkedIn", text: "Text, photos, galleries of up to 20 and videos on your profile." },
-  { platform: "bluesky", name: "Bluesky", text: "Text, up to 4 photos or a video, with links, mentions and hashtags." },
-  { platform: "x", name: "X", text: "Text, up to 4 photos or a video, posted to your account." },
+const PLATFORMS: { platform: Platform; name: string }[] = [
+  { platform: "tiktok", name: "TikTok" },
+  { platform: "instagram", name: "Instagram" },
+  { platform: "facebook", name: "Facebook Pages" },
+  { platform: "threads", name: "Threads" },
+  { platform: "youtube", name: "YouTube" },
+  { platform: "linkedin", name: "LinkedIn" },
+  { platform: "bluesky", name: "Bluesky" },
+  { platform: "x", name: "X" },
 ];
+
+// What people say about Post Social. The section stays hidden until there is at least one real quote.
+const TESTIMONIALS: { quote: string; name: string; role: string }[] = [];
 
 const NAV = [
   { label: "Use with AI", href: "#agents" },
@@ -66,15 +68,15 @@ function Check() {
   );
 }
 
-function Screen({ src, alt, priority, className }: { src: string; alt: string; priority?: boolean; className?: string }) {
+function Screen({ src, alt, width = 2400, height = 1500, priority, className }: { src: string; alt: string; width?: number; height?: number; priority?: boolean; className?: string }) {
   return (
     <div className={cn("lp-screen relative", className)}>
-      <Image src={src} alt={alt} width={2400} height={1500} priority={priority} sizes="(max-width: 768px) 100vw, 60vw" className="block h-auto w-full rounded-[14px]" />
+      <Image src={src} alt={alt} width={width} height={height} priority={priority} sizes="(max-width: 768px) 100vw, 60vw" className="block h-auto w-full rounded-[14px]" />
     </div>
   );
 }
 
-function Feature({ label, title, text, points, src, alt, flip }: { label: string; title: React.ReactNode; text: string; points: string[]; src: string; alt: string; flip?: boolean }) {
+function Feature({ label, title, text, points, src, alt, width, height, flip }: { label: string; title: React.ReactNode; text: string; points: string[]; src: string; alt: string; width?: number; height?: number; flip?: boolean }) {
   return (
     <div className={cn("grid items-center gap-10 md:gap-14", flip ? "md:grid-cols-[3fr_2fr]" : "md:grid-cols-[2fr_3fr]")}>
       <div className={cn(flip && "md:order-2")}>
@@ -90,7 +92,7 @@ function Feature({ label, title, text, points, src, alt, flip }: { label: string
           ))}
         </ul>
       </div>
-      <Screen src={src} alt={alt} className={cn(flip && "md:order-1")} />
+      <Screen src={src} alt={alt} width={width} height={height} className={cn(flip && "md:order-1")} />
     </div>
   );
 }
@@ -160,7 +162,19 @@ export default function LandingPage() {
             Works with Claude, ChatGPT or any AI agent
           </p>
 
-          <Screen src="/landing/app-home.webp" alt="The Post Social home screen: what's going out next, what just went live, and what needs you" priority className="mt-16 w-full max-w-5xl sm:mt-20" />
+          <div id="demo" className="lp-screen relative mt-16 w-full max-w-5xl scroll-mt-8 sm:mt-20">
+            <video
+              controls
+              playsInline
+              preload="none"
+              poster="/landing/product-video-poster.webp"
+              aria-label="Aki, the founder, shows Post Social: connect your accounts, connect your AI, then ask Claude to schedule a post"
+              className="block aspect-video w-full rounded-[14px] border border-white/[0.06] bg-[#140f24]"
+            >
+              <source src="/landing/product-video.mp4" type="video/mp4" />
+              <track kind="captions" src="/landing/product-video.vtt" srcLang="en" label="English" default />
+            </video>
+          </div>
         </div>
       </section>
 
@@ -185,63 +199,12 @@ export default function LandingPage() {
                 ))}
               </ul>
             </div>
-            <div className="lp-card p-5 md:p-6" role="img" aria-label="Example chat: someone asks Claude to post a clip to TikTok, Instagram and Threads at 6 PM, and Claude confirms it is scheduled.">
-              <div className="space-y-4 text-[15px]">
-                <div className="ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-[#9B6CFF]/25 px-4 py-3">Post today&apos;s behind-the-scenes clip to TikTok, Instagram and Threads at 6pm.</div>
-                <div className="flex max-w-[92%] gap-3">
-                  <AiMark app="claude" size={16} />
-                  <div className="rounded-2xl rounded-tl-md border border-white/10 bg-black/25 px-4 py-3">
-                    <p>Done. It&apos;s scheduled for 6:00 PM on all three.</p>
-                    <div className="mt-3 flex items-center gap-1.5">
-                      <PlatformCardIcon platform="tiktok" size="sm" />
-                      <PlatformCardIcon platform="instagram" size="sm" />
-                      <PlatformCardIcon platform="threads" size="sm" />
-                      <span className="ml-1.5 text-xs text-[#FAF6F0]/50">Today, 6:00 PM</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ===== Product video ===== */}
-        <section id="demo" className="mx-auto max-w-6xl scroll-mt-8 px-5 pb-24 sm:px-8 md:pb-32">
-          <div className="lp-screen relative mx-auto max-w-5xl">
-            <video
-              controls
-              playsInline
-              preload="none"
-              poster="/landing/product-video-poster.webp"
-              aria-label="Aki, the founder, shows Post Social: connect your accounts, connect your AI, then ask Claude to schedule a post"
-              className="block aspect-video w-full rounded-[14px] border border-white/[0.06] bg-[#140f24]"
-            >
-              <source src="/landing/product-video.mp4" type="video/mp4" />
-              <track kind="captions" src="/landing/product-video.vtt" srcLang="en" label="English" default />
-            </video>
-          </div>
-        </section>
-
-        {/* ===== The problem ===== */}
-        <section className="lp-band">
-          <div className="mx-auto max-w-6xl px-5 py-20 sm:px-8 md:py-24">
-            <Label>One post. Every channel.</Label>
-            <h2 className="lp-h2 mt-3 max-w-3xl">Stop rebuilding the same post five times.</h2>
-            <p className="mt-5 max-w-2xl leading-relaxed text-[#FAF6F0]/65 md:text-lg">
-              No more downloading and re-uploading, switching tabs, or wondering whether a post went live. Post Social keeps your media, channels, timing and results together in one place.
-            </p>
-            <div className="mt-10 grid gap-4 sm:grid-cols-3">
-              {[
-                { title: "Less tab switching", text: "Write once, choose your channels, done." },
-                { title: "Ready for each platform", text: "Sizes, lengths and captions checked before anything goes out." },
-                { title: "One clear history", text: "Every post, every channel, and what happened to it." },
-              ].map((item) => (
-                <div key={item.title} className="lp-card px-5 py-5">
-                  <p className="font-medium">{item.title}</p>
-                  <p className="mt-1.5 text-sm leading-relaxed text-[#FAF6F0]/60">{item.text}</p>
-                </div>
-              ))}
-            </div>
+            <Screen
+              src="/landing/claude-chat.webp"
+              width={1525}
+              height={1372}
+              alt="A real Claude chat: asked to post a clip to Adzo's TikTok at 6pm, Claude uploads it, asks who should see it, drafts a caption and checks the post with Post Social"
+            />
           </div>
         </section>
 
@@ -271,61 +234,61 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* ===== Features, with real screens ===== */}
+        {/* ===== Features ===== */}
         <section id="features" className="mx-auto max-w-6xl scroll-mt-8 space-y-24 px-5 pb-24 sm:px-8 md:space-y-32 md:pb-32">
           <Feature
-            label="Create"
-            title="Write it once. It fits everywhere."
-            text="Drop in a video or photos, write the caption, and pick your channels. The preview shows each platform's version, and Post Social checks lengths, sizes and formats before anything goes out."
-            points={["Live preview for every channel", "Per-platform options, like TikTok privacy and disclosures", "Your media library, ready to reuse"]}
-            src="/landing/app-create.webp"
-            alt="The Post Social composer with a video, caption, chosen channels and a live preview"
+            label="You stay in charge"
+            title="You decide what your AI can do."
+            text="Post Social shows up in Claude as a connector. Choose which actions it can take on its own and which ones wait for your OK, and disconnect it whenever you like."
+            points={["Let it read your posts and stats freely", "Make publishing ask you first", "Disconnect in one click"]}
+            src="/landing/claude-connector.webp"
+            width={2000}
+            height={1150}
+            alt="Post Social's tool permissions inside Claude, where each tool can be always allowed, need approval, or be blocked"
           />
           <Feature
             flip
-            label="Calendar"
-            title="Schedule it, then get back to your work."
-            text="See the week ahead at a glance, with every post shown as its picture and the channels it goes to. Batch your content, then move on."
-            points={["Week, two-week and list views", "Posts from you and from your AI, side by side", "Reschedule in a couple of clicks"]}
+            label="Prefer clicking?"
+            title="The dashboard does it all, too."
+            text="Write a post once, pick your channels, and schedule it on the calendar. Every channel reports back, and anything that needs you is flagged in plain words."
+            points={["A live preview for every channel", "One calendar for posts from you and your AI", "A clear status for every channel"]}
             src="/landing/app-calendar.webp"
             alt="The Post Social calendar showing a week of scheduled posts"
-          />
-          <Feature
-            label="Activity"
-            title="Know what happened after you hit publish."
-            text="Every channel reports back on its own: live, scheduled, or needs attention. When something needs you, it says what and why, in plain words."
-            points={["A status for every channel", "Who posted it: you, Claude, ChatGPT or an automation", "A clear next step when something needs you"]}
-            src="/landing/app-activity.webp"
-            alt="The Post Social activity feed with a status for each post and channel"
-          />
-          <Feature
-            flip
-            label="Accounts & AI"
-            title="Your channels and your AI, in one place."
-            text="Connect each platform through its official sign-in, then connect Claude or ChatGPT in a click. See exactly which apps can post for you, and switch any of them off at any time."
-            points={["Official sign-in for every platform", "Connected AI apps and API keys, with what each can do", "Disconnect anything, any time"]}
-            src="/landing/app-accounts.webp"
-            alt="Post Social connected accounts and connected AI apps"
           />
         </section>
 
         {/* ===== Platforms ===== */}
         <section id="platforms" className="lp-band scroll-mt-8">
-          <div className="mx-auto max-w-6xl px-5 py-24 sm:px-8 md:py-28">
+          <div className="mx-auto max-w-6xl px-5 py-20 text-center sm:px-8 md:py-24">
             <Label>Platforms</Label>
-            <h2 className="lp-h2 mt-3 max-w-3xl">Starting with the places your content already lives.</h2>
-            <p className="mt-5 max-w-2xl leading-relaxed text-[#FAF6F0]/65 md:text-lg">Eight platforms, one workspace. Each connects through the platform&apos;s official sign-in.</p>
-            <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <h2 className="lp-h2 mx-auto mt-3 max-w-3xl">Eight platforms, one place.</h2>
+            <p className="mx-auto mt-5 max-w-2xl leading-relaxed text-[#FAF6F0]/65 md:text-lg">Each connects through the platform&apos;s official sign-in. We never see your passwords.</p>
+            <ul aria-label="Supported platforms" className="mt-10 flex flex-wrap justify-center gap-3">
               {PLATFORMS.map((p) => (
-                <div key={p.platform} className="lp-card p-6 transition-colors hover:border-white/20">
-                  <PlatformCardIcon platform={p.platform} />
-                  <h3 className="mt-4 text-lg font-medium">{p.name}</h3>
-                  <p className="mt-2 text-[15px] leading-relaxed text-[#FAF6F0]/60">{p.text}</p>
-                </div>
+                <li key={p.platform} className="lp-card flex items-center gap-2.5 py-2 pl-2 pr-4 text-[15px]">
+                  <PlatformCardIcon platform={p.platform} size="sm" />
+                  {p.name}
+                </li>
               ))}
-            </div>
+            </ul>
           </div>
         </section>
+
+        {TESTIMONIALS.length > 0 && (
+          <section id="people" className="mx-auto max-w-6xl scroll-mt-8 px-5 pt-24 sm:px-8 md:pt-32">
+            <h2 className="lp-h2 text-center">What people say</h2>
+            <div className="mt-12 columns-1 gap-4 sm:columns-2 lg:columns-3">
+              {TESTIMONIALS.map((t) => (
+                <figure key={t.name} className="lp-card mb-4 break-inside-avoid p-6">
+                  <blockquote className="leading-relaxed text-[#FAF6F0]/80">&ldquo;{t.quote}&rdquo;</blockquote>
+                  <figcaption className="mt-4 text-sm text-[#FAF6F0]/55">
+                    <span className="font-medium text-[#FAF6F0]">{t.name}</span>, {t.role}
+                  </figcaption>
+                </figure>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* ===== FAQ ===== */}
         <section id="faq" className="mx-auto max-w-3xl scroll-mt-8 px-5 py-24 sm:px-8 md:py-32">
