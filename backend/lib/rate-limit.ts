@@ -16,7 +16,7 @@ export const LIMITS = {
   // Per email AND address, so a stranger can't use up someone's attempts; the email-only
   // caps are a high backstop against attacks spread over many addresses.
   signin_ip: { limit: 20, windowSeconds: 600 },
-  signin_email_ip: { limit: 10, windowSeconds: 900 },
+  signin_email_ip: { limit: 5, windowSeconds: 60 }, // 5 wrong tries, then wait a minute
   signin_email: { limit: 100, windowSeconds: 3600 },
   signup_ip: { limit: 10, windowSeconds: 3600 },
   reset_request_ip: { limit: 10, windowSeconds: 3600 },
