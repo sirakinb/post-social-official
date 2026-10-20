@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { IdentifyViewer } from "@/components/analytics/identify";
+import { RegisterServiceWorker } from "@/components/register-service-worker";
 import { Sidebar } from "@/components/beta/sidebar";
 import { ThemeToggle } from "@/components/beta/theme-toggle";
 import { loadViewer } from "@/lib/beta/workspace";
@@ -29,6 +30,7 @@ export default async function BetaAppLayout({ children }: { children: React.Reac
     // data-ph-mask: session replays hide this app's text and pictures (instrumentation-client.ts).
     <div data-ph-mask data-theme={theme} className="flex min-h-screen flex-col bg-ps-ground font-sans text-[13px] text-ps-text md:flex-row">
       <IdentifyViewer userId={viewer.id} role={workspace?.role ?? "member"} />
+      <RegisterServiceWorker />
       <Sidebar
         viewer={{ name: viewer.name, email: viewer.email, avatarUrl: viewer.avatarUrl }}
         plan={plan}
@@ -37,7 +39,7 @@ export default async function BetaAppLayout({ children }: { children: React.Reac
       />
       <div className="min-w-0 flex-1">
         {/* The light/dark switch, top right above every page. */}
-        <div className="flex justify-end px-8 pt-4">
+        <div className="flex justify-end px-4 sm:px-8 pt-4">
           <ThemeToggle initial={theme} />
         </div>
         {children}

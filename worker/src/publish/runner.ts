@@ -13,6 +13,7 @@ import { publishX } from "./x";
 import { publishLinkedIn } from "./linkedin";
 import { publishInstagram, publishThreads } from "./meta";
 import { publishTikTok } from "./tiktok";
+import { instagramPhotoLink } from "./instagram-photos";
 import { tiktokPhotoLinks } from "./tiktok-photos";
 import { coverImage, videoFrame } from "./covers";
 import { failureMessage } from "./support";
@@ -116,6 +117,7 @@ export async function runNextPublishJob(deps: PublishDeps): Promise<boolean> {
         await deps.sql(`UPDATE public.publish_jobs SET lease_expires_at = now() + make_interval(secs => $2) WHERE ${fence}`, [job.id, LEASE_SECONDS]);
       },
       tiktokPhotoLinks: b.platform === "tiktok" ? tiktokPhotoLinks({ r2: deps.r2, site: tiktokMediaSite(deps.setting), http: deps.http }) : undefined,
+      instagramPhotoLink: b.platform === "instagram" ? instagramPhotoLink({ r2: deps.r2, http: deps.http }) : undefined,
       cover: b.media.some((m) => m.media_type === "video")
         ? { image: b.cover ? coverImage({ r2: deps.r2, http: deps.http }, b.cover) : undefined, frame: videoFrame(b.media.find((m) => m.media_type === "video")!.url) }
         : undefined,

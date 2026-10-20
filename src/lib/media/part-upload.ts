@@ -20,8 +20,13 @@ export async function uploadParts(options: {
   signal?: AbortSignal;
   concurrency?: number;
   retries?: number;
+  // Resuming: parts already stored are skipped. onPartDone records each new one, so a
+  // later resume can skip it too.
+  completed?: UploadedPart[];
+  onPartDone?: (part: UploadedPart) => void;
 }): Promise<UploadedPart[]> {
-  const { file, partSize, parts, putPart, onProgress, concurrency = 4, retries = 2 } = options;
+  const { file, partSize, parts, putPart, onProgress, onPartDone, concurrency = 4, retries = 2 } = options;
+  const already = new Map((options.completed ?? []).map((p) => [p.part_number, p]));
   // Internal controller: cancelled by the caller, or by us when a part fails for good so the
   // other in-flight parts stop instead of racing the server-side cancel.
   const controller = new AbortController();
@@ -35,8 +40,10 @@ export async function uploadParts(options: {
     onProgress?.(file.size ? Math.min(total / file.size, 1) : 1);
   };
 
-  const results: UploadedPart[] = [];
-  const queue = [...parts].sort((a, b) => a.part_number - b.part_number);
+  const results: UploadedPart[] = [...already.values()];
+  for (const n of already.keys()) loaded.set(n, Math.max(0, Math.min(partSize, file.size - (n - 1) * partSize)));
+  report();
+  const queue = parts.filter((p) => !already.has(p.part_number)).sort((a, b) => a.part_number - b.part_number);
 
   async function runOne(part: PresignedPart) {
     const start = (part.part_number - 1) * partSize;
@@ -50,6 +57,7 @@ export async function uploadParts(options: {
         }, signal);
         loaded.set(part.part_number, body.size);
         report();
+        onPartDone?.({ part_number: part.part_number, etag });
         return { part_number: part.part_number, etag };
       } catch (error) {
         loaded.set(part.part_number, 0);
@@ -64,7 +72,7 @@ export async function uploadParts(options: {
     for (let part = queue.shift(); part; part = queue.shift()) results.push(await runOne(part));
   }
   try {
-    await Promise.all(Array.from({ length: Math.min(concurrency, parts.length) }, worker));
+    await Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, worker));
   } catch (error) {
     controller.abort();
     throw error;

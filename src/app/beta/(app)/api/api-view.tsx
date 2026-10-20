@@ -64,7 +64,7 @@ export function ApiView(props: { workspaceId: string; role: string; apps: AiApp[
   } as const;
 
   return (
-    <div className="flex w-full max-w-[1100px] flex-col gap-7 px-8 pb-14 pt-5">
+    <div className="flex w-full max-w-[1100px] flex-col gap-7 px-4 sm:px-8 pb-14 pt-5">
       <div>
         <h1 className="m-0 text-lg font-medium">API/MCP</h1>
         <p className="mt-1 text-ps-muted">Connect Claude, ChatGPT, Codex, Grok and other AI apps, or your own code, and see who has access.</p>

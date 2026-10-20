@@ -5,6 +5,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AccountMark } from "@/components/beta/avatar-img";
 import { Label, PlatformMark, Thumb } from "@/components/beta/ui";
 import { useUpload, type ReadyMedia } from "@/components/beta/use-upload";
+import { KeepOpenNote, UploadCard } from "@/components/beta/upload-status";
+import { takeShared } from "@/lib/share-inbox";
 import {
   captionLimits,
   defaultMediaType,
@@ -41,7 +43,9 @@ const toLocalInput = (iso: string) => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-export function Composer({ workspaceId, accounts, profiles = [], library: initialLibrary, editing, initialMedia = [] }: { workspaceId: string; accounts: ComposerAccount[]; profiles?: ComposerProfile[]; library: ComposerMedia[]; editing: EditingPost | null; initialMedia?: string[] }) {
+// waitFor: a file sent from the iPhone Shortcut that Post Social is still checking; it joins
+// the post when ready.
+export function Composer({ workspaceId, accounts, profiles = [], library: initialLibrary, editing, initialMedia = [], waitFor = null }: { workspaceId: string; accounts: ComposerAccount[]; profiles?: ComposerProfile[]; library: ComposerMedia[]; editing: EditingPost | null; initialMedia?: string[]; waitFor?: { id: string; name: string } | null }) {
   const [library, setLibrary] = useState(initialLibrary);
   const [selected, setSelected] = useState<string[]>(editing?.accounts.map((a) => a.accountId) ?? []);
   const [choices, setChoices] = useState<Record<string, PlatformChoice>>(() => Object.fromEntries((editing?.accounts ?? []).map((a) => [a.accountId, a.choice])));
@@ -68,7 +72,8 @@ export function Composer({ workspaceId, accounts, profiles = [], library: initia
   const choiceFor = (id: string) => choices[id] ?? {};
   const setChoice = (id: string, change: Partial<PlatformChoice>) => setChoices((all) => ({ ...all, [id]: { ...all[id], ...change } }));
 
-  const { uploads, upload, dismiss } = useUpload(workspaceId, async (m: ReadyMedia) => {
+  const [notice, setNotice] = useState<string | null>(null);
+  const { uploads, upload, dismiss, resume, watch, keepOpen } = useUpload(workspaceId, async (m: ReadyMedia) => {
     const { links, posters } = await getMediaLinks(workspaceId, [m.id]);
     setLibrary((all) => [{ id: m.id, name: m.name ?? "Upload", type: m.media_type, width: m.width, height: m.height, duration: m.duration_seconds === null ? null : Number(m.duration_seconds), url: links[m.id] ?? null, poster: posters[m.id] ?? null }, ...all]);
     setMediaIds((ids) => [...ids, m.id]);
@@ -80,6 +85,25 @@ export function Composer({ workspaceId, accounts, profiles = [], library: initia
     setLibrary((all) => [{ id: m.id, name: m.name ?? "Upload", type: m.media_type, width: m.width, height: m.height, duration: null, url: links[m.id] ?? null, poster: null }, ...all]);
     if (m.media_type === "image") setCover({ kind: "image", mediaId: m.id });
   });
+
+  // Arriving from the phone's share sheet (Android) or the iPhone Shortcut: pick up the
+  // shared files once, then tidy the address so a reload doesn't repeat it.
+  const arrived = useRef(false);
+  useEffect(() => {
+    if (arrived.current) return;
+    arrived.current = true;
+    if (waitFor) watch(waitFor.id, waitFor.name);
+    const shared = new URLSearchParams(window.location.search).get("shared");
+    if (!shared) return;
+    window.history.replaceState(null, "", "/beta/create");
+    void (shared === "failed" ? Promise.resolve(null) : takeShared()).then((got) => {
+      if (shared === "failed") return setNotice("The shared file didn't come through. Open Post Social once, then share again, or use Add media.");
+      if (!got || got.files.length === 0) return setNotice("Nothing was shared. Use Add media to pick a photo or video.");
+      for (const file of got.files) void upload(file);
+      // Shared words become the caption, unless they're only a link (Instagram shares a link).
+      if (got.text && !/^\s*https?:\/\/\S+\s*$/.test(got.text)) setCaption((c) => c || got.text);
+    });
+  }, [waitFor, watch, upload]);
 
   // TikTok's guidelines: read the creator's latest settings when the post page opens.
   const requested = useRef(new Set<string>());
@@ -172,11 +196,12 @@ export function Composer({ workspaceId, accounts, profiles = [], library: initia
 
   return (
     <div className="flex min-h-screen flex-wrap">
-      <section aria-label="Editor" className="flex min-w-0 flex-[1_1_520px] flex-col gap-6 border-r border-ps-fg/[0.06] px-8 pb-0 pt-6">
+      <section aria-label="Editor" className="flex min-w-0 flex-[1_1_520px] flex-col gap-6 border-r border-ps-fg/[0.06] px-4 sm:px-8 pb-0 pt-6">
         <div className="flex items-center justify-between">
           <h1 className="m-0 text-lg font-medium">{editing ? "Edit post" : "New post"}</h1>
           {editing && <span className="text-xs text-ps-subtle">Changes apply when you save</span>}
         </div>
+        {notice && <p role="status" className="m-0 rounded-lg border border-ps-line bg-ps-surface px-3 py-2 text-[13px] text-ps-muted">{notice}</p>}
 
         <div>
           <div className="mb-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -276,28 +301,19 @@ export function Composer({ workspaceId, accounts, profiles = [], library: initia
                 <Thumb url={m.type === "image" ? m.url : (m.poster ?? null)} isVideo={m.type === "video"} size={84} />
                 {media.length > 1 && <span className="absolute left-1 top-1 rounded bg-black/60 text-white px-1 font-mono text-[10px]">{i + 1}</span>}
                 {m.duration && <span className="absolute bottom-1 right-1 rounded bg-black/60 text-white px-1 font-mono text-[10px]">{Math.floor(m.duration / 60)}:{String(Math.round(m.duration % 60)).padStart(2, "0")}</span>}
-                <div className="absolute inset-x-1 top-1 hidden justify-end gap-1 group-hover:flex group-focus-within:flex">
+                <div className="absolute inset-x-1 top-1 hidden justify-end gap-1 group-hover:flex group-focus-within:flex [@media(hover:none)]:flex">
                   {i > 0 && <button type="button" aria-label={`Move ${m.name} earlier`} onClick={() => setMediaIds((ids) => swap(ids, i, i - 1))} className="rounded bg-black/70 text-white px-1 text-[11px]">←</button>}
                   <button type="button" aria-label={`Remove ${m.name}`} onClick={() => setMediaIds((ids) => ids.filter((x) => x !== m.id))} className="rounded bg-black/70 text-white px-1 text-[11px]">✕</button>
                 </div>
               </div>
             ))}
             {uploads.map((u) => (
-              <div key={u.key} className="flex h-[84px] w-[200px] flex-col justify-center gap-1.5 rounded-[10px] border border-ps-fg/[0.08] bg-ps-surface px-3">
-                <span className="truncate text-xs">{u.name}</span>
-                {u.error ? (
-                  <span className="text-xs text-ps-failed-text">{u.error} <button type="button" onClick={() => dismiss(u.key)} className="underline">Dismiss</button></span>
-                ) : (
-                  <>
-                    <span className="h-[3px] rounded bg-ps-fg/[0.06]"><span className="block h-full rounded bg-ps-plum" style={{ width: `${Math.round(u.progress * 100)}%` }} /></span>
-                    <span className="text-[11px] text-ps-subtle">{u.status === "checking" ? "Checking the file…" : `Uploading ${Math.round(u.progress * 100)}%`}</span>
-                  </>
-                )}
-              </div>
+              <UploadCard key={u.key} upload={u} onDismiss={() => dismiss(u.key)} onResume={() => resume(u.key)} className="flex h-[84px] w-[200px] flex-col justify-center gap-1.5 rounded-[10px] border border-ps-fg/[0.08] bg-ps-surface px-3" />
             ))}
             <button type="button" data-attr="add-media" onClick={() => setPicker(true)} className="h-[84px] w-[84px] rounded-[10px] border border-dashed border-ps-fg/[0.18] text-xs text-ps-muted hover:border-ps-plum/50 hover:text-ps-text">
               Add media
             </button>
+            {keepOpen && <KeepOpenNote />}
           </div>
         </div>
 
@@ -356,7 +372,7 @@ export function Composer({ workspaceId, accounts, profiles = [], library: initia
           </div>
         </div>
 
-        <div className="sticky bottom-0 -mx-8 mt-auto flex flex-col gap-2.5 border-t border-ps-fg/[0.06] bg-ps-ground/95 px-8 py-3.5 backdrop-blur">
+        <div className="sticky bottom-0 -mx-4 sm:-mx-8 mt-auto flex flex-col gap-2.5 border-t border-ps-fg/[0.06] bg-ps-ground/95 px-4 sm:px-8 py-3.5 backdrop-blur">
           {directTikTok && <TikTokConsent brandedContent={brandedTikTok} />}
           {error && <p role="alert" className="m-0 text-[13px] text-ps-failed-text">{error}</p>}
           <div className="flex flex-wrap items-center justify-between gap-2.5">
@@ -386,7 +402,7 @@ export function Composer({ workspaceId, accounts, profiles = [], library: initia
         </div>
       </section>
 
-      <aside aria-label="Preview" className="flex min-w-0 flex-[1_1_420px] flex-col items-center gap-4 bg-ps-sidebar px-8 py-6 [background-image:linear-gradient(rgba(155,108,255,0.055)_1px,transparent_1px),linear-gradient(90deg,rgba(155,108,255,0.055)_1px,transparent_1px)] [background-size:48px_48px]">
+      <aside aria-label="Preview" className="flex min-w-0 flex-[1_1_420px] flex-col items-center gap-4 bg-ps-sidebar px-4 sm:px-8 py-6 [background-image:linear-gradient(rgba(155,108,255,0.055)_1px,transparent_1px),linear-gradient(90deg,rgba(155,108,255,0.055)_1px,transparent_1px)] [background-size:48px_48px]">
         {previewAccount ? (
           <>
             <div className="flex flex-col items-center gap-4 md:sticky md:top-6">
@@ -498,12 +514,12 @@ function MediaPicker({ library, selected, onClose, onToggle, onFiles }: { librar
   return (
     <div role="dialog" aria-modal="true" aria-label="Add media" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div className="flex max-h-[80vh] w-full max-w-3xl flex-col rounded-2xl border border-ps-fg/10 bg-ps-dialog shadow-[0_24px_60px_rgba(0,0,0,0.55)]" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between border-b border-ps-fg/[0.06] px-5 py-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ps-fg/[0.06] px-4 py-3.5 sm:px-5">
           <h2 className="m-0 text-sm font-medium">Add media</h2>
           <div className="flex items-center gap-2">
             <Link href="/beta/media" className="px-2 text-xs text-ps-subtle hover:text-ps-text">Manage library</Link>
             <input ref={input} type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime" multiple className="sr-only" onChange={(e) => onFiles(Array.from(e.target.files ?? []))} />
-            <button type="button" data-attr="upload-media" onClick={() => input.current?.click()} className="h-8 rounded-lg bg-ps-plum px-3.5 font-medium text-ps-ground hover:bg-ps-plum-hover">Upload from computer</button>
+            <button type="button" data-attr="upload-media" onClick={() => input.current?.click()} className="h-8 rounded-lg bg-ps-plum px-3.5 font-medium text-ps-ground hover:bg-ps-plum-hover">Upload</button>
             <button type="button" onClick={onClose} className="h-8 rounded-lg border border-ps-fg/[0.12] px-3">Done</button>
           </div>
         </div>
@@ -538,7 +554,7 @@ function MediaPicker({ library, selected, onClose, onToggle, onFiles }: { librar
 function Finished({ done }: { done: Done }) {
   const scheduled = done.status === "scheduled";
   return (
-    <div className="mx-auto flex max-w-lg flex-col items-center gap-4 px-8 py-24 text-center">
+    <div className="mx-auto flex max-w-lg flex-col items-center gap-4 px-4 sm:px-8 py-24 text-center">
       <span className="flex h-12 w-12 items-center justify-center rounded-full border border-ps-live/40 bg-ps-live/[0.12] text-xl text-ps-live">✓</span>
       <h1 className="m-0 text-lg font-medium">{done.status === "draft" ? "Draft saved" : scheduled ? "Scheduled" : "Publishing now"}</h1>
       <p className="m-0 text-ps-muted">

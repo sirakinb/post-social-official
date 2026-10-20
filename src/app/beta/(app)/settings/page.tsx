@@ -29,7 +29,7 @@ export default async function SettingsPage() {
   const { viewer, workspace } = await loadViewer("/beta/settings");
 
   return (
-    <div className="flex w-full max-w-[760px] flex-col gap-6 px-8 pb-14 pt-5">
+    <div className="flex w-full max-w-[760px] flex-col gap-6 px-4 sm:px-8 pb-14 pt-5">
       <div>
         <h1 className="m-0 text-lg font-medium">Settings</h1>
         <p className="mt-1 text-ps-muted">Your sign-in and your workspace.</p>

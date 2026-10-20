@@ -51,10 +51,11 @@ export function createR2(config: R2Config, fetchImpl: typeof fetch = fetch) {
 
     // A URL the browser can PUT one part to without our credentials. The exact size is
     // signed, so R2 refuses a part of any other length (uploads cannot exceed what was
-    // declared and counted against the plan).
-    presignPart(key: string, uploadId: string, partNumber: number, expiresSeconds: number, contentLength: number) {
+    // declared and counted against the plan). contentLength null: size not known yet (a
+    // single-part upload); the stored size is checked against the limits when it finishes.
+    presignPart(key: string, uploadId: string, partNumber: number, expiresSeconds: number, contentLength: number | null) {
       const url = `${objectUrl(key)}?partNumber=${partNumber}&uploadId=${encodeURIComponent(uploadId)}`;
-      return presign(url, "PUT", expiresSeconds, { "content-length": String(contentLength) });
+      return presign(url, "PUT", expiresSeconds, contentLength === null ? {} : { "content-length": String(contentLength) });
     },
 
     async uploadPart(key: string, uploadId: string, partNumber: number, body: Uint8Array<ArrayBuffer>) {
@@ -84,6 +85,23 @@ export function createR2(config: R2Config, fetchImpl: typeof fetch = fetch) {
       // S3 can report an error inside a 200 response.
       const text = await response.text();
       if (text.includes("<Error>")) throw new Error(`R2 finish upload failed: ${xmlValue(text, "Message") ?? text.slice(0, 200)}`);
+    },
+
+    // The parts stored so far with their ETags, for callers that can't read the ETag header
+    // of their own PUT (Apple Shortcuts). Pages through R2's 1,000-part answers.
+    async listParts(key: string, uploadId: string) {
+      const parts: Array<{ partNumber: number; etag: string }> = [];
+      for (let marker: string | null = "0"; marker !== null; ) {
+        const url: string = `${objectUrl(key)}?uploadId=${encodeURIComponent(uploadId)}&part-number-marker=${marker}`;
+        const text: string = await (await expectOk(await send(url), "list parts")).text();
+        for (const m of text.matchAll(/<Part>([\s\S]*?)<\/Part>/g)) {
+          const partNumber = Number(xmlValue(m[1], "PartNumber"));
+          const etag = unescapeXml(xmlValue(m[1], "ETag") ?? "");
+          if (partNumber && etag) parts.push({ partNumber, etag });
+        }
+        marker = xmlValue(text, "IsTruncated") === "true" ? xmlValue(text, "NextPartNumberMarker") : null;
+      }
+      return parts;
     },
 
     async abortMultipartUpload(key: string, uploadId: string) {

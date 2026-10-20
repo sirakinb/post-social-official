@@ -77,12 +77,13 @@ export function monthRange(year: number, month: number) {
   return { start, end, days: Math.round((end - start) / DAY) };
 }
 
-export function CalendarView({ posts, anchor, canEdit, initialView = "month" }: { posts: CalendarPost[]; anchor: string; canEdit: boolean; initialView?: CalendarMode }) {
+// initialView left out: month, or the list on phone-sized screens, where a month is too wide.
+export function CalendarView({ posts, anchor, canEdit, initialView }: { posts: CalendarPost[]; anchor: string; canEdit: boolean; initialView?: CalendarMode }) {
   const router = useRouter();
   // The current minute, read outside render (0 on the server, where the view isn't drawn).
   const minute = useSyncExternalStore(subscribe, () => Math.floor(Date.now() / 60_000), () => 0);
   const ready = minute > 0;
-  const [view, setViewState] = useState<CalendarMode>(initialView);
+  const [view, setViewState] = useState<CalendarMode>(() => initialView ?? (typeof window !== "undefined" && window.matchMedia?.("(max-width: 767px)").matches ? "list" : "month"));
   // Months from the anchor's month (month and list), or weeks from the anchor's week.
   const [offset, setOffset] = useState(0);
   const [open, setOpen] = useState<string | null>(null);
@@ -115,7 +116,7 @@ export function CalendarView({ posts, anchor, canEdit, initialView = "month" }: 
   const reload = (mode: CalendarMode, at?: number) => {
     const qs = new URLSearchParams();
     if (at !== undefined) qs.set("from", new Date(at).toISOString().slice(0, 10));
-    if (mode !== "month") qs.set("view", mode);
+    qs.set("view", mode); // explicit, so a phone that picked Month stays on Month
     router.push(`/beta/calendar${qs.size ? `?${qs}` : ""}`);
   };
   // Outside the loaded window: ask the server for posts around the new dates.
@@ -142,7 +143,7 @@ export function CalendarView({ posts, anchor, canEdit, initialView = "month" }: 
   };
 
   return (
-    <div className="flex flex-col gap-4 px-8 pb-12 pt-5">
+    <div className="flex flex-col gap-4 px-4 sm:px-8 pb-12 pt-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <h1 className="m-0 text-lg font-medium">{title}</h1>

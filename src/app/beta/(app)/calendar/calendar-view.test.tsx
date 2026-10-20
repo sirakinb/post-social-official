@@ -27,3 +27,20 @@ describe("monthRange", () => {
     expect(new Date(r.start + 7 * 86_400_000).getMonth()).toBe(0);
   });
 });
+
+describe("CalendarView on a phone", () => {
+  it("opens on the list when no view was chosen, and respects a chosen one", async () => {
+    const { render, screen, waitFor } = await import("@testing-library/react");
+    const { CalendarView } = await import("./calendar-view");
+    const phone = vi.fn().mockReturnValue({ matches: true });
+    vi.stubGlobal("matchMedia", phone);
+    const anchor = new Date().toISOString();
+    const { unmount } = render(<CalendarView posts={[]} anchor={anchor} canEdit />);
+    await waitFor(() => expect(screen.getByRole("radio", { name: "List" })).toHaveAttribute("aria-checked", "true"));
+    expect(phone).toHaveBeenCalledWith("(max-width: 767px)");
+    unmount();
+    render(<CalendarView posts={[]} anchor={anchor} canEdit initialView="month" />);
+    await waitFor(() => expect(screen.getByRole("radio", { name: "Month" })).toHaveAttribute("aria-checked", "true"));
+    vi.unstubAllGlobals();
+  });
+});

@@ -6,6 +6,7 @@ import { createR2 } from "../../backend/lib/media/r2";
 import { expireUnusedMedia, removeExpiredSignIns, removeOrphanedFiles } from "./cleanup";
 import { runNextJob, type WorkerDeps } from "./jobs";
 import { probeStoredFile } from "./probe";
+import { remuxToMp4 } from "./remux";
 import { safeFetch } from "./safe-fetch";
 import { refreshDueTokens } from "./tokens";
 import { makePosters } from "./posters";
@@ -43,6 +44,7 @@ const deps: WorkerDeps = {
   r2,
   probe: (key, size, expected) => probeStoredFile(r2, key, size, expected),
   download: (url, signal) => safeFetch(url, { signal }),
+  remux: (key, fileName, videoFormat) => remuxToMp4({ r2, log }, key, fileName, videoFormat),
   log,
 };
 

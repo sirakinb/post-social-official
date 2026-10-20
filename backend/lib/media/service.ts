@@ -4,9 +4,11 @@
 import type { R2 } from "./r2";
 import { ApiError as MediaError, membership as membershipShared, requireUuid as requireUuidShared, type Caller, type Sql } from "../access";
 import {
+  MAX_MEDIA_BYTES,
   UPLOAD_LINK_SECONDS,
   importUrlProblem,
   mediaTypeFor,
+  mimeTypeFromName,
   normalizeMimeType,
   partLength,
   planParts,
@@ -86,13 +88,18 @@ function limitError(error: unknown): never {
 export async function createUpload(
   deps: MediaDeps,
   caller: Caller,
-  input: { workspace_id?: unknown; file_name?: unknown; mime_type?: unknown; size_bytes?: unknown },
+  input: { workspace_id?: unknown; file_name?: unknown; mime_type?: unknown; size_bytes?: unknown; single_part?: unknown },
 ) {
   const workspaceId = requireUuid(input.workspace_id, "Workspace");
+  const singlePart = input.single_part === true;
+  const fileName = String(input.file_name ?? "");
+  const rawSize = typeof input.size_bytes === "string" ? input.size_bytes.replace(/[,\s]/g, "") : input.size_bytes;
   const request = {
-    fileName: String(input.file_name ?? ""),
-    mimeType: normalizeMimeType(String(input.mime_type ?? "")),
-    sizeBytes: Number(input.size_bytes),
+    fileName,
+    // Apple Shortcuts can leave out the type (taken from the name) and, for a single-part
+    // upload, the size (checked against the limits when the upload finishes).
+    mimeType: normalizeMimeType(String(input.mime_type ?? "")) || mimeTypeFromName(fileName),
+    sizeBytes: singlePart && (rawSize === undefined || rawSize === null || rawSize === "") ? null : Number(rawSize),
   };
   const problem = uploadProblem(request);
   if (problem) throw new MediaError(400, problem);
@@ -100,7 +107,7 @@ export async function createUpload(
 
   const mediaId = deps.newId();
   const key = storageKey(workspaceId, mediaId, request.fileName);
-  const { partSize, partCount } = planParts(request.sizeBytes);
+  const { partSize, partCount } = request.sizeBytes === null ? { partSize: MAX_MEDIA_BYTES, partCount: 1 } : planParts(request.sizeBytes, singlePart);
 
   await deps
     .sql(
@@ -109,7 +116,7 @@ export async function createUpload(
          (id, workspace_id, uploaded_by_actor_id, storage_key, file_name, display_name,
           mime_type, media_type, size_bytes, status)
        SELECT $3, $1, $4, $5, $6, $6, $7, $8, $2, 'uploading' FROM lim`,
-      [workspaceId, request.sizeBytes, mediaId, member.actor_id, key, safeFileName(request.fileName), request.mimeType, mediaTypeFor(request.mimeType)],
+      [workspaceId, request.sizeBytes ?? 0, mediaId, member.actor_id, key, safeFileName(request.fileName), request.mimeType, mediaTypeFor(request.mimeType)],
     )
     .catch(limitError);
 
@@ -133,7 +140,7 @@ export async function createUpload(
   const parts = await Promise.all(
     Array.from({ length: partCount }, async (_, index) => ({
       part_number: index + 1,
-      url: await deps.r2.presignPart(key, uploadId, index + 1, UPLOAD_LINK_SECONDS, partLength(request.sizeBytes, partSize, index + 1)),
+      url: await deps.r2.presignPart(key, uploadId, index + 1, UPLOAD_LINK_SECONDS, request.sizeBytes === null ? null : partLength(request.sizeBytes, partSize, index + 1)),
     })),
   );
   return { media_id: mediaId, part_size: partSize, parts, expires_in_seconds: UPLOAD_LINK_SECONDS };
@@ -162,10 +169,14 @@ export async function completeUpload(
   const mediaId = requireUuid(input.media_id, "Media");
   const { upload, member } = await loadUpload(deps, caller, mediaId);
   const parts = Array.isArray(input.parts) ? input.parts : [];
-  const cleaned = parts.map((p) => ({
-    partNumber: Number((p as { part_number?: unknown }).part_number),
-    etag: String((p as { etag?: unknown }).etag ?? ""),
-  }));
+  // No parts listed (Apple Shortcuts can't read the ETag of its own upload): ask storage
+  // which parts arrived. The count check below still requires every one of them.
+  const cleaned = parts.length
+    ? parts.map((p) => ({
+        partNumber: Number((p as { part_number?: unknown }).part_number),
+        etag: String((p as { etag?: unknown }).etag ?? ""),
+      }))
+    : await deps.r2.listParts(upload.storage_key, upload.multipart_upload_id).catch(() => []);
   const numbers = new Set(cleaned.map((p) => p.partNumber));
   if (
     cleaned.length !== upload.part_count ||
@@ -182,14 +193,35 @@ export async function completeUpload(
   }
 
   const stored = await deps.r2.head(upload.storage_key);
-  if (!stored || stored.sizeBytes !== Number(upload.size_bytes)) {
+  // Size 0: a single-part upload whose size wasn't given; the stored size must fit the limits.
+  const announced = Number(upload.size_bytes);
+  const unannounced = announced === 0;
+  const fail = async (reason: string): Promise<never> => {
     await deps.r2.delete(upload.storage_key);
     await deps.sql(
       `WITH up AS (DELETE FROM public.media_uploads WHERE media_asset_id = $1)
        UPDATE public.media_assets SET status = 'failed', failure_reason = $2 WHERE id = $1`,
-      [mediaId, "The uploaded file did not match the size that was announced. Upload it again."],
+      [mediaId, reason],
     );
-    throw new MediaError(400, "The uploaded file did not match the size that was announced. Upload it again.");
+    throw new MediaError(400, reason);
+  };
+  if (!stored || (unannounced ? stored.sizeBytes <= 0 : stored.sizeBytes !== announced)) {
+    await fail("The uploaded file did not match the size that was announced. Upload it again.");
+  }
+  if (unannounced) {
+    if (stored!.sizeBytes > MAX_MEDIA_BYTES) await fail("Files can be at most 1 GB.");
+    // Count it against the plan now, the way a known size is counted when the upload starts.
+    try {
+      await deps.sql(
+        `WITH lim AS (SELECT public.assert_within_limit($2, 'media_storage_bytes', $3))
+         UPDATE public.media_assets SET size_bytes = $3 FROM lim WHERE media_assets.id = $1`,
+        [mediaId, upload.workspace_id, stored!.sizeBytes],
+      );
+    } catch (error) {
+      const plain = String((error as Error)?.message ?? "").match(/Your .* plan allows .*?limit\./)?.[0];
+      if (plain) await fail(plain);
+      throw error;
+    }
   }
 
   const rows = await deps.sql<AssetRow>(
@@ -203,7 +235,7 @@ export async function completeUpload(
      )
      UPDATE public.media_assets SET status = 'processing', last_used_at = now() WHERE id = $1
      RETURNING *`,
-    [mediaId, upload.workspace_id, member.actor_id, caller.entryPoint, `Uploaded ${upload.file_name}`, stored.sizeBytes],
+    [mediaId, upload.workspace_id, member.actor_id, caller.entryPoint, `Uploaded ${upload.file_name}`, stored!.sizeBytes],
   );
   return publicAsset(rows[0]);
 }

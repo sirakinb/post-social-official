@@ -64,5 +64,5 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   }));
 
   // Keyed by the anchor so moving to new dates starts the view fresh.
-  return <CalendarView key={`${anchor}-${view}`} posts={posts} anchor={new Date(anchor).toISOString()} initialView={view} canEdit={workspace.role !== "reviewer"} />;
+  return <CalendarView key={`${anchor}-${view}`} posts={posts} anchor={new Date(anchor).toISOString()} initialView={params.view ? view : undefined} canEdit={workspace.role !== "reviewer"} />;
 }

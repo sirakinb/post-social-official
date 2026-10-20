@@ -28,16 +28,13 @@ describe("Instagram", () => {
     expect(check({ kind: "instagram", media_type: "carousel" }, [image(), media({ id: "m2" })])).toEqual([]);
   });
 
-  it("requires feed photos between 4:5 and 1.91:1", () => {
-    expect(check({ kind: "instagram", media_type: "image" }, [image({ width: 1024, height: 1536 })])).toEqual([
-      "Instagram photos must be between 4:5 (portrait) and 1.91:1 (landscape); photo.jpg is 1024×1536. Crop it to 4:5, e.g. 1080×1350.",
-    ]);
-    expect(check({ kind: "instagram", media_type: "image" }, [image({ width: 1080, height: 1080 })])).toEqual([]);
-    expect(check({ kind: "instagram", media_type: "image" }, [image({ width: 1910, height: 1000 })])).toEqual([]);
+  it("takes photos of any shape and format, since they are fitted before sending", () => {
+    expect(check({ kind: "instagram", media_type: "image" }, [image({ width: 3024, height: 4032 })])).toEqual([]);
+    expect(check({ kind: "instagram", media_type: "image" }, [image({ mime_type: "image/png" })])).toEqual([]);
+    expect(check({ kind: "instagram", media_type: "carousel" }, [image({ mime_type: "image/webp", width: 4000, height: 1000 }), media({ id: "m2" })])).toEqual([]);
   });
 
   it("explains each problem", () => {
-    expect(check({ kind: "instagram", media_type: "image" }, [image({ mime_type: "image/png" })])).toEqual(["Instagram images must be JPEG; photo.jpg is image/png."]);
     expect(check({ kind: "instagram", media_type: "reel" }, [media({ duration_seconds: 1000 })])).toEqual(["Instagram Reels can be at most 15 minutes; clip.mp4 is 16 min 40 s."]);
     expect(check({ kind: "instagram", media_type: "carousel" }, [image()])).toEqual(["An Instagram carousel needs 2 to 10 files; this post has 1 file."]);
     expect(check({ kind: "instagram", media_type: "image" }, [image()], "x".repeat(2201))[0]).toMatch(/2,200 characters; this one is 2,201/);

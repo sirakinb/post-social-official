@@ -85,7 +85,14 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
   }
 
   const initialMedia = !editing && startMedia && UUID.test(startMedia) && library.some((m) => m.id === startMedia) ? [startMedia] : [];
-  return <Composer workspaceId={workspace.id} accounts={accounts} profiles={profiles} library={library} editing={editing} initialMedia={initialMedia} />;
+  // A file still being checked (just sent from the iPhone Shortcut): Create waits for it.
+  let waitFor: { id: string; name: string } | null = null;
+  if (!editing && startMedia && UUID.test(startMedia) && !initialMedia.length) {
+    const { data } = await client.database.from("media_assets").select("id, display_name, file_name, status").eq("id", startMedia).eq("workspace_id", workspace.id).in("status", ["uploading", "processing"]).maybeSingle();
+    const row = data as { id: string; display_name: string | null; file_name: string } | null;
+    if (row) waitFor = { id: row.id, name: row.display_name ?? row.file_name };
+  }
+  return <Composer workspaceId={workspace.id} accounts={accounts} profiles={profiles} library={library} editing={editing} initialMedia={initialMedia} waitFor={waitFor} />;
 }
 
 function toComposerMedia(m: MediaRow): ComposerMedia {

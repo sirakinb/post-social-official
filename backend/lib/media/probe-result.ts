@@ -6,7 +6,8 @@ type Track = Record<string, unknown> & { "@type": string };
 export type MediaInfoResult = { media?: { track?: Track[] } | null };
 
 export type ProbeOutcome =
-  | { ok: true; mimeType: string; mediaType: MediaType; width: number | null; height: number | null; durationSeconds: number | null }
+  // videoFormat: the video codec as mediainfo names it ("AVC", "HEVC"...), for videos.
+  | { ok: true; mimeType: string; mediaType: MediaType; width: number | null; height: number | null; durationSeconds: number | null; videoFormat?: string }
   | { ok: false; reason: string };
 
 function num(value: unknown): number | null {
@@ -57,7 +58,12 @@ export function interpretProbe(result: MediaInfoResult, expected: MediaType | nu
     if (!video) return { ok: false, reason: "This file has no video in it." };
     const duration = num(video.Duration) ?? num(general?.Duration);
     if (!duration || duration <= 0) return { ok: false, reason: "This video has no length. It may be damaged; export it again." };
-    return { ok: true, mimeType, mediaType, width: int(video.Width), height: int(video.Height), durationSeconds: Math.round(duration * 1000) / 1000 };
+    // Phones record portrait video as landscape pixels plus a "turn this 90°" flag; report
+    // the shape people see, or a portrait iPhone video looks landscape to every rule.
+    const turned = Math.abs(Math.round(num(video.Rotation) ?? 0)) % 180 === 90;
+    const [width, height] = turned ? [int(video.Height), int(video.Width)] : [int(video.Width), int(video.Height)];
+    const videoFormat = typeof video.Format === "string" ? video.Format : undefined;
+    return { ok: true, mimeType, mediaType, width, height, durationSeconds: Math.round(duration * 1000) / 1000, ...(videoFormat ? { videoFormat } : {}) };
   }
 
   const picture = image ?? video; // some WebP files report a Video track
