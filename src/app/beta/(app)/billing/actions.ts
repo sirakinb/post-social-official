@@ -1,6 +1,6 @@
 "use server";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getAccessTokenCookieName } from "@insforge/sdk/ssr";
@@ -28,6 +28,13 @@ async function callBilling<T>(body: Record<string, unknown>): Promise<{ ok: true
   return { ok: true, data: data as T };
 }
 
+// This copy of the app's own address, so Stripe sends the person back here.
+async function ownOrigin() {
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host");
+  return host ? `${h.get("x-forwarded-proto") ?? "https"}://${host}` : undefined;
+}
+
 const back = (error: string) => redirect(`/beta/billing?error=${encodeURIComponent(error)}`);
 
 // Stripe's own pages only: we never see card details.
@@ -36,7 +43,7 @@ function stripeUrl(url: unknown) {
 }
 
 export async function addCard(formData: FormData) {
-  const result = await callBilling<{ url: string }>({ action: "billing_checkout", workspace_id: formData.get("workspace_id") });
+  const result = await callBilling<{ url: string }>({ action: "billing_checkout", workspace_id: formData.get("workspace_id"), return_origin: await ownOrigin() });
   if (!result.ok) back(result.error);
   const url = result.ok ? stripeUrl(result.data.url) : null;
   if (!url) back(OUR_SIDE);
@@ -44,7 +51,7 @@ export async function addCard(formData: FormData) {
 }
 
 export async function manageBilling(formData: FormData) {
-  const result = await callBilling<{ url: string }>({ action: "billing_portal", workspace_id: formData.get("workspace_id") });
+  const result = await callBilling<{ url: string }>({ action: "billing_portal", workspace_id: formData.get("workspace_id"), return_origin: await ownOrigin() });
   if (!result.ok) back(result.error);
   const url = result.ok ? stripeUrl(result.data.url) : null;
   if (!url) back(OUR_SIDE);

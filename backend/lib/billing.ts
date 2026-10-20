@@ -6,6 +6,7 @@
 // Stripe's own pages (Checkout and the customer portal); we never see card details.
 import { ApiError, membership, requireUuid, type Caller, type Sql } from "./access";
 import { FREE_ACCOUNTS, X_PRICES, monthlyBill } from "./pricing";
+import { originAllowedFor } from "./connections/service";
 
 export const ACCOUNTS_PRICE_LOOKUP_KEY = "post_social_accounts_monthly";
 
@@ -47,7 +48,14 @@ export function createStripe(secretKey: string, fetchImpl: typeof fetch = fetch)
   };
 }
 
-export type BillingDeps = { sql: Sql; stripe: Stripe | null; webAppUrl: string };
+// allowedOrigins: web app addresses (WEB_APP_ORIGINS) Stripe may send people back to, so a
+// preview or local copy of the app gets them back to itself; anything else uses webAppUrl.
+export type BillingDeps = { sql: Sql; stripe: Stripe | null; webAppUrl: string; allowedOrigins?: string[] };
+
+function returnBase(deps: BillingDeps, input: Params) {
+  const origin = typeof input.return_origin === "string" ? input.return_origin : "";
+  return origin && originAllowedFor(origin, deps.allowedOrigins ?? []) ? new URL(origin).origin : deps.webAppUrl;
+}
 
 type BillingRow = {
   stripe_customer_id: string | null;
@@ -168,8 +176,8 @@ export async function startCheckout(deps: BillingDeps, caller: Caller, input: Pa
     metadata: { workspace_id: workspaceId },
     payment_method_collection: "always",
     allow_promotion_codes: true,
-    success_url: `${deps.webAppUrl}/beta/billing?checkout={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${deps.webAppUrl}/beta/billing`,
+    success_url: `${returnBase(deps, input)}/beta/billing?checkout={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${returnBase(deps, input)}/beta/billing`,
   });
   return { url: session.url };
 }
@@ -199,7 +207,7 @@ export async function openPortal(deps: BillingDeps, caller: Caller, input: Param
   const stripe = requireStripe(deps);
   const state = await workspaceState(deps.sql, workspaceId);
   if (!state.stripe_customer_id) throw new ApiError(409, "Add a card first.");
-  const portal = await stripe.request<{ url: string }>("POST", "/v1/billing_portal/sessions", { customer: state.stripe_customer_id, return_url: `${deps.webAppUrl}/beta/billing` });
+  const portal = await stripe.request<{ url: string }>("POST", "/v1/billing_portal/sessions", { customer: state.stripe_customer_id, return_url: `${returnBase(deps, input)}/beta/billing` });
   return { url: portal.url };
 }
 

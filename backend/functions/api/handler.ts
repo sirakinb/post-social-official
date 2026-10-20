@@ -344,7 +344,7 @@ async function personRoute(deps: ApiHandlerDeps, request: Request) {
         return tiktokCreatorInfo({ sql, setting: deps.setting }, caller, input);
       },
     };
-    const billing = billingActions({ sql: deps.sql, stripe: deps.stripe ?? null, webAppUrl: deps.webAppUrl });
+    const billing = billingActions({ sql: deps.sql, stripe: deps.stripe ?? null, webAppUrl: deps.webAppUrl, allowedOrigins: deps.allowedOrigins });
     const actions = { ...allActions, ...statsActions, ...mediaActions, ...billing } as Record<string, (sql: Sql, caller: Caller, input: Record<string, unknown>) => Promise<unknown>>;
     if (!Object.hasOwn(actions, name)) throw new ApiError(400, `Unknown action. Use one of: ${Object.keys(actions).join(", ")}.`);
     const caller: Caller = { userId: user.id, displayName: user.name, entryPoint: "ui" };

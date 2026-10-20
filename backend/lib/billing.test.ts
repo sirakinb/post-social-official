@@ -120,6 +120,16 @@ describe("startCheckout", () => {
     expect(session.success_url).toBe("https://www.postsocial.xyz/beta/billing?checkout={CHECKOUT_SESSION_ID}");
   });
 
+  it("sends people back to the copy of the app they came from, if it's allowed", async () => {
+    const run = async (origin: string) => {
+      const { stripe, calls } = fakeStripe({ "GET /v1/prices": { data: [{ id: "price_accounts" }] } });
+      await startCheckout({ sql: fakeSql({ plan_id: "free", plan_name: "Free", connected: 1 }).sql, stripe, webAppUrl: "https://www.postsocial.xyz", allowedOrigins: ["https://post-social-*-app-build-26.vercel.app"] }, person, { workspace_id: WORKSPACE, return_origin: origin });
+      return calls.find((c) => c.path === "/v1/checkout/sessions")!.params!.cancel_url;
+    };
+    expect(await run("https://post-social-git-x-app-build-26.vercel.app")).toBe("https://post-social-git-x-app-build-26.vercel.app/beta/billing");
+    expect(await run("https://evil.example")).toBe("https://www.postsocial.xyz/beta/billing");
+  });
+
   it("is only for owners and admins", async () => {
     const { sql } = fakeSql({ plan_id: "free", plan_name: "Free", connected: 2 }, "member");
     await expect(startCheckout({ sql, stripe: fakeStripe().stripe, webAppUrl: "" }, person, { workspace_id: WORKSPACE })).rejects.toMatchObject({ status: 403 });
