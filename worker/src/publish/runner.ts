@@ -92,11 +92,10 @@ export async function runNextPublishJob(deps: PublishDeps): Promise<boolean> {
       if (problems.length) throw new PublishError("invalid", problems.join(" "));
     }
 
-    await deps.sql(
-      `WITH p AS (SELECT public.mark_post_sending($2))
-       UPDATE public.destinations SET status = 'processing' WHERE id = $1 AND status IN ('queued', 'scheduled')`,
-      [b.destinationId, b.postId],
-    );
+    // Its own statement: Postgres skips a WITH query the main statement never reads, which
+    // once left every scheduled post "scheduled" after it went out.
+    await deps.sql(`SELECT public.mark_post_sending($1)`, [b.postId]);
+    await deps.sql(`UPDATE public.destinations SET status = 'processing' WHERE id = $1 AND status IN ('queued', 'scheduled')`, [b.destinationId]);
 
     const checkpoint: Checkpoint = { ...(job.checkpoint ?? {}) };
     const ctx: StepContext = {
