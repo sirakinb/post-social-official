@@ -88,6 +88,17 @@ export async function runNextPublishJob(deps: PublishDeps): Promise<boolean> {
 
     // The same checks as at submit time, unless the post is already part-way through.
     if (!Object.keys(job.checkpoint ?? {}).length) {
+      // A workspace over its plan's accounts (a cancelled subscription) posts again once
+      // it's back under, or has a card again.
+      const [plan] = await deps.sql<{ name: string; max: number; connected: number }>(
+        `SELECT p.name, p.max_connected_accounts AS max,
+                (SELECT count(*)::int FROM public.connected_accounts a WHERE a.workspace_id = $1 AND a.health <> 'disconnected') AS connected
+         FROM public.plans p WHERE p.id = coalesce((SELECT plan_id FROM public.workspace_plans WHERE workspace_id = $1), 'tester')`,
+        [b.workspaceId],
+      );
+      if (plan && plan.connected > plan.max) {
+        throw new PublishError("over_plan_accounts", `This workspace has ${plan.connected} connected accounts and the ${plan.name} plan covers ${plan.max}, so posting is paused. Add a card on the Billing page, or disconnect accounts, then post again.`);
+      }
       const problems = destinationProblems({ options: b.options, caption: b.caption, media: b.media, capabilities: b.account.capabilities as { video_max_seconds?: number }, cover: b.cover });
       if (problems.length) throw new PublishError("invalid", problems.join(" "));
     }

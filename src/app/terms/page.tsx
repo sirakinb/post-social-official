@@ -25,7 +25,7 @@ export default function TermsPage() {
           <h1 className="font-display text-3xl font-semibold text-ink">
             Terms of Service
           </h1>
-          <p className="mt-2 text-sm text-ink-subtle">Effective July 21, 2026 · Updated August 4, 2026</p>
+          <p className="mt-2 text-sm text-ink-subtle">Effective July 21, 2026 · Updated October 20, 2026</p>
 
           <div className="mt-8 space-y-6 text-ink-muted">
             <section>
@@ -105,7 +105,34 @@ export default function TermsPage() {
 
             <section>
               <h2 className="font-display text-xl font-semibold text-ink">
-                5. Your content and acceptable use
+                5. Fees and billing
+              </h2>
+              <p className="mt-2 text-sm leading-relaxed">
+                Each workspace may connect up to two social accounts at no
+                charge. Connecting more requires a payment card and a monthly
+                subscription priced per connected account, as shown on our{" "}
+                <Link href="/docs/billing" className="text-accent hover:text-accent-hover underline">pricing and billing page</Link>.
+                Changes in the number of connected accounts during a billing
+                month are charged or credited by the day on the next invoice.
+                Posts to X are charged per post at the listed rates, up to the
+                monthly limit you set; at that limit, X posts pause until the
+                next month.
+              </p>
+              <p className="mt-2 text-sm leading-relaxed">
+                Subscriptions renew monthly until cancelled, and you authorize
+                us, through our payment processor Stripe, to charge your card
+                for each invoice. Prices exclude taxes where taxes apply. You can
+                cancel at any time from the Billing page; cancellation takes
+                effect at the end of the paid month, and fees already paid are
+                not refunded except where the law requires. If a payment fails,
+                publishing may be paused until it is resolved. We will give at
+                least 30 days&apos; notice by email before raising prices.
+              </p>
+            </section>
+
+            <section>
+              <h2 className="font-display text-xl font-semibold text-ink">
+                6. Your content and acceptable use
               </h2>
               <p className="mt-2 text-sm leading-relaxed">
                 You retain ownership of content you upload. You give Post Social
@@ -119,7 +146,7 @@ export default function TermsPage() {
 
             <section>
               <h2 className="font-display text-xl font-semibold text-ink">
-                6. Availability and account access
+                7. Availability and account access
               </h2>
               <p className="mt-2 text-sm leading-relaxed">
                 Social platforms may change permissions, limits, review status,
@@ -133,7 +160,7 @@ export default function TermsPage() {
 
             <section>
               <h2 className="font-display text-xl font-semibold text-ink">
-                7. Limitation of liability
+                8. Limitation of liability
               </h2>
               <p className="mt-2 text-sm leading-relaxed">
                 Post Social is provided “as is.” To the extent permitted by law,
@@ -144,7 +171,7 @@ export default function TermsPage() {
 
             <section>
               <h2 className="font-display text-xl font-semibold text-ink">
-                8. Changes to terms
+                9. Changes to terms
               </h2>
               <p className="mt-2 text-sm leading-relaxed">
                 We may update these terms from time to time. Continued use after
@@ -154,7 +181,7 @@ export default function TermsPage() {
 
             <section>
               <h2 className="font-display text-xl font-semibold text-ink">
-                9. Contact
+                10. Contact
               </h2>
               <p className="mt-2 text-sm leading-relaxed">
                 Questions about these terms may be sent to{" "}

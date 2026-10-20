@@ -32,6 +32,7 @@ export default function DocsPage() {
             <a href="#cli" className="text-ink-muted hover:text-ink">CLI</a>
             <a href="#api" className="text-ink-muted hover:text-ink">API</a>
             <a href="#tools" className="text-ink-muted hover:text-ink">Tools</a>
+            <Link href="/docs/billing" className="text-ink-muted hover:text-ink">Billing</Link>
           </nav>
         </div>
       </header>
@@ -40,7 +41,7 @@ export default function DocsPage() {
         <p className="utility-label text-accent">Post Social / Docs</p>
         <h1 className="mt-3 text-3xl font-semibold tracking-[-0.035em] text-ink">Connect your AI to your social accounts</h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-muted">
-          Connect your Instagram, Facebook Pages, Threads, YouTube and TikTok accounts in Post Social once. Then tell your AI what to post and when, and it publishes or schedules it. Your AI does the
+          Connect your Instagram, Facebook Pages, Threads, YouTube, TikTok, LinkedIn, Bluesky and X accounts in Post Social once. Then tell your AI what to post and when, and it publishes or schedules it. Your AI does the
           work; you stay in charge of what it does.
         </p>
 
@@ -114,6 +115,7 @@ npx postsocial create-post --help           # every option for a command`}</Code
             <li>You connect your social accounts in Post Social yourself; AIs can send you a connect link but never sign in for you.</li>
             <li>TikTok posts from an AI go out directly, with the audience you ask for. To finish them in TikTok first, set the account to “Inbox first” in Accounts (or ask your AI to), and each post lands in your TikTok inbox.</li>
             <li>Everything an AI does is labelled with its name in your activity, and you can disconnect it any time under API keys.</li>
+            <li>Your first 2 accounts are free. After that you pay by the day for each connected account, and X posts cost a few cents each. See <Link href="/docs/billing" className="text-accent hover:underline">pricing and billing</Link>.</li>
           </ul>
         </section>
         <p className="mt-8 text-xs text-ink-subtle"><Link href="/" className="hover:underline">postsocial.xyz</Link></p>
