@@ -1,44 +1,52 @@
 import Link from "next/link";
-import { Card, CardHeader, Status } from "@/components/beta/ui";
 import { callServer, loadViewer } from "@/lib/beta/workspace";
+import { cn } from "@/lib/utils";
 import { addCard, manageBilling, saveXCap } from "./actions";
 
 export const metadata = { title: "Billing · Post Social" };
 
+type Line = { label: string; detail: string; amount: number };
 export type BillingStatus = {
   plan: { id: string; name: string; comped: boolean };
   connected_accounts: number;
   free_accounts: number;
   subscription: { status: string } | null;
-  estimate: { monthly_total: number; credit: number; bands: Array<{ units: number; perAccount: number; amount: number }> } | null;
   // monthly_cap is the cap in force (null: not capped); set_cap is the one the workspace chose.
-  x: { spent: number; posts: number; monthly_cap: number | null; set_cap: number; price_per_post: number; price_per_link_post: number; free_monthly: number };
+  x: { spent: number; posts: number; monthly_cap: number | null; set_cap: number; free_monthly: number };
   can_manage: boolean;
   available: boolean;
+  upcoming: { total: number; period_start: string | null; period_end: string | null; lines: Line[] } | null;
+  card: { brand: string; last4: string; exp_month: number; exp_year: number } | null;
+  details: { email: string | null; name: string | null; address: string | null } | null;
+  invoices: Array<{ id: string; number: string | null; date: string | null; total: number; status: string; pdf: string | null; url: string | null }>;
 };
 
-const money = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`;
-const cents = (n: number) => `${Math.round(n * 100)}¢`;
-const plural = (n: number) => `${n} account${n === 1 ? "" : "s"}`;
+const money = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const day = (iso: string | null, opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" }) => (iso ? new Date(iso).toLocaleDateString("en-US", { ...opts, timeZone: "UTC" }) : "");
+const BRANDS: Record<string, string> = { visa: "Visa", mastercard: "Mastercard", amex: "American Express", discover: "Discover" };
 
-const STATUS: Record<string, { tone: "live" | "attention" | "failed"; label: string }> = {
-  active: { tone: "live", label: "Card on file" },
-  trialing: { tone: "live", label: "Card on file" },
-  past_due: { tone: "attention", label: "Payment failed, Stripe is retrying" },
-  unpaid: { tone: "failed", label: "Unpaid" },
-  canceled: { tone: "failed", label: "Cancelled" },
-};
-
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function Panel({ title, note, action, footer, children, className }: { title: string; note?: string; action?: React.ReactNode; footer?: string; children: React.ReactNode; className?: string }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-6 gap-y-1 border-b border-ps-fg/[0.05] px-4 py-3 last:border-b-0">
-      <span className="w-40 flex-none text-ps-subtle">{label}</span>
-      <span className="min-w-0 flex-1 break-words">{children}</span>
-    </div>
+    <section aria-label={title} className={cn("flex flex-col rounded-xl border border-ps-line bg-ps-surface", className)}>
+      <div className="flex items-start justify-between gap-3 border-b border-ps-fg/[0.06] px-5 py-4">
+        <div>
+          <h2 className="m-0 text-[15px] font-medium text-ps-text">{title}</h2>
+          {note && <p className="mt-1 text-xs text-ps-subtle">{note}</p>}
+        </div>
+        {action}
+      </div>
+      <div className="flex-1">{children}</div>
+      {footer && <p className="border-t border-ps-fg/[0.06] px-5 py-3 text-xs text-ps-subtle">{footer}</p>}
+    </section>
   );
 }
 
-const button = "inline-flex h-[34px] items-center rounded-lg px-3.5 text-[13px] font-medium";
+function Hidden({ id }: { id: string }) {
+  return <input type="hidden" name="workspace_id" value={id} />;
+}
+
+const quiet = "inline-flex h-8 flex-none items-center rounded-lg border border-ps-fg/[0.12] px-3 text-xs text-ps-text hover:border-ps-fg/25";
+const primary = "inline-flex h-8 flex-none items-center rounded-lg bg-ps-plum px-3 text-xs font-medium text-ps-ground";
 
 export default async function BillingPage({ searchParams }: { searchParams: Promise<{ checkout?: string; error?: string; saved?: string }> }) {
   const { workspace } = await loadViewer("/beta/billing");
@@ -46,116 +54,204 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   // Back from Stripe Checkout: confirm it here so Paid turns on without waiting for Stripe.
   if (workspace && checkout) await callServer("billing_confirm", { workspace_id: workspace.id, session_id: checkout });
   const status = workspace ? await callServer<BillingStatus>("billing_status", { workspace_id: workspace.id }) : null;
+  const paying = Boolean(status?.subscription && status.subscription.status !== "canceled");
+  const manage = Boolean(status?.can_manage && status.available && !status.plan.comped);
 
   return (
-    <div className="flex w-full max-w-[760px] flex-col gap-6 px-4 sm:px-8 pb-14 pt-5">
+    <div className="flex w-full max-w-[1100px] flex-col gap-6 px-4 sm:px-8 pb-14 pt-5">
       <div>
         <h1 className="m-0 text-lg font-medium">Billing</h1>
         <p className="mt-1 text-ps-muted">
-          Your first 2 accounts are free. After that it&apos;s usage based: you pay per account you connect. <Link href="/docs/billing" className="text-ps-plum-soft hover:text-ps-text">How billing works</Link>
+          Pay per connected account. First 2 are free. <Link href="/docs/billing" className="text-ps-plum-soft hover:text-ps-text">How it works</Link>
         </p>
       </div>
 
       {error && <p role="alert" className="rounded-lg border border-ps-failed-text/30 px-4 py-3 text-sm text-ps-failed-text">{error}</p>}
-      {checkout && status?.subscription && <p role="status" className="rounded-lg border border-ps-line px-4 py-3 text-sm text-ps-text">Card added. You can connect as many accounts as you need.</p>}
-      {saved === "x_cap" && <p role="status" className="rounded-lg border border-ps-line px-4 py-3 text-sm text-ps-text">X cap saved.</p>}
+      {checkout && paying && <p role="status" className="rounded-lg border border-ps-line px-4 py-3 text-sm text-ps-text">Card added. Connect as many accounts as you need.</p>}
+      {saved === "x_cap" && <p role="status" className="rounded-lg border border-ps-line px-4 py-3 text-sm text-ps-text">Cap saved.</p>}
 
       {!workspace ? (
         <p className="text-sm text-ps-muted">You are not a member of any workspace yet.</p>
       ) : !status ? (
         <p role="alert" className="text-sm text-ps-failed-text">Billing could not be loaded. Refresh the page to try again.</p>
+      ) : status.plan.comped ? (
+        <Panel title={`${status.plan.name} plan`} note="This workspace isn't billed.">
+          <p className="px-5 py-4 text-sm text-ps-muted">{status.connected_accounts} connected accounts.</p>
+        </Panel>
       ) : (
         <>
-          <Card aria-label="Plan">
-            <CardHeader
-              title="Plan"
-              action={status.subscription ? <Status {...(STATUS[status.subscription.status] ?? { tone: "attention" as const, label: status.subscription.status })} /> : undefined}
-            />
-            <Row label="Plan">{status.plan.comped ? `${status.plan.name} (no charge)` : status.plan.name}</Row>
-            <Row label="Connected accounts">
-              {plural(status.connected_accounts)}
-              {!status.subscription && !status.plan.comped && <span className="ml-2 text-xs text-ps-subtle">{status.free_accounts} free without a card</span>}
-            </Row>
-            {status.estimate && (
-              <Row label="This month">
-                <span className="text-ps-text">{status.estimate.monthly_total === 0 ? "Free" : `${money(status.estimate.monthly_total)} a month`}</span>
-                <span className="mt-1 block text-xs text-ps-subtle">
-                  {[...status.estimate.bands.map((b) => `${plural(b.units)} × ${money(b.perAccount)}`), ...(status.estimate.credit ? [`${money(status.estimate.credit)} monthly credit`] : [])].join(" · ")}
-                  {status.estimate.monthly_total > 0 && " · you only pay for the time each account is connected"}
-                </span>
-              </Row>
-            )}
-            {!status.plan.comped && status.can_manage && status.available && (
-              <div className="flex flex-wrap items-center gap-3 px-4 py-3.5">
-                {status.subscription && status.subscription.status !== "canceled" ? (
-                  <form action={manageBilling}>
-                    <input type="hidden" name="workspace_id" value={workspace.id} />
-                    <button type="submit" className={`${button} border border-ps-fg/[0.12] hover:border-ps-fg/25`}>Manage billing</button>
-                  </form>
-                ) : (
+          {status.upcoming && (
+            <section aria-label="Upcoming invoice" className="rounded-xl border border-ps-line bg-ps-surface">
+              <div className="flex flex-wrap items-end justify-between gap-4 px-6 pb-5 pt-6">
+                <div>
+                  <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-ps-subtle">
+                    Upcoming invoice · {day(status.upcoming.period_start)} to {day(status.upcoming.period_end)}
+                  </p>
+                  <p className="mt-2 text-4xl font-semibold tracking-[-0.03em] text-ps-text tabular-nums">{money(status.upcoming.total)}</p>
+                  <p className="mt-2 text-sm text-ps-muted">
+                    {paying ? `Charged on ${day(status.upcoming.period_end, { month: "short", day: "numeric", year: "numeric" })}.` : `No card on file. ${status.free_accounts} accounts are free.`}
+                  </p>
+                </div>
+                {manage && !paying && (
                   <form action={addCard}>
-                    <input type="hidden" name="workspace_id" value={workspace.id} />
-                    <button type="submit" className={`${button} bg-ps-plum text-ps-ground`}>Add a card</button>
+                    <Hidden id={workspace.id} />
+                    <button type="submit" className={primary}>Add a card</button>
                   </form>
                 )}
-                <span className="text-xs text-ps-subtle">
-                  {status.subscription ? "Change your card, see invoices or cancel on Stripe's page." : "Needed for a 3rd account. Cards are handled by Stripe, we never see them."}
-                </span>
               </div>
-            )}
-            {!status.can_manage && <p className="px-4 py-3.5 text-xs text-ps-subtle">Only owners and admins can change billing.</p>}
-            {status.can_manage && !status.available && !status.plan.comped && <p className="px-4 py-3.5 text-xs text-ps-subtle">Billing isn&apos;t switched on here yet.</p>}
-          </Card>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-y border-ps-fg/[0.06] text-left font-mono text-[11px] uppercase tracking-[0.12em] text-ps-subtle">
+                    <th className="px-6 py-2 font-normal">Item</th>
+                    <th className="hidden px-6 py-2 font-normal sm:table-cell">Usage</th>
+                    <th className="px-6 py-2 text-right font-normal">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {status.upcoming.lines.map((line) => (
+                    <tr key={line.label} className="border-b border-ps-fg/[0.06]">
+                      <td className="px-6 py-3 text-ps-text">
+                        {line.label}
+                        <span className="mt-0.5 block text-xs text-ps-subtle sm:hidden">{line.detail}</span>
+                      </td>
+                      <td className="hidden px-6 py-3 text-ps-muted sm:table-cell">{line.detail}</td>
+                      <td className="px-6 py-3 text-right font-mono tabular-nums text-ps-text">{money(line.amount)}</td>
+                    </tr>
+                  ))}
+                  <tr className="bg-ps-fg/[0.02]">
+                    <td className="px-6 py-3.5 font-medium text-ps-text" colSpan={2}>{paying ? "Total charged to your card" : "Total"}</td>
+                    <td className="px-6 py-3.5 text-right font-mono font-semibold tabular-nums text-ps-text">{money(status.upcoming.total)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </section>
+          )}
 
-          <Card aria-label="X posts">
-            <CardHeader title="X posts" />
-            <Row label="Price">
-              {cents(status.x.price_per_post)} a post, {cents(status.x.price_per_link_post)} with a link
-              <span className="mt-1 block text-xs text-ps-subtle">X charges us for every post. The first {money(status.x.free_monthly)} each month is on us.</span>
-            </Row>
-            <Row label="This month">
-              {money(status.x.spent)} <span className="text-ps-subtle">{status.x.monthly_cap !== null && `of ${money(status.x.monthly_cap)}`} · {status.x.posts} post{status.x.posts === 1 ? "" : "s"}</span>
-              {status.x.monthly_cap !== null && status.x.monthly_cap > 0 && (
-                <span className="mt-2 block h-1.5 max-w-xs overflow-hidden rounded-full bg-ps-fg/[0.06]" role="progressbar" aria-label="X spend this month" aria-valuenow={Math.round(Math.min(100, (status.x.spent / status.x.monthly_cap) * 100))} aria-valuemin={0} aria-valuemax={100}>
-                  <span className={`block h-full ${status.x.spent >= status.x.monthly_cap * 0.8 ? "bg-warning" : "bg-ps-plum"}`} style={{ width: `${Math.min(100, (status.x.spent / status.x.monthly_cap) * 100)}%` }} />
-                </span>
+          <div className="grid gap-4 lg:grid-cols-3">
+            <Panel title="Cost controls" note="Limits on what you can spend.">
+              <div className="border-b border-ps-fg/[0.06] px-5 py-4">
+                <p className="text-sm text-ps-text">X monthly cap</p>
+                <p className="mt-1 text-xs text-ps-subtle">
+                  {status.x.monthly_cap !== null ? `${money(status.x.spent)} of ${money(status.x.monthly_cap)} used. ` : ""}At the cap, X posts pause until next month.
+                </p>
+                {status.x.monthly_cap !== null && status.x.monthly_cap > 0 && status.x.spent >= status.x.monthly_cap * 0.8 && (
+                  <p role="status" className="mt-1.5 text-xs text-ps-attention">{status.x.spent >= status.x.monthly_cap ? "X posts are paused." : "Close to your cap."}</p>
+                )}
+                {status.can_manage && (
+                  <form action={saveXCap} className="mt-3 flex items-center gap-2">
+                    <Hidden id={workspace.id} />
+                    <label className="flex items-center gap-1.5">
+                      <span aria-hidden="true" className="text-ps-subtle">$</span>
+                      <input name="monthly_cap" type="number" min={0} max={10000} step={1} defaultValue={status.x.set_cap} aria-label="X monthly cap in dollars" className="h-8 w-20 rounded-lg border border-ps-fg/[0.12] bg-transparent px-2 text-sm tabular-nums" />
+                    </label>
+                    <button type="submit" className={quiet}>Set cap</button>
+                  </form>
+                )}
+                {!paying && <p className="mt-2 text-xs text-ps-subtle">Without a card, X is limited to {money(status.x.free_monthly)} a month.</p>}
+              </div>
+              {manage && paying && (
+                <div className="flex items-center justify-between gap-3 px-5 py-4">
+                  <div>
+                    <p className="text-sm text-ps-text">Stop paying</p>
+                    <p className="mt-1 text-xs text-ps-subtle">Go back to {status.free_accounts} free accounts at the end of the month.</p>
+                  </div>
+                  <form action={manageBilling}>
+                    <Hidden id={workspace.id} />
+                    <button type="submit" className={quiet}>Switch to Free</button>
+                  </form>
+                </div>
               )}
-              {status.x.monthly_cap !== null && status.x.spent >= status.x.monthly_cap * 0.8 && (
-                <span role="status" className="mt-1.5 block text-xs text-ps-attention">
-                  {status.x.spent >= status.x.monthly_cap ? "X posts are paused until next month." : "Over 80% of this month's X cap."}{" "}
-                  {status.subscription ? "Raise the cap below to keep posting." : "Add a card to go past the free $1."}
-                </span>
-              )}
-            </Row>
-            <Row label="Monthly cap">
-              {status.can_manage ? (
-                <form action={saveXCap} className="flex flex-wrap items-center gap-2">
-                  <input type="hidden" name="workspace_id" value={workspace.id} />
-                  <label className="flex items-center gap-1.5">
-                    <span aria-hidden="true" className="text-ps-subtle">$</span>
-                    <input
-                      name="monthly_cap"
-                      type="number"
-                      min={0}
-                      max={10000}
-                      step={1}
-                      defaultValue={status.x.set_cap}
-                      aria-label="Monthly X cap in dollars"
-                      className="h-[34px] w-24 rounded-lg border border-ps-fg/[0.12] bg-transparent px-2.5 text-sm tabular-nums"
-                    />
-                  </label>
-                  <button type="submit" className={`${button} border border-ps-fg/[0.12] hover:border-ps-fg/25`}>Save</button>
-                </form>
+            </Panel>
+
+            <Panel
+              title="Payment method"
+              note="Charged to your default card."
+              footer="Cards are handled by Stripe."
+              action={
+                manage ? (
+                  <form action={paying ? manageBilling : addCard}>
+                    <Hidden id={workspace.id} />
+                    <button type="submit" className={paying ? quiet : primary}>{paying ? "Change" : "Add card"}</button>
+                  </form>
+                ) : undefined
+              }
+            >
+              {status.card ? (
+                <div className="flex items-center gap-3 px-5 py-4">
+                  <span className="rounded-md bg-ps-fg/[0.06] px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-ps-muted">{status.card.brand}</span>
+                  <span>
+                    <span className="block text-sm text-ps-text">{BRANDS[status.card.brand] ?? status.card.brand} •••• {status.card.last4}</span>
+                    <span className="block text-xs text-ps-subtle">Expires {String(status.card.exp_month).padStart(2, "0")}/{status.card.exp_year}</span>
+                  </span>
+                </div>
               ) : (
-                money(status.x.set_cap)
+                <p className="px-5 py-4 text-sm text-ps-muted">No card yet. You need one for a 3rd account.</p>
               )}
-              <span className="mt-1 block text-xs text-ps-subtle">
-                {status.plan.comped
-                  ? "Your plan isn't charged for X posts."
-                  : `At the cap, X posts pause until next month; other platforms keep posting.${status.subscription ? "" : ` Without a card, X stops at the free ${money(status.x.free_monthly)}.`}`}
-              </span>
-            </Row>
-          </Card>
+            </Panel>
+
+            <Panel
+              title="Billing details"
+              note="Shown on your invoices."
+              footer="Changes apply to future invoices."
+              action={
+                manage && status.details ? (
+                  <form action={manageBilling}>
+                    <Hidden id={workspace.id} />
+                    <button type="submit" className={quiet}>Edit</button>
+                  </form>
+                ) : undefined
+              }
+            >
+              {status.details ? (
+                <dl className="space-y-2.5 px-5 py-4 text-sm">
+                  {(
+                    [
+                      ["Email", status.details.email],
+                      ["Name", status.details.name],
+                      ["Address", status.details.address],
+                    ] as const
+                  ).map(([label, value]) => (
+                    <div key={label} className="flex justify-between gap-4">
+                      <dt className="text-ps-subtle">{label}</dt>
+                      <dd className="m-0 text-right text-ps-text">{value || "None"}</dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : (
+                <p className="px-5 py-4 text-sm text-ps-muted">Added with your first card.</p>
+              )}
+            </Panel>
+          </div>
+
+          <Panel title="Invoices" note="Every charge, with the PDF.">
+            {status.invoices.length === 0 ? (
+              <p className="px-5 py-4 text-sm text-ps-muted">No invoices yet.</p>
+            ) : (
+              <table className="w-full text-sm">
+                <tbody>
+                  {status.invoices.map((invoice) => (
+                    <tr key={invoice.id} className="border-b border-ps-fg/[0.06] last:border-b-0">
+                      <td className="px-5 py-3 font-mono text-xs text-ps-subtle">{day(invoice.date)}</td>
+                      <td className="px-5 py-3 text-ps-text">{day(invoice.date, { month: "long" })}</td>
+                      <td className="hidden px-5 py-3 font-mono text-xs text-ps-subtle sm:table-cell">{invoice.number}</td>
+                      <td className="px-5 py-3 text-right font-mono tabular-nums text-ps-text">{money(invoice.total)}</td>
+                      <td className="px-5 py-3">
+                        <span className={cn("rounded-full px-2 py-0.5 text-[11px]", invoice.status === "paid" ? "bg-ps-live/15 text-ps-live" : "bg-ps-attention/15 text-ps-attention")}>{invoice.status}</span>
+                      </td>
+                      <td className="px-5 py-3 text-right">
+                        {(invoice.pdf ?? invoice.url) && (
+                          <a href={invoice.pdf ?? invoice.url ?? undefined} className="text-xs text-ps-plum-soft hover:text-ps-text" aria-label={`Download invoice ${invoice.number ?? ""}`}>
+                            PDF
+                          </a>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </Panel>
+          {!status.can_manage && <p className="text-xs text-ps-subtle">Only owners and admins can change billing.</p>}
         </>
       )}
     </div>

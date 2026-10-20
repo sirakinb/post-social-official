@@ -147,15 +147,79 @@ export async function billingStatus(deps: BillingDeps, caller: Caller, input: Pa
   const billable = state.plan_id === "paid" && PAID_STATUSES.has(state.subscription_status ?? "");
   const setCap = (state.x_monthly_cap_cents ?? 1000) / 100;
   const effectiveCap = comped ? null : billable ? setCap : Math.min(setCap, X_PRICES.freeMonthly);
+  const xSpend = await xSpendThisMonth(deps.sql, workspaceId);
   return {
     plan: { id: state.plan_id, name: state.plan_name, comped },
     connected_accounts: state.connected,
     free_accounts: FREE_ACCOUNTS,
     subscription: state.stripe_subscription_id ? { status: state.subscription_status } : null,
     estimate: comped ? null : { monthly_total: bill.total, credit: bill.credit, bands: bill.bands.filter((b) => b.units > 0) },
-    x: { ...(await xSpendThisMonth(deps.sql, workspaceId)), monthly_cap: effectiveCap, set_cap: (state.x_monthly_cap_cents ?? 1000) / 100, price_per_post: X_PRICES.post, price_per_link_post: X_PRICES.postWithLink, free_monthly: X_PRICES.freeMonthly },
+    x: { ...xSpend, monthly_cap: effectiveCap, set_cap: (state.x_monthly_cap_cents ?? 1000) / 100, price_per_post: X_PRICES.post, price_per_link_post: X_PRICES.postWithLink, free_monthly: X_PRICES.freeMonthly },
     can_manage: member.role === "owner" || member.role === "admin",
     available: Boolean(deps.stripe),
+    ...(await stripeDetails(deps, state, bill.total, xSpend.spent, comped)),
+  };
+}
+
+type Card = { brand: string; last4: string; exp_month: number; exp_year: number };
+type StripeInvoice = { id: string; number: string | null; created: number; period_start: number; period_end: number; total: number; status: string; invoice_pdf: string | null; hosted_invoice_url: string | null };
+const iso = (seconds: number | null | undefined) => (seconds ? new Date(seconds * 1000).toISOString() : null);
+const monthStart = () => {
+  const d = new Date();
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+};
+
+// What Stripe knows: the next invoice, the card, billing details and past invoices. Each
+// part is best effort, so the page still loads if Stripe is slow or down.
+async function stripeDetails(deps: BillingDeps, state: Awaited<ReturnType<typeof workspaceState>>, estimate: number, xSpent: number, comped: boolean) {
+  const xLine = (amount: number) => ({ label: "X posts", detail: "This month so far", amount });
+  const xBillable = Math.max(0, Math.round((xSpent - X_PRICES.freeMonthly) * 100) / 100);
+  const fallbackEnd = new Date(Date.UTC(monthStart().getUTCFullYear(), monthStart().getUTCMonth() + 1, 0));
+  const ourUpcoming = {
+    total: Math.round((estimate + xBillable) * 100) / 100,
+    period_start: monthStart().toISOString(),
+    period_end: fallbackEnd.toISOString(),
+    lines: [
+      { label: "Connected accounts", detail: `${state.connected} connected · ${Math.min(state.connected, FREE_ACCOUNTS)} free`, amount: estimate },
+      ...(xSpent > 0 ? [xLine(xBillable)] : []),
+    ],
+  };
+  const empty = { upcoming: comped ? null : ourUpcoming, card: null as Card | null, details: null as { email: string | null; name: string | null; address: string | null } | null, invoices: [] as Array<Record<string, unknown>> };
+  if (!deps.stripe || !state.stripe_customer_id) return empty;
+  const stripe = deps.stripe;
+  const customerId = state.stripe_customer_id;
+  const [customer, subscription, invoices, preview] = await Promise.all([
+    stripe.request<{ email: string | null; name: string | null; address: Record<string, string | null> | null; invoice_settings?: { default_payment_method?: { card?: Card } | null } }>("GET", `/v1/customers/${customerId}`, { expand: ["invoice_settings.default_payment_method"] }).catch(() => null),
+    state.stripe_subscription_id
+      ? stripe.request<{ default_payment_method?: { card?: Card } | null }>("GET", `/v1/subscriptions/${state.stripe_subscription_id}`, { expand: ["default_payment_method"] }).catch(() => null)
+      : null,
+    stripe.request<{ data: StripeInvoice[] }>("GET", "/v1/invoices", { customer: customerId, limit: 12 }).catch(() => null),
+    state.stripe_subscription_id && PAID_STATUSES.has(state.subscription_status ?? "")
+      ? stripe.request<{ total: number; period_start: number; period_end: number; next_payment_attempt: number | null; lines: { data: Array<{ amount: number; description: string | null; quantity?: number | null }> } }>("POST", "/v1/invoices/create_preview", { customer: customerId, subscription: state.stripe_subscription_id }).catch(() => null)
+      : null,
+  ]);
+  const a = customer?.address;
+  const card = subscription?.default_payment_method?.card ?? customer?.invoice_settings?.default_payment_method?.card ?? null;
+  const upcoming = preview
+    ? {
+        total: Math.round((preview.total / 100 + xBillable) * 100) / 100,
+        period_start: iso(preview.period_start),
+        period_end: iso(preview.next_payment_attempt ?? preview.period_end),
+        lines: [
+          { label: "Connected accounts", detail: `${state.connected} connected · ${Math.min(state.connected, FREE_ACCOUNTS)} free`, amount: preview.total / 100 },
+          ...(xSpent > 0 ? [xLine(xBillable)] : []),
+        ],
+      }
+    : ourUpcoming;
+  return {
+    upcoming: comped ? null : upcoming,
+    card: card ? { brand: card.brand, last4: card.last4, exp_month: card.exp_month, exp_year: card.exp_year } : null,
+    details: customer
+      ? { email: customer.email, name: customer.name, address: a ? [a.line1, a.line2, a.city, a.state, a.postal_code, a.country].filter(Boolean).join(", ") || null : null }
+      : null,
+    invoices: (invoices?.data ?? [])
+      .filter((i) => i.status !== "draft" && i.status !== "void")
+      .map((i) => ({ id: i.id, number: i.number, date: iso(i.created), total: i.total / 100, status: i.status, pdf: i.invoice_pdf, url: i.hosted_invoice_url })),
   };
 }
 

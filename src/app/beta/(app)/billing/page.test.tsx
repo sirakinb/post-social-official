@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import BillingPage, { type BillingStatus } from "./page";
 
@@ -17,10 +17,32 @@ const base: BillingStatus = {
   connected_accounts: 2,
   free_accounts: 2,
   subscription: null,
-  estimate: { monthly_total: 0, credit: 10, bands: [{ units: 2, perAccount: 5, amount: 10 }] },
-  x: { spent: 0.42, posts: 21, monthly_cap: 1, set_cap: 10, price_per_post: 0.02, price_per_link_post: 0.25, free_monthly: 1 },
+  x: { spent: 0.42, posts: 21, monthly_cap: 1, set_cap: 10, free_monthly: 1 },
   can_manage: true,
   available: true,
+  upcoming: { total: 0, period_start: "2026-10-01T00:00:00Z", period_end: "2026-10-31T00:00:00Z", lines: [{ label: "Connected accounts", detail: "2 accounts, 2 free", amount: 0 }] },
+  card: null,
+  details: null,
+  invoices: [],
+};
+
+const paid: BillingStatus = {
+  ...base,
+  plan: { id: "paid", name: "Paid", comped: false },
+  connected_accounts: 12,
+  subscription: { status: "active" },
+  upcoming: {
+    total: 45.42,
+    period_start: "2026-10-01T00:00:00Z",
+    period_end: "2026-10-31T00:00:00Z",
+    lines: [
+      { label: "Connected accounts", detail: "12 accounts", amount: 45 },
+      { label: "X posts", detail: "21 posts", amount: 0.42 },
+    ],
+  },
+  card: { brand: "visa", last4: "4242", exp_month: 4, exp_year: 2030 },
+  details: { email: "ada@example.com", name: "Ada", address: null },
+  invoices: [{ id: "in_1", number: "PS-0001", date: "2026-09-30T00:00:00Z", total: 12.5, status: "paid", pdf: "https://pay.stripe.com/in_1.pdf", url: null }],
 };
 
 beforeEach(() => {
@@ -28,36 +50,51 @@ beforeEach(() => {
 });
 
 describe("BillingPage", () => {
-  it("offers a card to Free workspaces", async () => {
+  it("shows the upcoming invoice and offers a card to Free workspaces", async () => {
     server.status = base;
     render(await BillingPage({ searchParams: Promise.resolve({}) }));
-    expect(screen.getByRole("button", { name: "Add a card" })).toBeInTheDocument();
-    expect(screen.getAllByText("Free")).toHaveLength(2);
-    expect(screen.getByLabelText("Monthly X cap in dollars")).toHaveValue(10);
-    expect(screen.getByText(/2¢ a post, 25¢ with a link/)).toBeInTheDocument();
-    expect(screen.getByRole("progressbar", { name: "X spend this month" })).toHaveAttribute("aria-valuenow", "42");
+    const upcoming = within(screen.getByRole("region", { name: "Upcoming invoice" }));
+    expect(upcoming.getByText(/Upcoming invoice · Oct 1 to Oct 31/)).toBeInTheDocument();
+    expect(upcoming.getByText("No card on file. 2 accounts are free.")).toBeInTheDocument();
+    expect(upcoming.getByRole("button", { name: "Add a card" })).toBeInTheDocument();
+    expect(screen.getByLabelText("X monthly cap in dollars")).toHaveValue(10);
+    expect(screen.getByText(/\$0.42 of \$1.00 used/)).toBeInTheDocument();
+    expect(screen.getByText("No invoices yet.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Switch to Free" })).toBeNull();
   });
 
   it("warns near the X cap", async () => {
     server.status = { ...base, x: { ...base.x, spent: 0.9 } };
     render(await BillingPage({ searchParams: Promise.resolve({}) }));
-    expect(screen.getByText(/Over 80% of this month's X cap/)).toHaveTextContent("Add a card to go past the free $1.");
+    expect(screen.getByText("Close to your cap.")).toBeInTheDocument();
   });
 
-  it("confirms a checkout on return and shows Manage billing", async () => {
-    server.status = { ...base, plan: { id: "paid", name: "Paid", comped: false }, connected_accounts: 12, subscription: { status: "active" }, estimate: { monthly_total: 45, credit: 10, bands: [{ units: 10, perAccount: 5, amount: 50 }, { units: 2, perAccount: 2.5, amount: 5 }] } };
+  it("confirms a checkout on return and shows the card, details and invoices", async () => {
+    server.status = paid;
     render(await BillingPage({ searchParams: Promise.resolve({ checkout: "cs_test_123" }) }));
     expect(server.calls[0]).toEqual(["billing_confirm", { workspace_id: "w1", session_id: "cs_test_123" }]);
-    expect(screen.getByRole("status")).toHaveTextContent("Card added");
-    expect(screen.getByRole("button", { name: "Manage billing" })).toBeInTheDocument();
-    expect(screen.getByText("$45 a month")).toBeInTheDocument();
-    expect(screen.getByText(/10 accounts × \$5 · 2 accounts × \$2.50 · \$10 monthly credit/)).toBeInTheDocument();
+    expect(screen.getAllByRole("status")[0]).toHaveTextContent("Card added");
+    expect(screen.getAllByText("$45.42")).toHaveLength(2);
+    expect(screen.getByText("Charged on Oct 31, 2026.")).toBeInTheDocument();
+    expect(screen.getByText("Visa •••• 4242")).toBeInTheDocument();
+    expect(screen.getByText("Expires 04/2030")).toBeInTheDocument();
+    expect(screen.getByText("ada@example.com")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Change" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Switch to Free" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Download invoice PS-0001/ })).toHaveAttribute("href", "https://pay.stripe.com/in_1.pdf");
+  });
+
+  it("keeps the wording quiet", async () => {
+    server.status = paid;
+    render(await BillingPage({ searchParams: Promise.resolve({}) }));
+    expect(document.body.textContent).not.toMatch(/charges us|by the day|prorat/i);
   });
 
   it("lets only owners and admins change billing", async () => {
     server.status = { ...base, can_manage: false };
     render(await BillingPage({ searchParams: Promise.resolve({}) }));
     expect(screen.queryByRole("button", { name: "Add a card" })).toBeNull();
+    expect(screen.queryByLabelText("X monthly cap in dollars")).toBeNull();
     expect(screen.getByText("Only owners and admins can change billing.")).toBeInTheDocument();
   });
 });

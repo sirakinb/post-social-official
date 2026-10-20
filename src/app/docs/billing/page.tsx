@@ -56,7 +56,7 @@ export default function BillingDocsPage() {
         <p className="utility-label text-accent">Post Social / Docs / Billing</p>
         <h1 className="mt-3 text-3xl font-semibold tracking-[-0.035em] text-ink">Pricing and billing</h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-muted">
-          Your first {FREE_ACCOUNTS} accounts are free, with no card needed. After that it&apos;s usage based: you pay per connected account, only while it&apos;s connected, and X posts at about what X charges us. Every
+          Your first {FREE_ACCOUNTS} accounts are free, with no card needed. After that it&apos;s usage based: you pay per connected account, only while it&apos;s connected, plus a few cents per X post. Every
           feature is included at every size.
         </p>
 
@@ -99,8 +99,7 @@ export default function BillingDocsPage() {
 
         <Section id="x" title="X posts">
           <p>
-            X charges Post Social for every post made through its API, so X posts are billed on top: {cents(X_PRICES.post)} a post, or {cents(X_PRICES.postWithLink)} when the text has a link (X charges
-            much more for links). The first {money(X_PRICES.freeMonthly)} of X posts each month is free. Reading posts and stats costs you nothing.
+            X posts are billed by use: {cents(X_PRICES.post)} a post, or {cents(X_PRICES.postWithLink)} when the text has a link. The first {money(X_PRICES.freeMonthly)} of X posts each month is free. Reading posts and stats costs you nothing.
           </p>
           <p>
             You set a monthly X cap on the Billing page ({money(X_PRICES.defaultMonthlyCap)}{" "}to start). The Billing page warns you once you&apos;ve used 80%. At the cap, X posts pause until the next
