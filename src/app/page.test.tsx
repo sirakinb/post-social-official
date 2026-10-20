@@ -48,9 +48,9 @@ describe("LandingPage", () => {
     // The real chat sits in the Use with AI section; the connector permissions sit under Features.
     expect(document.querySelector('#agents [data-src="/landing/claude-chat.webp"]')).not.toBeNull();
     expect(document.querySelector('#features [data-src="/landing/claude-connector.webp"]')).not.toBeNull();
-    // Each shot says where it comes from.
+    // The Claude chat is labelled as Claude; the app's own screen needs no label.
     expect(within(document.getElementById("agents") as HTMLElement).getByText("Claude")).toBeInTheDocument();
-    expect(within(document.getElementById("features") as HTMLElement).getByText("Post Social")).toBeInTheDocument();
+    expect(within(document.getElementById("features") as HTMLElement).queryByText("Post Social")).toBeNull();
   });
 
   it("is honest about platforms: eight live, nothing promised", () => {

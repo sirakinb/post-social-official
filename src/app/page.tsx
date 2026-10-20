@@ -68,10 +68,10 @@ function Check() {
   );
 }
 
-// A small chip on a screen's top-left corner naming where the screenshot comes from.
+// A small chip inside a screen's top-left corner naming the app the screenshot comes from.
 function Badge({ icon, label }: { icon: React.ReactNode; label: string }) {
   return (
-    <span className="lp-glass absolute bottom-full left-3 z-10 mb-3 inline-flex items-center gap-2 rounded-full py-1 pl-1 pr-3 text-[13px] font-medium text-[#FAF6F0] shadow-[0_8px_24px_rgba(0,0,0,0.4)]">
+    <span className="lp-glass absolute left-4 top-4 z-10 inline-flex items-center gap-2 rounded-full py-1 pl-1 pr-3 text-[13px] font-medium text-[#FAF6F0] shadow-[0_8px_24px_rgba(0,0,0,0.4)]">
       {icon}
       {label}
     </span>
@@ -80,14 +80,14 @@ function Badge({ icon, label }: { icon: React.ReactNode; label: string }) {
 
 function Screen({ src, alt, width = 2400, height = 1500, priority, badge, className }: { src: string; alt: string; width?: number; height?: number; priority?: boolean; badge?: React.ReactNode; className?: string }) {
   return (
-    <div className={cn("lp-screen relative", badge && "mt-8 md:mt-0", className)}>
+    <div className={cn("lp-screen relative", className)}>
       {badge}
       <Image src={src} alt={alt} width={width} height={height} priority={priority} sizes="(max-width: 768px) 100vw, 60vw" className="block h-auto w-full rounded-[14px]" />
     </div>
   );
 }
 
-function Feature({ label, title, text, points, src, alt, width, height, badge, flip }: { label: string; title: React.ReactNode; text: string; points: string[]; src: string; alt: string; width?: number; height?: number; badge?: React.ReactNode; flip?: boolean }) {
+function Feature({ label, title, text, points, src, alt, width, height, flip }: { label: string; title: React.ReactNode; text: string; points: string[]; src: string; alt: string; width?: number; height?: number; flip?: boolean }) {
   return (
     <div className={cn("grid items-center gap-10 md:gap-14", flip ? "md:grid-cols-[3fr_2fr]" : "md:grid-cols-[2fr_3fr]")}>
       <div className={cn(flip && "md:order-2")}>
@@ -103,7 +103,7 @@ function Feature({ label, title, text, points, src, alt, width, height, badge, f
           ))}
         </ul>
       </div>
-      <Screen src={src} alt={alt} width={width} height={height} badge={badge} className={cn(flip && "md:order-1")} />
+      <Screen src={src} alt={alt} width={width} height={height} className={cn(flip && "md:order-1")} />
     </div>
   );
 }
@@ -266,15 +266,6 @@ export default function LandingPage() {
             points={["Everything going out next, on every channel", "Problems flagged in plain words, with the fix", "Posts from you and your agents, side by side"]}
             src="/landing/app-home.webp"
             alt="The Post Social home screen: posts going out next, one that needs attention, and recent activity from the team, Claude and ChatGPT"
-            badge={
-              <Badge
-                icon={
-                  // eslint-disable-next-line @next/next/no-img-element -- tiny static svg
-                  <img src="/post-social-icon.svg" alt="" className="size-[22px] rounded-[6px]" />
-                }
-                label="Post Social"
-              />
-            }
           />
         </section>
 
