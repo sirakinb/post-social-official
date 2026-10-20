@@ -17,7 +17,7 @@ function fill(accounts: number, from: number, to: number) {
   return Math.max(0, Math.min(1, (accounts - (from - 1)) / (end - from + 1)));
 }
 
-export function PricingCalculator({ initial = 12 }: { initial?: number }) {
+export function PricingCalculator({ initial = 2 }: { initial?: number }) {
   const [accounts, setAccounts] = useState(initial);
   const bill = monthlyBill(accounts);
   const average = accounts > 0 ? bill.total / accounts : 0;
@@ -62,8 +62,8 @@ export function PricingCalculator({ initial = 12 }: { initial?: number }) {
         <div className="md:text-right">
           <p className="lp-label">Your monthly price</p>
           <p aria-live="polite" className="mt-3 text-6xl tracking-[-0.04em] tabular-nums">
-            <span className="lp-display lp-ink">{money(bill.total)}</span>
-            <span className="ml-1 text-lg text-[#FAF6F0]/50">/mo</span>
+            <span className="lp-display lp-ink">{bill.total === 0 ? "Free" : money(bill.total)}</span>
+            {bill.total > 0 && <span className="ml-1 text-lg text-[#FAF6F0]/50">/mo</span>}
           </p>
           <p className="mt-2 text-sm text-[#FAF6F0]/55">
             {bill.total === 0 ? `Free for up to ${FREE_ACCOUNTS} accounts. No card needed.` : `About ${money(Math.round(average * 100) / 100)} per account, first ${FREE_ACCOUNTS} free.`}
@@ -98,7 +98,7 @@ export function PricingCalculator({ initial = 12 }: { initial?: number }) {
           );
         })}
         <li className="flex items-center justify-between gap-4 rounded-xl border border-dashed border-white/10 px-4 py-3 text-sm">
-          <span className="text-[#FAF6F0]/70">Monthly credit: your first {FREE_ACCOUNTS} accounts</span>
+          <span className="text-[#FAF6F0]/70">Your first {FREE_ACCOUNTS} accounts, free every month</span>
           <span className="whitespace-nowrap tabular-nums text-[#ffc48a]">−{money(bill.credit)}</span>
         </li>
       </ol>

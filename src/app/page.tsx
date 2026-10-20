@@ -321,12 +321,12 @@ export default function LandingPage() {
           <div className="text-center">
             <Label>Pricing</Label>
             <h2 className="lp-h2 mt-3">
-              Pay per account. <span className="lp-display lp-ink">Less as you grow.</span>
+              Your first 2 accounts are <span className="lp-display lp-ink">free.</span>
             </h2>
-            <p className="mx-auto mt-4 max-w-xl leading-relaxed text-[#FAF6F0]/65">Your first 2 accounts are free. After that, each account costs less the more you connect.</p>
+            <p className="mx-auto mt-4 max-w-xl leading-relaxed text-[#FAF6F0]/65">No card needed. Start posting today, and add more accounts only when you need them, from $5 each.</p>
           </div>
           <div className="mt-12">
-            <PricingCalculator />
+            <PricingCalculator initial={2} />
           </div>
         </section>
 

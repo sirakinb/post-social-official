@@ -7,7 +7,7 @@ describe("PricingCalculator", () => {
     render(<PricingCalculator initial={12} />);
     expect(screen.getByText("$45")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Number of connected accounts"), { target: { value: "2" } });
-    expect(screen.getByText("$0")).toBeInTheDocument();
+    expect(screen.getByText("Free")).toBeInTheDocument();
     expect(screen.getByText(/No card needed/)).toBeInTheDocument();
   });
   it("lights only the bands the accounts reach", () => {
