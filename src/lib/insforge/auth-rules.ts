@@ -3,9 +3,23 @@
 
 export const BETA_HOME = "/beta";
 export const BETA_LOGIN = "/beta/login";
+export const BETA_SIGNUP = "/beta/signup";
+// Where Google sends people back after they sign in (must be in insforge.toml's
+// allowed_redirect_urls for every site address).
+export const OAUTH_CALLBACK = "/beta/auth/callback";
+export const OAUTH_VERIFIER_COOKIE = "ps_oauth_verifier";
 
 // Pages under /beta that signed-out visitors may open.
-export const PUBLIC_BETA_PATHS = [BETA_LOGIN, "/beta/reset-password"] as const;
+export const PUBLIC_BETA_PATHS = [BETA_LOGIN, BETA_SIGNUP, OAUTH_CALLBACK, "/beta/reset-password"] as const;
+
+// Sign-in and sign-up pages are for signed-out visitors only; signed-in people go to the app.
+export const SIGNED_OUT_ONLY_PATHS = [BETA_LOGIN, BETA_SIGNUP] as const;
+
+// Open sign-up is switched on per environment (PUBLIC_SIGNUP=on). Off, the site stays
+// invite-only: no sign-up page, no Google button.
+export function signupOpen(env: Record<string, string | undefined> = process.env) {
+  return env.PUBLIC_SIGNUP === "on";
+}
 
 export function isPublicBetaPath(pathname: string) {
   return (PUBLIC_BETA_PATHS as readonly string[]).includes(pathname.replace(/\/+$/, "") || "/");
@@ -47,6 +61,18 @@ export function signInErrorMessage(error: MaybeAuthError) {
     return "The sign-in service is not responding. Try again in a moment.";
   }
   return "That email and password do not match. Check them and try again.";
+}
+
+export function signUpErrorMessage(error: MaybeAuthError) {
+  if (!error) return null;
+  if (error.statusCode === 429) return "Too many attempts. Wait a minute, then try again.";
+  if (error.statusCode !== undefined && error.statusCode >= 500) {
+    return "The sign-in service is not responding. Try again in a moment.";
+  }
+  if (error.statusCode === 403) return "Sign-up is closed right now. Contact support@postsocial.xyz.";
+  // Taken addresses get the same answer as other problems, so the form cannot be used to
+  // find out who has an account.
+  return "We couldn't create an account with that email. If you already have one, sign in instead.";
 }
 
 export function resetErrorMessage(error: MaybeAuthError) {

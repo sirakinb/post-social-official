@@ -30,6 +30,7 @@ import {
   type AuthorizeParams,
 } from "../../lib/oauth/server";
 import { usageReport } from "../../lib/usage";
+import { provisionWorkspace } from "../../lib/signup";
 import { mediaLinks } from "../../lib/media/links";
 import { tiktokCreatorInfo } from "../../lib/connections/tiktok-creator";
 import type { Settings } from "../../lib/connections/platforms";
@@ -60,7 +61,7 @@ const bearer = (request: Request) => request.headers.get("authorization")?.match
 // OAuth discovery and token endpoints are called from AI apps, some running in a browser.
 const OPEN_CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type, Authorization, MCP-Protocol-Version" };
 
-const allActions = { ...keyActions, ...grantActions, usage: usageReport };
+const allActions = { ...keyActions, ...grantActions, usage: usageReport, provision_workspace: provisionWorkspace };
 
 async function agentFor(deps: ApiHandlerDeps, request: Request, entryPoint: "api" | "mcp"): Promise<AgentCaller | null> {
   const token = bearer(request);
@@ -153,7 +154,7 @@ async function waitlistRoute(deps: ApiHandlerDeps, request: Request) {
 
 const tooFast = (wait: number) => `Too many requests from this key or app. Wait ${wait} seconds, then try again.`;
 
-// Sign-in and password-reset limits, checked by our website before it talks to the sign-in
+// Sign-in, sign-up and password-reset limits, checked by our website before it talks to the sign-in
 // service. Only callers holding the shared proxy secret may use it.
 async function internalLimitsRoute(deps: ApiHandlerDeps, request: Request) {
   if (request.method !== "POST" || !fromOurWebsite(request, deps.proxySecret)) return json(404, errorBody(404, "Not found."));
@@ -166,6 +167,8 @@ async function internalLimitsRoute(deps: ApiHandlerDeps, request: Request) {
       await enforceLimit(deps.sql, "signin_ip", ip);
       if (emailAndIp) await enforceLimit(deps.sql, "signin_email_ip", emailAndIp);
       if (email) await enforceLimit(deps.sql, "signin_email", email);
+    } else if (body.check === "signup") {
+      await enforceLimit(deps.sql, "signup_ip", ip);
     } else if (body.check === "reset_request") {
       await enforceLimit(deps.sql, "reset_request_ip", ip);
       // Over the per-email cap: answer as usual but send nothing, so a stranger can neither

@@ -1,8 +1,14 @@
 # InsForge project settings, applied to dev with `npm run config:dev` and to prod by
-# `npm run db:promote`. Accounts are created by an admin script, so public sign-up is off
-# and email verification is not needed.
+# `npm run db:promote`. Accounts are created by an admin script while public sign-up is
+# off. Open sign-up (email and Google) is built; turning it on means disable_signup =
+# false here AND PUBLIC_SIGNUP=on on the website. Redirect URLs are where Google sign-in
+# may return to (src/app/beta/auth/callback).
 [auth]
-allowed_redirect_urls = []
+allowed_redirect_urls = [
+  "https://www.postsocial.xyz/beta/auth/callback",
+  "https://postsocial.xyz/beta/auth/callback",
+  "http://localhost:3333/beta/auth/callback",
+]
 require_email_verification = false
 verify_email_method = "code"
 reset_password_method = "code"

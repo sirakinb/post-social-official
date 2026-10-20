@@ -17,8 +17,13 @@ export async function loadViewer(path: string, slug?: string) {
   const user = await currentUser();
   if (!user) redirect(`${BETA_LOGIN}?next=${encodeURIComponent(path)}`);
   const client = await insforgeServerClient();
-  const { data } = await client.database.from("workspace_members").select("role, workspace_id, workspaces(name, slug)").eq("user_id", user.id);
-  const memberships = ((data ?? []) as unknown as MembershipRow[]).map((m) => ({ id: m.workspace_id, name: m.workspaces?.name ?? "Workspace", slug: m.workspaces?.slug ?? "", role: m.role }));
+  const readMemberships = async () => {
+    const { data } = await client.database.from("workspace_members").select("role, workspace_id, workspaces(name, slug)").eq("user_id", user.id);
+    return ((data ?? []) as unknown as MembershipRow[]).map((m) => ({ id: m.workspace_id, name: m.workspaces?.name ?? "Workspace", slug: m.workspaces?.slug ?? "", role: m.role }));
+  };
+  let memberships = await readMemberships();
+  // Someone who just signed up has no workspace yet: create theirs (Free plan) and read again.
+  if (!memberships.length && (await callServer<{ workspace_id: string }>("provision_workspace", {}))) memberships = await readMemberships();
   const workspace = memberships.find((m) => m.slug === slug) ?? memberships[0] ?? null;
   const profile = (user as { profile?: { name?: string; avatar_url?: string } | null }).profile;
   const viewer: Viewer = { id: user.id, email: user.email, name: profile?.name || user.email.split("@")[0], avatarUrl: profile?.avatar_url ?? null };

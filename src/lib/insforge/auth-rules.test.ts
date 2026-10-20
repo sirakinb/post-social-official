@@ -5,6 +5,8 @@ import {
   resetErrorMessage,
   safeNextPath,
   signInErrorMessage,
+  signUpErrorMessage,
+  signupOpen,
 } from "./auth-rules";
 
 describe("safeNextPath", () => {
@@ -63,5 +65,21 @@ describe("error messages", () => {
     expect(signInErrorMessage({ statusCode: 503 })).toMatch(/not responding/);
     expect(resetErrorMessage({ statusCode: 400 })).toMatch(/not valid or has expired/);
     expect(signInErrorMessage(null)).toBeNull();
+  });
+});
+
+describe("open sign-up", () => {
+  it("is off unless switched on", () => {
+    expect(signupOpen({})).toBe(false);
+    expect(signupOpen({ PUBLIC_SIGNUP: "true" })).toBe(false);
+    expect(signupOpen({ PUBLIC_SIGNUP: "on" })).toBe(true);
+  });
+  it("lets signed-out visitors reach the sign-up page and Google's return address", () => {
+    expect(isPublicBetaPath("/beta/signup")).toBe(true);
+    expect(isPublicBetaPath("/beta/auth/callback")).toBe(true);
+  });
+  it("never says whether an email already has an account", () => {
+    expect(signUpErrorMessage({ statusCode: 409 })).toBe(signUpErrorMessage({ statusCode: 400 }));
+    expect(signUpErrorMessage({ statusCode: 429 })).toMatch(/Too many attempts/);
   });
 });

@@ -18,6 +18,7 @@ export const LIMITS = {
   signin_ip: { limit: 20, windowSeconds: 600 },
   signin_email_ip: { limit: 10, windowSeconds: 900 },
   signin_email: { limit: 100, windowSeconds: 3600 },
+  signup_ip: { limit: 10, windowSeconds: 3600 },
   reset_request_ip: { limit: 10, windowSeconds: 3600 },
   reset_request_email: { limit: 3, windowSeconds: 3600 }, // over it: same answer, no email sent
   reset_complete_email_ip: { limit: 10, windowSeconds: 3600 },

@@ -2,7 +2,7 @@
 // site forwards to the API (rate limits).
 import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@insforge/sdk/ssr/middleware";
-import { BETA_HOME, BETA_LOGIN, isPublicBetaPath } from "@/lib/insforge/auth-rules";
+import { BETA_HOME, BETA_LOGIN, SIGNED_OUT_ONLY_PATHS, isPublicBetaPath } from "@/lib/insforge/auth-rules";
 import { forwardingHeaders } from "@/lib/security/client-ip";
 
 // Paths this site forwards to the API function (next.config.ts rewrites).
@@ -26,7 +26,7 @@ export async function proxy(request: NextRequest) {
     login.searchParams.set("next", `${pathname}${search}`);
     return withCookies(NextResponse.redirect(login), response);
   }
-  if (accessToken && pathname.replace(/\/+$/, "") === BETA_LOGIN) {
+  if (accessToken && (SIGNED_OUT_ONLY_PATHS as readonly string[]).includes(pathname.replace(/\/+$/, ""))) {
     return withCookies(NextResponse.redirect(new URL(BETA_HOME, request.url)), response);
   }
   return response;

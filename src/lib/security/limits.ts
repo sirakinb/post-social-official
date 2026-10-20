@@ -7,11 +7,11 @@ const telemetry = createTelemetry({ key: process.env.NEXT_PUBLIC_POSTHOG_KEY, se
 export type LimitAnswer = { blocked: string | null; send: boolean };
 const GO_AHEAD: LimitAnswer = { blocked: null, send: true };
 
-// Asks the API whether this sign-in or password reset may go ahead (limits per visitor and
+// Asks the API whether this sign-in, sign-up or password reset may go ahead (limits per visitor and
 // per email). `blocked` is a message to show; `send: false` means answer as usual but send
 // no reset email. If the check can't be made, the request goes ahead (a limiter outage must
 // not lock people out) and the failure is reported, so limits can't silently switch off.
-export async function checkAuthLimit(check: "signin" | "reset_request" | "reset_complete", email: string): Promise<LimitAnswer> {
+export async function checkAuthLimit(check: "signin" | "signup" | "reset_request" | "reset_complete", email: string): Promise<LimitAnswer> {
   const base = process.env.API_BASE_URL;
   if (!base) return GO_AHEAD;
   if (!process.env.INTERNAL_PROXY_SECRET) {
