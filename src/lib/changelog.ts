@@ -14,6 +14,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    at: "2026-10-20T02:00:00-04:00",
+    kind: "Fixed",
+    title: "Scheduled posts show as published",
+    body: "Scheduled posts went out on time but kept saying Scheduled afterwards, in the app and through the API. They now change to Published (or Partly published or Failed) once they go out, and earlier scheduled posts have been corrected.",
+  },
+  {
     at: "2026-10-20T01:00:00-04:00",
     kind: "Fixed",
     title: "TikTok links and stats",

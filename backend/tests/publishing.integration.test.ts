@@ -210,6 +210,17 @@ describe.skipIf(!enabled)("publishing engine on the dev backend (US-027 to US-03
     expect(after.state).toBe("cancelled");
   });
 
+  it("a scheduled post shows as published once it goes out", async () => {
+    const at = new Date(Date.now() + 3600_000).toISOString();
+    const draft = await act(person(), "create", { ...textPost(facebook, `Due ${suffix}`), scheduled_at: at });
+    expect((await act(person(), "submit", { post_id: draft.id })).status).toBe("scheduled");
+    await sql(`UPDATE public.publish_jobs SET next_attempt_at = now() WHERE post_id = $1`, [draft.id]); // now due
+    await drain();
+    const done = await act(person(), "get", { post_id: draft.id });
+    expect(done.destinations[0].status).toBe("published");
+    expect(done.status).toBe("published");
+  });
+
   it("editing a scheduled post that needed approval takes it out of the queue and back to approval", async () => {
     const at = new Date(Date.now() + 3600_000).toISOString();
     const draft = await act(ai(), "create", { ...textPost(facebook, `Edit me ${suffix}`), scheduled_at: at });
