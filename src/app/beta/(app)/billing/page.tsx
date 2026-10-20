@@ -52,7 +52,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       <div>
         <h1 className="m-0 text-lg font-medium">Billing</h1>
         <p className="mt-1 text-ps-muted">
-          Your first 2 accounts are free. After that you pay by the day for each connected account. <Link href="/docs/billing" className="text-ps-plum-soft hover:text-ps-text">How billing works</Link>
+          Your first 2 accounts are free. After that it&apos;s usage based: you pay per account. <Link href="/docs/billing" className="text-ps-plum-soft hover:text-ps-text">How billing works</Link>
         </p>
       </div>
 
@@ -81,7 +81,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
                 <span className="text-ps-text">{status.estimate.monthly_total === 0 ? "Free" : `${money(status.estimate.monthly_total)} a month`}</span>
                 <span className="mt-1 block text-xs text-ps-subtle">
                   {[...status.estimate.bands.map((b) => `${plural(b.units)} × ${money(b.perAccount)}`), ...(status.estimate.credit ? [`${money(status.estimate.credit)} monthly credit`] : [])].join(" · ")}
-                  {status.estimate.monthly_total > 0 && " · charged by the day, so a month with fewer accounts costs less"}
+                  {status.estimate.monthly_total > 0 && " · you only pay for the accounts you have connected"}
                 </span>
               </Row>
             )}

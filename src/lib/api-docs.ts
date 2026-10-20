@@ -50,7 +50,7 @@ export function llmsText() {
     "5. A post is live only when list_post_results shows published with a live_url.",
     "",
     "## Pricing",
-    `- First 2 connected accounts free (no card). Then per account per month: $5 (1–10), $2.50 (11–100), $1 (101+), minus a $10 monthly credit, billed by the day. X posts 2¢ each, 25¢ with a link, first $1 a month free, under a monthly cap the person sets. Details: ${SITE}/docs/billing`,
+    `- First 2 connected accounts free (no card). Then per account per month: $5 (1–10), $2.50 (11–100), $1 (101+), minus a $10 monthly credit; usage based, so only connected accounts are charged. X posts 2¢ each, 25¢ with a link, first $1 a month free, under a monthly cap the person sets. Details: ${SITE}/docs/billing`,
     "",
     "## Tools (MCP name = REST operationId; CLI command uses hyphens)",
     ...ops.map((op) => `- ${op.name} (${op.method} ${op.path}): ${op.description}`),

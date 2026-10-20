@@ -4,7 +4,7 @@ import { FREE_ACCOUNTS, MONTHLY_CREDIT, PRICE_BANDS, X_PRICES, monthlyBill } fro
 
 export const metadata = {
   title: "Docs: pricing and billing · Post Social",
-  description: "How Post Social bills: your first 2 accounts are free, then you pay by the day for each connected account, with X posts at cost plus a little and a monthly cap.",
+  description: "How Post Social bills: your first 2 accounts are free, then it's usage based: you pay per connected account, with X posts at cost plus a little and a monthly cap.",
 };
 
 const money = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`;
@@ -56,7 +56,7 @@ export default function BillingDocsPage() {
         <p className="utility-label text-accent">Post Social / Docs / Billing</p>
         <h1 className="mt-3 text-3xl font-semibold tracking-[-0.035em] text-ink">Pricing and billing</h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-muted">
-          Your first {FREE_ACCOUNTS} accounts are free, with no card needed. After that you pay for what you use: each connected account, by the day, and X posts at about what X charges us. Every
+          Your first {FREE_ACCOUNTS} accounts are free, with no card needed. After that it&apos;s usage based: you pay per connected account, plus X posts at about what X charges us. Every
           feature is included at every size.
         </p>
 
@@ -86,7 +86,7 @@ export default function BillingDocsPage() {
           </div>
         </Section>
 
-        <Section id="by-the-day" title="Billed by the day">
+        <Section id="changes" title="Adding or removing accounts">
           <p>
             You pay at the start of each billing month for the accounts you have then. Connect an account halfway through the month and the next invoice includes it for the days you had it;
             disconnect one and the unused days are credited back. Nothing to switch on: connecting and disconnecting in Post Social is enough.

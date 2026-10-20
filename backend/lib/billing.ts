@@ -224,7 +224,7 @@ export function accountLimitMessage(error: unknown, webAppUrl?: string): string 
   const match = message.match(/Your (.+?) plan allows (\d+) connected accounts/);
   if (!match) return null;
   if (match[1] === "Free") {
-    return `Your first ${FREE_ACCOUNTS} accounts are free. To connect more, add a card on the Billing page${webAppUrl ? ` (${webAppUrl}/beta/billing)` : ""}: $5 a month per account, billed by the day.`;
+    return `Your first ${FREE_ACCOUNTS} accounts are free. To connect more, add a card on the Billing page${webAppUrl ? ` (${webAppUrl}/beta/billing)` : ""}. After that it's usage based: $5 a month per account.`;
   }
   return `Your ${match[1]} plan allows ${match[2]} connected accounts. Disconnect one first, or contact support@postsocial.xyz.`;
 }
