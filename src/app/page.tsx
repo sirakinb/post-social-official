@@ -317,16 +317,16 @@ export default function LandingPage() {
         )}
 
         {/* ===== Pricing ===== */}
-        <section id="pricing" className="mx-auto max-w-5xl scroll-mt-8 px-5 py-24 sm:px-8 md:py-32">
+        <section id="pricing" className="mx-auto max-w-6xl scroll-mt-8 px-5 py-24 sm:px-8 md:py-32">
           <div className="text-center">
             <Label>Pricing</Label>
             <h2 className="lp-h2 mt-3">
-              Your first 2 accounts are <span className="lp-display lp-ink">free.</span>
+              <span className="lp-display lp-ink">Start free.</span> Pay only for the accounts you use.
             </h2>
-            <p className="mx-auto mt-4 max-w-xl leading-relaxed text-[#FAF6F0]/65">No card needed. Start posting today, and add more accounts only when you need them, from $5 each.</p>
+            <p className="mx-auto mt-4 max-w-xl leading-relaxed text-[#FAF6F0]/65">Your first 2 accounts are free, no card needed. After that you pay by the day for each account you connect, and every feature is included.</p>
           </div>
           <div className="mt-12">
-            <PricingCalculator initial={2} />
+            <PricingCalculator initial={2} cta={<PrimaryCta />} />
           </div>
         </section>
 

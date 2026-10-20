@@ -1,17 +1,20 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { PricingCalculator } from "./pricing-calculator";
+import { PricingCalculator, accountsAt, positionOf } from "./pricing-calculator";
 
 describe("PricingCalculator", () => {
-  it("shows the monthly price for the chosen number of accounts", () => {
-    render(<PricingCalculator initial={12} />);
+  it("starts free and spells out the bill as the slider moves", () => {
+    render(<PricingCalculator initial={2} />);
+    expect(screen.getAllByText("Free").length).toBeGreaterThan(0);
+    expect(screen.getByText("2 accounts free")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Number of connected accounts"), { target: { value: String(positionOf(12)) } });
     expect(screen.getByText("$45")).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Number of connected accounts"), { target: { value: "2" } });
-    expect(screen.getByText("Free")).toBeInTheDocument();
-    expect(screen.getByText(/No card needed/)).toBeInTheDocument();
+    expect(screen.getByText("8 accounts × $5")).toBeInTheDocument();
+    expect(screen.getByText("2 accounts × $2.50")).toBeInTheDocument();
   });
-  it("lights only the bands the accounts reach", () => {
-    render(<PricingCalculator initial={5} />);
-    expect(screen.getAllByText("not reached")).toHaveLength(2);
+  it("maps every account count to the slider and back", () => {
+    for (const n of [1, 2, 3, 10, 11, 57, 100, 101, 500, 2000]) expect(accountsAt(positionOf(n))).toBe(n);
+    expect(accountsAt(0)).toBe(1);
+    expect(accountsAt(1000)).toBe(2000);
   });
 });
