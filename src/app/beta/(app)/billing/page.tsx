@@ -224,12 +224,12 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
           </div>
 
           <Panel title="Invoices" note="Every charge, with the PDF.">
-            {status.invoices.length === 0 ? (
+            {!status.invoices?.length ? (
               <p className="px-5 py-4 text-sm text-ps-muted">No invoices yet.</p>
             ) : (
               <table className="w-full text-sm">
                 <tbody>
-                  {status.invoices.map((invoice) => (
+                  {(status.invoices ?? []).map((invoice) => (
                     <tr key={invoice.id} className="border-b border-ps-fg/[0.06] last:border-b-0">
                       <td className="px-5 py-3 font-mono text-xs text-ps-subtle">{day(invoice.date)}</td>
                       <td className="px-5 py-3 text-ps-text">{day(invoice.date, { month: "long" })}</td>
