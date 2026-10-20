@@ -34,31 +34,34 @@ describe("LandingPage", () => {
   it("links each section from the header", () => {
     render(<LandingPage />);
     const nav = screen.getByRole("navigation", { name: "Landing page" });
-    for (const [label, id] of [["Use with AI", "agents"], ["How it works", "how-it-works"], ["Features", "features"], ["Platforms", "platforms"], ["FAQ", "faq"]]) {
+    for (const [label, id] of [["AI agents", "agents"], ["How it works", "how-it-works"], ["Features", "features"], ["Platforms", "platforms"], ["FAQ", "faq"]]) {
       expect(within(nav).getByRole("link", { name: label })).toHaveAttribute("href", `#${id}`);
       expect(document.getElementById(id)).not.toBeNull();
     }
   });
 
-  it("shows real screens from the app, each described", () => {
+  it("shows real Claude screenshots and stays light on app screens, each described", () => {
     render(<LandingPage />);
-    const screens = screen.getAllByTestId("image").filter((i) => i.getAttribute("data-src")?.startsWith("/landing/app-"));
-    expect(screens.map((i) => i.getAttribute("data-src"))).toEqual(
-      expect.arrayContaining(["/landing/app-home.webp", "/landing/app-create.webp", "/landing/app-calendar.webp", "/landing/app-activity.webp", "/landing/app-accounts.webp"]),
-    );
+    const screens = screen.getAllByTestId("image").filter((i) => /^\/landing\/(app|claude)-/.test(i.getAttribute("data-src") ?? ""));
+    expect(screens.map((i) => i.getAttribute("data-src"))).toEqual(["/landing/claude-chat.webp", "/landing/claude-connector.webp", "/landing/app-home.webp"]);
     for (const s of screens) expect(s.getAttribute("data-alt")?.length).toBeGreaterThan(10);
+    // The real chat sits in the Use with AI section; the connector permissions sit under Features.
+    expect(document.querySelector('#agents [data-src="/landing/claude-chat.webp"]')).not.toBeNull();
+    expect(document.querySelector('#features [data-src="/landing/claude-connector.webp"]')).not.toBeNull();
+    // Each shot says where it comes from.
+    expect(within(document.getElementById("agents") as HTMLElement).getByText("Claude")).toBeInTheDocument();
+    expect(within(document.getElementById("features") as HTMLElement).getByText("Post Social")).toBeInTheDocument();
   });
 
   it("is honest about platforms: eight live, nothing promised", () => {
     render(<LandingPage />);
     const platforms = document.getElementById("platforms") as HTMLElement;
-    for (const name of ["TikTok", "Instagram", "Facebook Pages", "Threads", "YouTube", "LinkedIn", "Bluesky", "X"]) {
-      expect(within(platforms).getByRole("heading", { name })).toBeInTheDocument();
-    }
+    const list = within(platforms).getByRole("list", { name: "Supported platforms" });
+    expect(within(list).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["TikTok", "Instagram", "Facebook Pages", "Threads", "YouTube", "LinkedIn", "Bluesky", "X"]);
     expect(document.body.textContent).not.toMatch(/\d+%|free trial|testimonial|eight destinations/i);
   });
 
-  it("plays the product video above the problem section, with captions", () => {
+  it("plays the product video in the hero, with captions", () => {
     render(<LandingPage />);
     const video = document.querySelector("#demo video") as HTMLVideoElement;
     expect(video).not.toBeNull();
@@ -69,15 +72,21 @@ describe("LandingPage", () => {
     expect(video.querySelector("track")).toHaveAttribute("src", "/landing/product-video.vtt");
     expect(video.getAttribute("aria-label")?.length).toBeGreaterThan(10);
     expect(screen.queryByRole("img", { name: "Product video coming soon" })).toBeNull();
-    const problem = screen.getByRole("heading", { name: "Stop rebuilding the same post five times." });
-    expect(video.compareDocumentPosition(problem) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const agents = document.getElementById("agents") as HTMLElement;
+    expect(video.compareDocumentPosition(agents) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText("Stop rebuilding the same post five times.")).toBeNull();
+  });
+
+  it("keeps the testimonials section hidden until there are real quotes", () => {
+    render(<LandingPage />);
+    expect(document.getElementById("people")).toBeNull();
   });
 
   it("answers common questions in an accessible list", () => {
     render(<LandingPage />);
     const faq = document.getElementById("faq") as HTMLElement;
     expect(faq.querySelectorAll("details").length).toBeGreaterThanOrEqual(6);
-    expect(within(faq).getByText("Can an AI publish for me?")).toBeInTheDocument();
+    expect(within(faq).getByText("Can my AI agent publish for me?")).toBeInTheDocument();
   });
 
   it("links to sign in, docs and the legal pages", () => {
