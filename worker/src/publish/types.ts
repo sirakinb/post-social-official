@@ -1,6 +1,7 @@
 // Shared shapes for publishing. Each platform adapter is a resumable step function: it reads
 // the job's checkpoint to see how far it got, does the next step, saves progress BEFORE any
 // call that cannot be undone, and returns either "published" or "check again later".
+import { parseJson } from "../json";
 import type { Platform } from "../../../backend/lib/connections/platforms";
 import type { DestinationOptions, MediaFacts } from "../../../backend/lib/publishing/validate";
 
@@ -83,7 +84,7 @@ export async function platformJson(response: Response, what: string): Promise<Re
   const text = await response.text();
   let body: Record<string, any> = {}; // eslint-disable-line @typescript-eslint/no-explicit-any
   try {
-    body = text ? JSON.parse(text) : {};
+    body = text ? (parseJson(text) as typeof body) : {};
   } catch {
     // keep empty
   }

@@ -187,6 +187,8 @@ export function buildDashboard(input: {
   });
   const followersTotal = accounts.reduce((t, a) => t + (a.followers ?? 0), 0);
   const followerChange = accounts.reduce((t, a) => t + (a.change_30_days ?? a.change_since_start ?? 0), 0);
+  // When an account has under 30 days of counts, its change runs from its first count.
+  const shortHistory = accounts.filter((a) => a.change_30_days === null && a.tracking_since).map((a) => a.tracking_since!).sort();
 
   // Best times: average rate by hour of the week (UTC; the page shifts it to local time).
   const hours = new Map<number, number[]>();
@@ -234,6 +236,8 @@ export function buildDashboard(input: {
       engagements: posts.reduce((t, p) => t + p.engagements, 0),
       followers: accounts.some((a) => a.followers !== null) ? followersTotal : null,
       follower_change: accounts.some((a) => a.followers !== null) ? followerChange : null,
+      // The earliest day the follower change is measured from, when that's under 30 days ago.
+      follower_change_since: shortHistory[0] ?? null,
       posts: posts.length,
       views: anyViews ? sum("views") : null,
       likes: sum("likes"),

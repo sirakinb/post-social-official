@@ -14,6 +14,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    at: "2026-10-20T01:00:00-04:00",
+    kind: "Fixed",
+    title: "TikTok links and stats",
+    body: "New TikTok posts could get the wrong link, so View post didn't open them and Analytics thought they'd been deleted. Links are now right and their stats show. The one post this hit has been fixed. On Analytics, the accounts column that shows followers gained or lost is now called Follower change, and it says when counting started if that was under 30 days ago.",
+  },
+  {
     at: "2026-10-20T00:00:00-04:00",
     kind: "Improved",
     title: "Post from your phone",

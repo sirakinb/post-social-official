@@ -1,5 +1,6 @@
 // Keeps published posts' stats fresh: often while a post is new, then less often, and not
 // after 90 days. Each fetch updates the post's current numbers and today's history row.
+import { parseJson } from "../json";
 import type { Sql } from "../../../backend/lib/access";
 import { DISPLAY_NAMES as PLATFORM_NAMES, type Platform, type Settings } from "../../../backend/lib/connections/platforms";
 import { accountToken } from "../credentials";
@@ -71,7 +72,8 @@ export async function tiktokStatus(http: typeof fetch, token: string, publishId:
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json; charset=UTF-8" },
     body: JSON.stringify({ publish_id: publishId }),
   });
-  const body = await response.json().catch(() => ({}));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const body = (await response.text().then(parseJson).catch(() => ({}))) as Record<string, any>;
   if (!response.ok || (body.error?.code && body.error.code !== "ok")) throw new Error(`TikTok status check failed: ${body.error?.message || body.error?.code || `HTTP ${response.status}`}`);
   const raw = body.data?.publicaly_available_post_id ?? body.data?.publicly_available_post_id;
   const postId = Array.isArray(raw) ? raw[0] : raw;

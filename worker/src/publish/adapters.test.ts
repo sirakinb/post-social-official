@@ -301,6 +301,13 @@ describe("TikTok", () => {
     expect(h.calls.filter((c) => c.includes("/video/init/"))).toHaveLength(1);
   });
 
+  it("keeps TikTok's 19-digit post id exact (TikTok sends it as a bare number)", async () => {
+    const h = harness("tiktok", direct, [
+      (u) => (u.pathname.endsWith("/status/fetch/") ? new Response('{"data":{"status":"PUBLISH_COMPLETE","publicaly_available_post_id":[7698502021669784846]},"error":{"code":"ok"}}') : undefined),
+    ], { media: [video], checkpoint: { publish_id: "pub-1", uploaded: true } });
+    expect(await publishTikTok(h.ctx)).toMatchObject({ platformId: "7698502021669784846", liveUrl: "https://www.tiktok.com/@aki/video/7698502021669784846" });
+  });
+
   it("sends the chosen cover frame with a direct video post", async () => {
     let postInfo: Record<string, unknown> = {};
     const h = harness("tiktok", { ...direct, cover_time_ms: 3300 }, [

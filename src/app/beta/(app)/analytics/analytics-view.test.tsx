@@ -63,6 +63,15 @@ describe("Analytics page", () => {
     expect(container.textContent).not.toMatch(/—/);
   });
 
+  it("labels follower change as such, and says when it counts from under 30 days of history", () => {
+    view("overview");
+    expect(dashboard.summary.follower_change_since).toBe("2026-10-01");
+    expect(screen.getByText("+100 since Oct 1")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Follower change" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Last 30 days" })).toBeNull();
+    expect(screen.getByText("since Oct 1")).toBeInTheDocument();
+  });
+
   it("says a YouTube channel is counted after its first video, until its channel is known", () => {
     const yt = { ...data.accounts.find((a) => a.id === "x")!, id: "yt", platform: "youtube" as const, handle: null, followers: null };
     render(<AccountTable accounts={[yt]} showSources={false} />);

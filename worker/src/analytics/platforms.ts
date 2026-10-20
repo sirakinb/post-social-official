@@ -1,6 +1,7 @@
 // Reads one published post's stats from its platform. Each platform reports different
 // numbers, and some need a read permission the account may not have granted yet; those
 // are listed in `unavailable` and left out, never reported as zero.
+import { parseJson } from "../json";
 import type { Platform } from "../../../backend/lib/connections/platforms";
 
 export type Counters = { views?: number; likes?: number; comments?: number; shares?: number; saves?: number; reposts?: number; quotes?: number };
@@ -27,7 +28,7 @@ async function getJson(ctx: FetchContext, url: string, init: RequestInit = {}) {
   const text = await response.text();
   let body: Record<string, any> = {}; // eslint-disable-line @typescript-eslint/no-explicit-any
   try {
-    body = text ? JSON.parse(text) : {};
+    body = text ? (parseJson(text) as typeof body) : {};
   } catch {
     // keep empty
   }
