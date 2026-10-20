@@ -1,7 +1,7 @@
 import { AuthCard } from "../auth-card";
 import { ResetPasswordForm } from "../forms";
 
-export const metadata = { title: "Reset password · Post Social beta" };
+export const metadata = { title: "Reset password · Post Social" };
 
 export default function BetaResetPasswordPage() {
   return (
