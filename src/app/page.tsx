@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { Fraunces, GeistPixelGrid } from "./fonts";
 
 // The landing. It opens at dusk (lanterns leaving the lake the way posts leave for every
-// platform) with the product video, then keeps to a few short sections: posting from your AI,
+// platform) with the product video, then keeps to a few short sections: posting from your AI agent,
 // three steps, the dashboard, platforms and questions. Light on app screens on purpose.
 
 type Platform = "tiktok" | "instagram" | "facebook" | "threads" | "youtube" | "linkedin" | "bluesky" | "x";
@@ -30,7 +30,7 @@ const PLATFORMS: { platform: Platform; name: string }[] = [
 const TESTIMONIALS: { quote: string; name: string; role: string }[] = [];
 
 const NAV = [
-  { label: "Use with AI", href: "#agents" },
+  { label: "AI agents", href: "#agents" },
   { label: "How it works", href: "#how-it-works" },
   { label: "Features", href: "#features" },
   { label: "Platforms", href: "#platforms" },
@@ -40,10 +40,10 @@ const NAV = [
 const FAQ = [
   { q: "Which platforms are supported?", a: "TikTok, Instagram, Facebook Pages, Threads, YouTube, LinkedIn, Bluesky and X, each through the platform's official API and sign-in." },
   { q: "What can I publish?", a: "Videos and photo posts on TikTok; photos, Reels and carousels on Instagram; text, links, photos, Reels and videos on Facebook Pages; text, photos, videos and carousels on Threads; Shorts on YouTube; and text, photos and videos on LinkedIn, Bluesky and X. What a given account can post depends on its type and the platform's rules, and Post Social checks each file before it goes out." },
-  { q: "Can an AI publish for me?", a: "Yes. Connect Claude, ChatGPT, or any AI agent, or call the API from your own automations. Your AI drafts, schedules and publishes exactly as you direct it." },
+  { q: "Can my AI agent publish for me?", a: "Yes. Connect Claude, ChatGPT, or any AI agent, or call the API from your own automations. Your agent drafts, schedules and publishes exactly as you direct it." },
   { q: "Can I schedule posts?", a: "Yes. Publish now or pick a date and time, then see everything on the calendar and move it if plans change." },
   { q: "Do you need my social passwords?", a: "No. Each account connects through the platform's own sign-in page, and you can disconnect it at any time." },
-  { q: "Is Post Social only for developers?", a: "No. If you can ask an AI for something in plain language, you can use Post Social. The web app does everything too, no code required." },
+  { q: "Is Post Social only for developers?", a: "No. If you can ask an AI agent for something in plain language, you can use Post Social. The web app does everything too, no code required." },
 ];
 
 function AiMark({ app, size = 18 }: { app: "claude" | "openai"; size?: number }) {
@@ -68,15 +68,26 @@ function Check() {
   );
 }
 
-function Screen({ src, alt, width = 2400, height = 1500, priority, className }: { src: string; alt: string; width?: number; height?: number; priority?: boolean; className?: string }) {
+// A small chip on a screen's top-left corner naming where the screenshot comes from.
+function Badge({ icon, label }: { icon: React.ReactNode; label: string }) {
   return (
-    <div className={cn("lp-screen relative", className)}>
+    <span className="lp-glass absolute bottom-full left-3 z-10 mb-3 inline-flex items-center gap-2 rounded-full py-1 pl-1 pr-3 text-[13px] font-medium text-[#FAF6F0] shadow-[0_8px_24px_rgba(0,0,0,0.4)]">
+      {icon}
+      {label}
+    </span>
+  );
+}
+
+function Screen({ src, alt, width = 2400, height = 1500, priority, badge, className }: { src: string; alt: string; width?: number; height?: number; priority?: boolean; badge?: React.ReactNode; className?: string }) {
+  return (
+    <div className={cn("lp-screen relative", badge && "mt-8 md:mt-0", className)}>
+      {badge}
       <Image src={src} alt={alt} width={width} height={height} priority={priority} sizes="(max-width: 768px) 100vw, 60vw" className="block h-auto w-full rounded-[14px]" />
     </div>
   );
 }
 
-function Feature({ label, title, text, points, src, alt, width, height, flip }: { label: string; title: React.ReactNode; text: string; points: string[]; src: string; alt: string; width?: number; height?: number; flip?: boolean }) {
+function Feature({ label, title, text, points, src, alt, width, height, badge, flip }: { label: string; title: React.ReactNode; text: string; points: string[]; src: string; alt: string; width?: number; height?: number; badge?: React.ReactNode; flip?: boolean }) {
   return (
     <div className={cn("grid items-center gap-10 md:gap-14", flip ? "md:grid-cols-[3fr_2fr]" : "md:grid-cols-[2fr_3fr]")}>
       <div className={cn(flip && "md:order-2")}>
@@ -92,7 +103,7 @@ function Feature({ label, title, text, points, src, alt, width, height, flip }: 
           ))}
         </ul>
       </div>
-      <Screen src={src} alt={alt} width={width} height={height} className={cn(flip && "md:order-1")} />
+      <Screen src={src} alt={alt} width={width} height={height} badge={badge} className={cn(flip && "md:order-1")} />
     </div>
   );
 }
@@ -168,7 +179,7 @@ export default function LandingPage() {
               playsInline
               preload="none"
               poster="/landing/product-video-poster.webp"
-              aria-label="Aki, the founder, shows Post Social: connect your accounts, connect your AI, then ask Claude to schedule a post"
+              aria-label="Aki, the founder, shows Post Social: connect your accounts, connect your AI agent, then ask Claude to schedule a post"
               className="block aspect-video w-full rounded-[14px] border border-white/[0.06] bg-[#140f24]"
             >
               <source src="/landing/product-video.mp4" type="video/mp4" />
@@ -179,16 +190,16 @@ export default function LandingPage() {
       </section>
 
       <main>
-        {/* ===== Use with AI ===== */}
+        {/* ===== Use with your AI agent ===== */}
         <section id="agents" className="mx-auto max-w-6xl scroll-mt-8 px-5 py-24 sm:px-8 md:py-32">
           <div className="grid items-center gap-12 md:grid-cols-2">
             <div>
-              <Label>Use with AI</Label>
+              <Label>Use with your AI agent</Label>
               <h2 className="lp-h2 mt-3">
-                Post from <span className="lp-display lp-ink">ChatGPT, Claude</span>, or any AI you already use.
+                Post from <span className="lp-display lp-ink">ChatGPT, Claude</span>, or any AI agent you already use.
               </h2>
               <p className="mt-5 max-w-xl leading-relaxed text-[#FAF6F0]/65 md:text-lg">
-                Connect Post Social once, then just ask. Your AI writes the post, picks the channels, and publishes or schedules it directly, with no copying and no switching tabs.
+                Connect Post Social once, then just ask. Your agent writes the post, picks the channels, and publishes or schedules it directly, with no copying and no switching tabs.
               </p>
               <ul className="mt-6 space-y-2.5 text-[15px] text-[#FAF6F0]/75">
                 {["Ask in plain language. No code required.", "Works with Claude, ChatGPT, Codex, and your own automations.", "Publish now or schedule for later, straight from the chat."].map((item) => (
@@ -203,6 +214,7 @@ export default function LandingPage() {
               src="/landing/claude-chat.webp"
               width={1525}
               height={1372}
+              badge={<Badge icon={<AiMark app="claude" size={14} />} label="Claude" />}
               alt="A real Claude chat: asked to post a clip to Adzo's TikTok at 6pm, Claude uploads it, asks who should see it, drafts a caption and checks the post with Post Social"
             />
           </div>
@@ -218,8 +230,8 @@ export default function LandingPage() {
           </div>
           <ol className="mt-14 grid gap-5 md:grid-cols-3">
             {[
-              { title: "Connect your accounts", text: "Sign in to each platform once through its official page. Connect your AI app the same way." },
-              { title: "Say what to post", text: "Ask your AI, or use the composer: add your video or photos, write the caption once, pick the channels." },
+              { title: "Connect your accounts", text: "Sign in to each platform once through its official page. Connect your AI agent the same way." },
+              { title: "Say what to post", text: "Ask your agent, or use the composer: add your video or photos, write the caption once, pick the channels." },
               { title: "It goes out, you see it land", text: "Publish now or pick the moment. Each channel reports back, and anything that needs you is flagged in plain words." },
             ].map((step, i) => (
               <li key={step.title} className="lp-card relative overflow-hidden p-6 md:p-7">
@@ -238,7 +250,7 @@ export default function LandingPage() {
         <section id="features" className="mx-auto max-w-6xl scroll-mt-8 space-y-24 px-5 pb-24 sm:px-8 md:space-y-32 md:pb-32">
           <Feature
             label="You stay in charge"
-            title="You decide what your AI can do."
+            title="You decide what your agent can do."
             text="Post Social shows up in Claude as a connector. Choose which actions it can take on its own and which ones wait for your OK, and disconnect it whenever you like."
             points={["Let it read your posts and stats freely", "Make publishing ask you first", "Disconnect in one click"]}
             src="/landing/claude-connector.webp"
@@ -250,10 +262,19 @@ export default function LandingPage() {
             flip
             label="Prefer clicking?"
             title="The dashboard does it all, too."
-            text="Write a post once, pick your channels, and schedule it on the calendar. Every channel reports back, and anything that needs you is flagged in plain words."
-            points={["A live preview for every channel", "One calendar for posts from you and your AI", "A clear status for every channel"]}
-            src="/landing/app-calendar.webp"
-            alt="The Post Social calendar showing a week of scheduled posts"
+            text="See what's going out next, what needs you, and who posted what, whether it was you, Claude or ChatGPT. Write and schedule posts right there when you'd rather do it yourself."
+            points={["Everything going out next, on every channel", "Problems flagged in plain words, with the fix", "Posts from you and your agents, side by side"]}
+            src="/landing/app-home.webp"
+            alt="The Post Social home screen: posts going out next, one that needs attention, and recent activity from the team, Claude and ChatGPT"
+            badge={
+              <Badge
+                icon={
+                  // eslint-disable-next-line @next/next/no-img-element -- tiny static svg
+                  <img src="/post-social-icon.svg" alt="" className="size-[22px] rounded-[6px]" />
+                }
+                label="Post Social"
+              />
+            }
           />
         </section>
 
@@ -320,7 +341,7 @@ export default function LandingPage() {
             <h2 className="lp-h2 mx-auto mt-4 max-w-2xl">
               Spend less time posting. <span className="lp-display lp-ink">Keep showing up.</span>
             </h2>
-            <p className="mx-auto mt-5 max-w-xl leading-relaxed text-[#FAF6F0]/70 md:text-lg">Publish everywhere from one workspace, or straight from your AI. We&apos;re letting people in a few at a time.</p>
+            <p className="mx-auto mt-5 max-w-xl leading-relaxed text-[#FAF6F0]/70 md:text-lg">Publish everywhere from one workspace, or straight from your AI agent. We&apos;re letting people in a few at a time.</p>
             <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Waitlist />
               <Link href={BETA_LOGIN} className="lp-glass inline-flex h-11 items-center rounded-full px-5 text-sm text-[#FAF6F0] transition hover:bg-white/10">
