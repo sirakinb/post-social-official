@@ -93,7 +93,7 @@ function Overview({ data, topPosts, showSources }: { data: AnalyticsData; topPos
   const tiles: Array<{ label: string; value: string; note?: string }> = [];
   if (s.engagement_rate !== null) tiles.push({ label: "Engagement rate", value: percent(s.engagement_rate), note: "Engagements per follower, on average" });
   tiles.push({ label: "Engagements", value: count(s.engagements), note: "Likes, comments, shares and saves" });
-  if (s.followers !== null) tiles.push({ label: "Followers", value: count(s.followers), note: s.follower_change ? `${signed(s.follower_change)} in the last 30 days` : "Across your accounts" });
+  if (s.followers !== null) tiles.push({ label: "Followers", value: count(s.followers), note: s.follower_change ? `${signed(s.follower_change)} ${s.follower_change_since ? `since ${day(s.follower_change_since)}` : "in the last 30 days"}` : "Across your accounts" });
   tiles.push({ label: "Posts", value: count(s.posts), note: `Published in the last ${data.days} days` });
   if (s.views !== null) tiles.push({ label: "Views", value: count(s.views), note: "Where the platform reports them" });
 
@@ -254,7 +254,7 @@ export function AccountTable({ accounts, showSources }: { accounts: Account[]; s
           <tr className="text-left text-xs text-ps-subtle">
             <th className="px-4 py-2 font-medium">Account</th>
             <th className="px-3 py-2 text-right font-medium">Followers</th>
-            <th className="px-3 py-2 text-right font-medium">Last 30 days</th>
+            <th className="px-3 py-2 text-right font-medium" title="Followers gained or lost in the last 30 days, or since counting started">Follower change</th>
             <th className="px-3 py-2 text-right font-medium">Posts</th>
             <th className="px-3 py-2 text-right font-medium">Engagements</th>
             <th className="px-3 py-2 text-right font-medium">Eng. rate</th>
@@ -278,6 +278,7 @@ export function AccountTable({ accounts, showSources }: { accounts: Account[]; s
                 <td className="px-3 py-2.5 text-right tabular-nums text-ps-text">{a.followers !== null ? count(a.followers) : <span className="text-[11px] text-ps-subtle">{a.platform === "youtube" && !a.handle ? "After your first video" : "Counting"}</span>}</td>
                 <td className="px-3 py-2.5 text-right tabular-nums">
                   {change !== null ? <span className={change > 0 ? "text-ps-live-text" : change < 0 ? "text-ps-failed-text" : "text-ps-muted"}>{signed(change)}</span> : <span className="text-[11px] text-ps-subtle">{a.tracking_since ? `Since ${day(a.tracking_since)}` : "Starting"}</span>}
+                  {change !== null && a.change_30_days === null && a.tracking_since && <span className="block text-[11px] text-ps-subtle">since {day(a.tracking_since)}</span>}
                 </td>
                 <td className="px-3 py-2.5 text-right tabular-nums text-ps-text">{a.posts}</td>
                 <td className="px-3 py-2.5 text-right tabular-nums text-ps-text">{count(a.engagements)}</td>

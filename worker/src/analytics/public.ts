@@ -2,6 +2,7 @@
 // ScrapeCreators (one credit per read). Used for a platform until it approves Post Social's
 // own read permissions, and to fill gaps the official numbers leave. Only numbers the page
 // actually shows are returned; nothing is guessed.
+import { parseJson } from "../json";
 import type { Platform } from "../../../backend/lib/connections/platforms";
 import type { Counters, MetricsResult } from "./platforms";
 
@@ -32,7 +33,7 @@ async function read(ctx: PublicContext, path: string, params: Record<string, str
   const text = await response.text();
   let body: Record<string, any> = {}; // eslint-disable-line @typescript-eslint/no-explicit-any
   try {
-    body = text ? JSON.parse(text) : {};
+    body = text ? (parseJson(text) as typeof body) : {};
   } catch {
     // keep empty
   }

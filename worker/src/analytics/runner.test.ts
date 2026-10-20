@@ -167,6 +167,16 @@ describe("TikTok posts without a public link yet", () => {
     expect(saved(db.writes)?.params[1]).toBe(9);
   });
 
+  it("keeps TikTok's 19-digit post id exact when saving the link", async () => {
+    const db = fakeSql("tiktok", { platform_request_id: "v_pub_file~v2-1", live_url: null });
+    const sql = db.sql;
+    db.sql = (async (q: string, p: unknown[]) => (q.includes("FROM public.destinations d JOIN") ? [{ platform_request_id: "v_pub_file~v2-1", live_url: null, media_type: null, display_name: "Maker", privacy_level: "PUBLIC_TO_EVERYONE", handle: "maker" }] : sql(q, p))) as Sql;
+    const http = (async () => new Response('{"data":{"status":"PUBLISH_COMPLETE","publicaly_available_post_id":[7698502021669784846]},"error":{"code":"ok"}}')) as unknown as typeof fetch;
+    await runMetricsSweep(deps(db, { ...base, http, publicReaders: { tiktok: async () => publicResult({ views: 9 }) } }));
+    const link = db.writes.find((w) => w.query.includes("SET live_url"));
+    expect(link?.params).toEqual(["d1", "https://www.tiktok.com/@maker/video/7698502021669784846", "7698502021669784846"]);
+  });
+
   const stub = (target: Record<string, unknown>) => {
     const db = fakeSql("tiktok", { platform_request_id: null, live_url: null });
     const sql = db.sql;
