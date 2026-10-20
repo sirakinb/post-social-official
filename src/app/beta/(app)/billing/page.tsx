@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { callServer, loadViewer } from "@/lib/beta/workspace";
+import { callServer, callServerResult, loadViewer } from "@/lib/beta/workspace";
 import { cn } from "@/lib/utils";
 import { addCard, manageBilling, saveXCap } from "./actions";
 
@@ -53,7 +53,8 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const { checkout, error, saved } = await searchParams;
   // Back from Stripe Checkout: confirm it here so Paid turns on without waiting for Stripe.
   if (workspace && checkout) await callServer("billing_confirm", { workspace_id: workspace.id, session_id: checkout });
-  const status = workspace ? await callServer<BillingStatus>("billing_status", { workspace_id: workspace.id }) : null;
+  const result = workspace ? await callServerResult<BillingStatus>("billing_status", { workspace_id: workspace.id }) : null;
+  const status = result?.data ?? null;
   const paying = Boolean(status?.subscription && status.subscription.status !== "canceled");
   const manage = Boolean(status?.can_manage && status.available && !status.plan.comped);
 
@@ -73,7 +74,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       {!workspace ? (
         <p className="text-sm text-ps-muted">You are not a member of any workspace yet.</p>
       ) : !status ? (
-        <p role="alert" className="text-sm text-ps-failed-text">Billing could not be loaded. Refresh the page to try again.</p>
+        <p role="alert" className="text-sm text-ps-failed-text">Billing could not be loaded. {result?.error ?? "Refresh the page to try again."}</p>
       ) : status.plan.comped ? (
         <Panel title={`${status.plan.name} plan`} note="This workspace isn't billed.">
           <p className="px-5 py-4 text-sm text-ps-muted">{status.connected_accounts} connected accounts.</p>

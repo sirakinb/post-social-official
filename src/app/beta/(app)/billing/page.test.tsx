@@ -9,6 +9,10 @@ vi.mock("@/lib/beta/workspace", () => ({
     server.calls.push([action, body]);
     return action === "billing_status" ? server.status : { paid: true };
   },
+  callServerResult: async (action: string, body: Record<string, unknown>) => {
+    server.calls.push([action, body]);
+    return server.status ? { data: server.status, error: null } : { data: null, error: "Something broke on the server." };
+  },
 }));
 vi.mock("./actions", () => ({ addCard: async () => {}, manageBilling: async () => {}, saveXCap: async () => {} }));
 
@@ -88,6 +92,12 @@ describe("BillingPage", () => {
     server.status = paid;
     render(await BillingPage({ searchParams: Promise.resolve({}) }));
     expect(document.body.textContent).not.toMatch(/charges us|by the day|prorat/i);
+  });
+
+  it("says why Billing didn't load", async () => {
+    server.status = null;
+    render(await BillingPage({ searchParams: Promise.resolve({}) }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Billing could not be loaded. Something broke on the server.");
   });
 
   it("lets only owners and admins change billing", async () => {

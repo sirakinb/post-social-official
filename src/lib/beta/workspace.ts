@@ -33,15 +33,22 @@ export async function loadViewer(path: string, slug?: string) {
 // Calls an action on the `api` function with the person's session (key management,
 // connected apps, usage, stats, media links). Returns null on any failure.
 export async function callServer<T>(action: string, body: Record<string, unknown>): Promise<T | null> {
+  return (await callServerResult<T>(action, body)).data;
+}
+
+// The same call, with the reason when it fails, for pages that show it.
+export async function callServerResult<T>(action: string, body: Record<string, unknown>): Promise<{ data: T | null; error: string | null }> {
   const base = process.env.API_BASE_URL;
   const token = (await cookies()).get(getAccessTokenCookieName())?.value;
-  if (!base || !token) return null;
+  if (!base || !token) return { data: null, error: !base ? "The app isn't set up to reach the server." : "You're signed out. Sign in again." };
   const response = await fetch(`${base}/keys`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ action, ...body }),
     cache: "no-store",
   }).catch(() => null);
-  if (!response?.ok) return null;
-  return (await response.json().catch(() => null)) as T | null;
+  if (!response) return { data: null, error: "The server didn't answer." };
+  const json = (await response.json().catch(() => null)) as (T & { error?: { message?: string } }) | null;
+  if (!response.ok) return { data: null, error: json?.error?.message ?? `The server answered ${response.status}.` };
+  return { data: json, error: null };
 }
