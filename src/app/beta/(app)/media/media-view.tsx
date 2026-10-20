@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ActorMark, type ActorKind } from "@/components/beta/marks";
 import { useUpload } from "@/components/beta/use-upload";
+import { KeepOpenNote, UploadCard } from "@/components/beta/upload-status";
 import { formatBytes } from "@/lib/media/part-upload";
 import { cn } from "@/lib/utils";
 import { callMedia } from "./actions";
@@ -61,7 +62,7 @@ export function MediaView({ workspaceId, items, showHidden, loadError, canEdit }
   const [importOpen, setImportOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const file = useRef<HTMLInputElement>(null);
-  const { uploads, upload, dismiss } = useUpload(workspaceId, () => router.refresh());
+  const { uploads, upload, dismiss, resume, keepOpen } = useUpload(workspaceId, () => router.refresh());
 
   // While anything is being checked, refresh until it settles.
   const checking = items.some((i) => i.status === "processing");
@@ -100,7 +101,7 @@ export function MediaView({ workspaceId, items, showHidden, loadError, canEdit }
 
   return (
     <div className="flex min-h-screen flex-wrap">
-      <section aria-label="Library" className="flex min-w-0 flex-[1_1_560px] flex-col gap-4 px-8 pb-12 pt-5">
+      <section aria-label="Library" className="flex min-w-0 flex-[1_1_560px] flex-col gap-4 px-4 sm:px-8 pb-12 pt-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-baseline gap-3">
             <h1 className="m-0 text-lg font-medium">{showHidden ? "Hidden media" : "Media"}</h1>
@@ -146,18 +147,9 @@ export function MediaView({ workspaceId, items, showHidden, loadError, canEdit }
         {uploads.length > 0 && (
           <div className="flex flex-wrap gap-2.5">
             {uploads.map((u) => (
-              <div key={u.key} className="flex w-[220px] flex-col gap-1.5 rounded-xl border border-ps-line bg-ps-surface px-3 py-2.5">
-                <span className="truncate text-xs">{u.name}</span>
-                {u.error ? (
-                  <span className="text-xs text-ps-failed-text">{u.error} <button type="button" onClick={() => dismiss(u.key)} className="underline">Dismiss</button></span>
-                ) : (
-                  <>
-                    <span className="h-[3px] rounded bg-ps-fg/[0.06]"><span className="block h-full rounded bg-ps-plum" style={{ width: `${Math.round(u.progress * 100)}%` }} /></span>
-                    <span className="text-[11px] text-ps-subtle">{u.status === "checking" ? "Checking the file…" : `Uploading ${Math.round(u.progress * 100)}%`}</span>
-                  </>
-                )}
-              </div>
+              <UploadCard key={u.key} upload={u} onDismiss={() => dismiss(u.key)} onResume={() => resume(u.key)} className="flex w-[220px] flex-col gap-1.5 rounded-xl border border-ps-line bg-ps-surface px-3 py-2.5" />
             ))}
+            {keepOpen && <KeepOpenNote />}
           </div>
         )}
 

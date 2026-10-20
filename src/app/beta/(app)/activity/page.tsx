@@ -40,7 +40,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
   const older = hasMore && logs.length ? href({ before: logs[logs.length - 1].at }) : null;
 
   return (
-    <div className="flex w-full max-w-[1100px] flex-col gap-5 px-8 pb-12 pt-6">
+    <div className="flex w-full max-w-[1100px] flex-col gap-5 px-4 sm:px-8 pb-12 pt-6">
       <div>
         <h1 className="m-0 text-lg font-medium">Logs</h1>
         <p className="mt-1 text-ps-muted">Everything that happened in this workspace: who did it, from where, and why anything failed.</p>

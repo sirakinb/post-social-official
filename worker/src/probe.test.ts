@@ -90,7 +90,7 @@ describe("probing through rangeReader with mediainfo", () => {
 
   it("reads a real video", async () => {
     const { outcome } = await probe(tinyMp4({ width: 1080, height: 1920, seconds: 7 }));
-    expect(outcome).toEqual({ ok: true, mimeType: "video/mp4", mediaType: "video", width: 1080, height: 1920, durationSeconds: 7 });
+    expect(outcome).toEqual({ ok: true, mimeType: "video/mp4", mediaType: "video", width: 1080, height: 1920, durationSeconds: 7, videoFormat: expect.any(String) });
   });
 
   it("rejects random bytes quickly and with few requests", async () => {

@@ -28,7 +28,7 @@ export default async function DraftsPage() {
   });
 
   return (
-    <div className="flex w-full max-w-[900px] flex-col gap-5 px-8 pb-12 pt-6">
+    <div className="flex w-full max-w-[900px] flex-col gap-5 px-4 sm:px-8 pb-12 pt-6">
       <div className="flex items-end justify-between gap-3">
         <div>
           <h1 className="m-0 text-lg font-medium">Drafts</h1>

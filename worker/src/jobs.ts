@@ -10,6 +10,8 @@ export type WorkerDeps = {
   r2: R2;
   probe: (key: string, sizeBytes: number, expected: MediaType | null) => Promise<ProbeOutcome>;
   download: (url: string, signal: AbortSignal) => Promise<Download>;
+  // Rewraps a checked MOV as MP4 next to it (remux.ts); null when that didn't work.
+  remux?: (key: string, fileName: string, videoFormat: string | undefined) => Promise<{ key: string; fileName: string; sizeBytes: number } | null>;
   log: (message: string, details?: Record<string, unknown>) => void;
 };
 
@@ -125,7 +127,10 @@ async function runProbe(deps: WorkerDeps, job: Job, asset: Asset) {
   if (!stored) throw new PermanentError("The file is missing from storage. Upload it again.");
   const outcome = await deps.probe(asset.storage_key, size, job.kind === "import" ? null : asset.media_type);
   if (!outcome.ok) throw new PermanentError(outcome.reason);
-  await deps.sql(
+  // MOV (iPhones) becomes MP4, which every platform takes. The MOV stays if that fails.
+  const mp4 = outcome.mimeType === "video/quicktime" && deps.remux ? await deps.remux(asset.storage_key, asset.file_name, outcome.videoFormat) : null;
+  const file = mp4 ?? { key: asset.storage_key, fileName: asset.file_name, sizeBytes: size };
+  const updated = await deps.sql<{ id: string }>(
     `WITH ok AS (SELECT 1 WHERE ${owns(9, 10)}),
      audit AS (
        INSERT INTO public.audit_events (workspace_id, entry_point, event_type, entity_type, entity_id, summary, after_values)
@@ -134,10 +139,18 @@ async function runProbe(deps: WorkerDeps, job: Job, asset: Asset) {
      )
      UPDATE public.media_assets
      SET status = 'ready', failure_reason = NULL, mime_type = $4, media_type = $5,
-         width = $6, height = $7, duration_seconds = $8
-     WHERE id = $1 AND EXISTS (SELECT 1 FROM ok)`,
-    [asset.id, job.workspace_id, `${asset.file_name} is ready to use`, outcome.mimeType, outcome.mediaType, outcome.width, outcome.height, outcome.durationSeconds, job.id, job.attempt_count],
+         width = $6, height = $7, duration_seconds = $8,
+         storage_key = $11, file_name = $12, size_bytes = $13
+     WHERE id = $1 AND EXISTS (SELECT 1 FROM ok)
+     RETURNING id`,
+    [asset.id, job.workspace_id, `${asset.file_name} is ready to use`, mp4 ? "video/mp4" : outcome.mimeType, outcome.mediaType, outcome.width, outcome.height, outcome.durationSeconds, job.id, job.attempt_count, file.key, file.fileName, file.sizeBytes],
   );
+  if (mp4) {
+    // Another worker took the job over: its copy wins, drop ours. Otherwise the MOV goes.
+    if (!updated.length) await deps.r2.delete(mp4.key).catch(() => undefined);
+    else await deps.r2.delete(asset.storage_key).catch(() => undefined);
+    deps.log(updated.length ? "mov rewrapped as mp4" : "mov rewrap discarded", { media: asset.id });
+  }
 }
 
 async function runImport(deps: WorkerDeps, job: Job, asset: Asset) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_MEDIA_BYTES, importUrlProblem, isPrivateAddress, mediaTypeFor, planParts, safeFileName, storageKey, uploadProblem } from "./rules";
+import { MAX_MEDIA_BYTES, importUrlProblem, isPrivateAddress, mediaTypeFor, mimeTypeFromName, planParts, safeFileName, storageKey, uploadProblem } from "./rules";
 
 describe("isPrivateAddress", () => {
   it.each([
@@ -62,6 +62,7 @@ describe("uploads", () => {
 
   it("splits files into parts R2 accepts", () => {
     expect(planParts(1000)).toEqual({ partSize: 8 * 1024 * 1024, partCount: 1 });
+    expect(planParts(300 * 1024 * 1024, true)).toEqual({ partSize: 300 * 1024 * 1024, partCount: 1 });
     const gig = planParts(MAX_MEDIA_BYTES);
     expect(gig.partCount).toBeLessThanOrEqual(64);
     expect(gig.partSize * gig.partCount).toBeGreaterThanOrEqual(MAX_MEDIA_BYTES);
@@ -73,5 +74,20 @@ describe("uploads", () => {
     expect(safeFileName("C:\\Users\\me\\Clip Final (2).MOV")).toBe("Clip-Final-2-.MOV");
     expect(safeFileName("...")).toBe("file");
     expect(storageKey("ws", "m1", "../x.mp4")).toBe("workspaces/ws/media/m1/x.mp4");
+  });
+});
+
+describe("mimeTypeFromName", () => {
+  it("guesses the type from the extension, for callers that can't say", () => {
+    expect(mimeTypeFromName("IMG_0001.MOV")).toBe("video/quicktime");
+    expect(mimeTypeFromName("clip.mp4")).toBe("video/mp4");
+    expect(mimeTypeFromName("photo.JPG")).toBe("image/jpeg");
+    expect(mimeTypeFromName("photo.heic")).toBe("");
+    expect(mimeTypeFromName("noextension")).toBe("");
+  });
+
+  it("lets a single-part upload leave the size for later", () => {
+    expect(uploadProblem({ fileName: "a.mov", mimeType: "video/quicktime", sizeBytes: null })).toBeNull();
+    expect(uploadProblem({ fileName: "a.mov", mimeType: "video/quicktime", sizeBytes: 0 })).toBe("The file is empty.");
   });
 });

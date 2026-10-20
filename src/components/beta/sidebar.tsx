@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { forgetViewer } from "@/components/analytics/identify";
 import { ActorMark } from "./marks";
@@ -26,6 +27,7 @@ const ITEMS: Item[] = [
 ];
 // Pinned under the main list: the public setup guide (opens in a new tab) and Settings.
 const DOCS = { href: "/docs", label: "Docs", icon: icon(<><path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H19v15H5.5A1.5 1.5 0 0 0 4 19.5z" /><path d="M4 19.5A1.5 1.5 0 0 0 5.5 21H19v-3" /></>) };
+const PHONE: Item = { href: "/beta/phone", label: "On your phone", match: (p) => p.startsWith("/beta/phone"), icon: icon(<><rect x="6" y="2.5" width="12" height="19" rx="2.5" /><path d="M11 18h2" /></>) };
 const SETTINGS: Item = { href: "/beta/settings", label: "Settings", match: (p) => p.startsWith("/beta/settings"), icon: icon(<><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></>) };
 
 const linkClass = "flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[13px] transition-colors";
@@ -55,8 +57,11 @@ export function Sidebar(props: {
 }) {
   const path = usePathname() ?? "/beta";
   const percent = props.plan && props.plan.limit > 0 ? Math.min(100, (props.plan.used / props.plan.limit) * 100) : 0;
+  // On phones the menu folds into a bar at the top; it opens with Menu and closes on arrival.
+  const [openOn, setOpenOn] = useState<string | null>(null);
+  const open = openOn === path;
   return (
-    <nav aria-label="Main" className="flex w-full flex-col gap-5 border-b border-ps-line bg-ps-sidebar px-3 py-3.5 md:sticky md:top-0 md:h-screen md:w-60 md:flex-none md:border-b-0 md:border-r">
+    <nav aria-label="Main" className="flex w-full flex-col gap-5 border-b border-ps-line bg-ps-sidebar px-3 py-2.5 md:sticky md:top-0 md:h-screen md:w-60 md:flex-none md:border-b-0 md:border-r md:py-3.5">
       {/* Who is signed in: their photo (or a symbol), name and email. */}
       <div className="flex items-center gap-2.5 px-2 py-1.5">
         <ActorMark kind="user" name={props.viewer.name} avatarUrl={props.viewer.avatarUrl} size={30} />
@@ -64,43 +69,51 @@ export function Sidebar(props: {
           <span className="truncate text-[13px] font-medium text-ps-text">{props.viewer.name}</span>
           <span className="truncate text-[11px] text-ps-subtle">{props.viewer.email}</span>
         </span>
-      </div>
-
-      <div className="flex flex-col gap-0.5">
-        {ITEMS.filter((item) => props.analytics || item.href !== "/beta/analytics").map((item) => <NavLink key={item.href} item={item} path={path} />)}
-      </div>
-
-      <div className="hidden flex-1 md:block" />
-
-      <div className="flex flex-col gap-0.5">
-        <a href={DOCS.href} target="_blank" rel="noopener" className={cn(linkClass, "text-ps-muted hover:bg-ps-fg/[0.03] hover:text-ps-text")}>
-          {DOCS.icon}
-          <span className="flex-1">{DOCS.label}</span>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" className="text-ps-subtle"><path d="M7 17 17 7M8 7h9v9" /></svg>
-          <span className="sr-only"> (opens in a new tab)</span>
-        </a>
-        <NavLink item={SETTINGS} path={path} />
-      </div>
-
-      {props.plan && (
-        <Link href="/beta/usage" className="block rounded-[10px] border border-ps-line bg-ps-surface p-3 hover:border-ps-line-strong">
-          <div className="flex justify-between text-xs">
-            <span className="text-ps-muted">Posts this month</span>
-            <span className="font-mono text-ps-text">{props.plan.used.toLocaleString("en-US")} / {props.plan.limit.toLocaleString("en-US")}</span>
-          </div>
-          <div className="mt-2 h-1 overflow-hidden rounded bg-ps-fg/[0.06]">
-            <div className="h-full bg-ps-plum" style={{ width: `${percent}%` }} />
-          </div>
-          <div className="mt-2 text-[11px] text-ps-subtle">{props.plan.name} plan · resets {props.plan.resets}</div>
-        </Link>
-      )}
-
-      <form action={props.signOut} onSubmit={forgetViewer}>
-        <button type="submit" className={cn(linkClass, "w-full text-ps-muted hover:bg-ps-fg/[0.03] hover:text-ps-text")}>
-          {icon(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /></>)}
-          <span>Sign out</span>
+        <Link href="/beta/create" data-attr="phone-new-post" className="flex h-9 items-center rounded-lg bg-ps-plum px-3 text-[13px] font-medium text-ps-ground md:hidden">New post</Link>
+        <button type="button" aria-expanded={open} aria-controls="main-menu" onClick={() => setOpenOn(open ? null : path)} className="flex h-9 items-center gap-1.5 rounded-lg border border-ps-line-strong px-3 text-[13px] text-ps-text md:hidden">
+          {icon(open ? <path d="M6 6l12 12M18 6 6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />)}
+          <span>Menu</span>
         </button>
-      </form>
+      </div>
+
+      <div id="main-menu" className={cn("flex-1 flex-col gap-5 md:flex", open ? "flex" : "hidden")}>
+        <div className="flex flex-col gap-0.5">
+          {ITEMS.filter((item) => props.analytics || item.href !== "/beta/analytics").map((item) => <NavLink key={item.href} item={item} path={path} />)}
+        </div>
+
+        <div className="hidden flex-1 md:block" />
+
+        <div className="flex flex-col gap-0.5">
+          <a href={DOCS.href} target="_blank" rel="noopener" className={cn(linkClass, "text-ps-muted hover:bg-ps-fg/[0.03] hover:text-ps-text")}>
+            {DOCS.icon}
+            <span className="flex-1">{DOCS.label}</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" className="text-ps-subtle"><path d="M7 17 17 7M8 7h9v9" /></svg>
+            <span className="sr-only"> (opens in a new tab)</span>
+          </a>
+          <NavLink item={PHONE} path={path} />
+          <NavLink item={SETTINGS} path={path} />
+        </div>
+
+        {props.plan && (
+          <Link href="/beta/usage" className="block rounded-[10px] border border-ps-line bg-ps-surface p-3 hover:border-ps-line-strong">
+            <div className="flex justify-between text-xs">
+              <span className="text-ps-muted">Posts this month</span>
+              <span className="font-mono text-ps-text">{props.plan.used.toLocaleString("en-US")} / {props.plan.limit.toLocaleString("en-US")}</span>
+            </div>
+            <div className="mt-2 h-1 overflow-hidden rounded bg-ps-fg/[0.06]">
+              <div className="h-full bg-ps-plum" style={{ width: `${percent}%` }} />
+            </div>
+            <div className="mt-2 text-[11px] text-ps-subtle">{props.plan.name} plan · resets {props.plan.resets}</div>
+          </Link>
+        )}
+
+        <form action={props.signOut} onSubmit={forgetViewer}>
+          <button type="submit" className={cn(linkClass, "w-full text-ps-muted hover:bg-ps-fg/[0.03] hover:text-ps-text")}>
+            {icon(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /></>)}
+            <span>Sign out</span>
+          </button>
+        </form>
+      </div>
     </nav>
   );
 }

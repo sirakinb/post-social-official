@@ -297,32 +297,19 @@ export function destinationProblems(args: {
     if (matching.length !== count || media.length !== count) problems.push(`${label} needs exactly ${plural(count, kind)}${media.length ? `; this post has ${plural(media.length, "file")}` : ""}.`);
   };
 
-  // Instagram feed photos must be between 4:5 (portrait) and 1.91:1 (landscape).
-  const instagramShape = (items: MediaFacts[]) => {
-    for (const item of items) {
-      if (!item.width || !item.height) continue;
-      const ratio = item.width / item.height;
-      if (ratio < 0.8 - 0.005 || ratio > 1.91 + 0.005) {
-        problems.push(`Instagram photos must be between 4:5 (portrait) and 1.91:1 (landscape); ${item.name} is ${item.width}×${item.height}. Crop it to 4:5, e.g. 1080×1350.`);
-      }
-    }
-  };
-
   switch (options.kind) {
     case "instagram":
       if (caption.length > 2200) problems.push(`Instagram captions can be at most 2,200 characters; this one is ${caption.length.toLocaleString("en-US")}.`);
       if (options.media_type === "image") {
+        // Any shape and format: the worker fits each photo to Instagram's 4:5 to 1.91:1 as
+        // JPEG before sending (worker/src/publish/instagram-photos.ts).
         exactly(1, "image", "An Instagram image post");
-        types(images, ["image/jpeg"], "Instagram images");
-        instagramShape(images);
       } else if (options.media_type === "reel") {
         exactly(1, "video", "An Instagram Reel");
         types(videos, ["video/mp4", "video/quicktime"], "Instagram Reels");
         videos.forEach((v) => videoLength(v, 3, 900, "Instagram Reels"));
       } else {
         if (media.length < 2 || media.length > 10) problems.push(`An Instagram carousel needs 2 to 10 files; this post has ${plural(media.length, "file")}.`);
-        types(images, ["image/jpeg"], "Instagram carousel images");
-        instagramShape(images);
         types(videos, ["video/mp4", "video/quicktime"], "Instagram carousel videos");
         videos.forEach((v) => videoLength(v, 3, 60, "Videos in an Instagram carousel"));
       }

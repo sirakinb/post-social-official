@@ -63,6 +63,9 @@ export type StepContext = {
   // TikTok photo posts: makes each photo's TikTok-ready copy and returns the links TikTok
   // fetches them from (worker/src/publish/tiktok-photos.ts).
   tiktokPhotoLinks?: (photos: PublishMedia[], onEach?: () => Promise<void>) => Promise<string[]>;
+  // Instagram photos: the link Instagram fetches each from, a fitted JPEG copy when the
+  // photo is outside Instagram's shape or format (worker/src/publish/instagram-photos.ts).
+  instagramPhotoLink?: (photo: PublishMedia) => Promise<string>;
   // Video covers (covers.ts): the cover image as a JPEG (bytes + signed link), and a still of
   // the video at a moment. Absent when not applicable.
   cover?: { image?: () => Promise<{ bytes: Uint8Array<ArrayBuffer>; link: string }>; frame: (ms: number) => Promise<Uint8Array<ArrayBuffer>> };

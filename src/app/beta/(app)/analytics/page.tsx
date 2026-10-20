@@ -45,7 +45,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   const posts = (list: AnalyticsData["posts"]) => list.map(strip);
 
   return (
-    <div className="flex w-full max-w-[1180px] flex-col px-8 pb-12 pt-6">
+    <div className="flex w-full max-w-[1180px] flex-col px-4 sm:px-8 pb-12 pt-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="m-0 text-lg font-medium">Analytics</h1>

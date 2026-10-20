@@ -50,10 +50,12 @@ async function containerStatus(ctx: StepContext, flavor: Flavor, id: string) {
   return { status, detail };
 }
 
-function mediaParams(flavor: Flavor, item: PublishMedia, child: boolean): Record<string, string> {
+async function mediaParams(ctx: StepContext, flavor: Flavor, item: PublishMedia, child: boolean): Promise<Record<string, string>> {
   if (flavor.name === "Instagram") {
     if (item.media_type === "video") return child ? { media_type: "VIDEO", video_url: item.url, is_carousel_item: "true" } : { media_type: "REELS", video_url: item.url, share_to_feed: "true" };
-    return child ? { image_url: item.url, is_carousel_item: "true" } : { image_url: item.url };
+    // Photos outside Instagram's shape or format get a fitted copy (instagram-photos.ts).
+    const url = ctx.instagramPhotoLink ? await ctx.instagramPhotoLink(item) : item.url;
+    return child ? { image_url: url, is_carousel_item: "true" } : { image_url: url };
   }
   const base: Record<string, string> = item.media_type === "video" ? { media_type: "VIDEO", video_url: item.url } : { media_type: "IMAGE", image_url: item.url };
   return child ? { ...base, is_carousel_item: "true" } : base;
@@ -85,7 +87,7 @@ async function createContainer(ctx: StepContext, flavor: Flavor) {
     // Children first; saved one by one so a retry continues instead of starting over.
     const children = Array.isArray(ctx.checkpoint.children) ? [...(ctx.checkpoint.children as string[])] : [];
     for (let i = children.length; i < bundle.media.length; i++) {
-      const child = await call(ctx, flavor, "POST", flavor.containerPath(userId), mediaParams(flavor, bundle.media[i], true), `Uploading carousel item ${i + 1} to ${flavor.name}`);
+      const child = await call(ctx, flavor, "POST", flavor.containerPath(userId), await mediaParams(ctx, flavor, bundle.media[i], true), `Uploading carousel item ${i + 1} to ${flavor.name}`);
       children.push(String(child.id));
       await ctx.save({ children });
     }
@@ -99,7 +101,7 @@ async function createContainer(ctx: StepContext, flavor: Flavor) {
     return true;
   }
 
-  const params: Record<string, string> = kind === "text" ? { media_type: "TEXT" } : mediaParams(flavor, bundle.media[0], false);
+  const params: Record<string, string> = kind === "text" ? { media_type: "TEXT" } : await mediaParams(ctx, flavor, bundle.media[0], false);
   if (caption) params[textKey] = caption;
   if (flavor.name === "Instagram" && kind === "reel") Object.assign(params, await reelCover(ctx));
   const container = await call(ctx, flavor, "POST", flavor.containerPath(userId), params, `Uploading to ${flavor.name}`);

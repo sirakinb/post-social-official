@@ -121,6 +121,37 @@ describe.skipIf(!enabled)("media function on the dev backend (US-013, US-014, US
     expect(again.status).toBe(409);
   });
 
+  it("takes a whole file in one request and finishes without ETags (Apple Shortcuts)", async () => {
+    const bytes = new Uint8Array(9 * 1024 * 1024).fill(3); // over the 8 MiB part size, still one part
+    const start = await media(ownerToken, {
+      action: "create_upload",
+      workspace_id: workspaceId,
+      file_name: "IMG_0001.MOV", // no type or size: Shortcuts may not know them
+      single_part: true,
+    });
+    expect(start.status, JSON.stringify(start.body)).toBe(200);
+    const parts = start.body.parts as Array<{ url: string }>;
+    expect(parts).toHaveLength(1);
+    expect((await fetch(parts[0].url, { method: "PUT", body: bytes })).status).toBe(200);
+    const done = await media(ownerToken, { action: "complete_upload", media_id: start.body.media_id });
+    expect(done.status, JSON.stringify(done.body)).toBe(200);
+    expect(done.body).toMatchObject({ status: "processing", size_bytes: bytes.length, mime_type: "video/quicktime" });
+  });
+
+  it("takes a size written with thousands separators", async () => {
+    const start = await media(ownerToken, { action: "create_upload", workspace_id: workspaceId, file_name: "d.mp4", mime_type: "video/mp4", size_bytes: "9,437,184", single_part: true });
+    expect(start.status, JSON.stringify(start.body)).toBe(200);
+    await media(ownerToken, { action: "abort_upload", media_id: start.body.media_id });
+  });
+
+  it("refuses to finish without ETags when the file never arrived", async () => {
+    const start = await media(ownerToken, { action: "create_upload", workspace_id: workspaceId, file_name: "c.mp4", mime_type: "video/mp4", size_bytes: 1000, single_part: true });
+    const finish = await media(ownerToken, { action: "complete_upload", media_id: start.body.media_id });
+    expect(finish.status).toBe(400);
+    expect(String(finish.body.error)).toMatch(/Expected 1 uploaded parts/);
+    await media(ownerToken, { action: "abort_upload", media_id: start.body.media_id });
+  });
+
   it("refuses a part larger than the size that was announced and counted", async () => {
     const start = await media(ownerToken, { action: "create_upload", workspace_id: workspaceId, file_name: "small.mp4", mime_type: "video/mp4", size_bytes: 100 });
     const [part] = start.body.parts as Array<{ url: string }>;

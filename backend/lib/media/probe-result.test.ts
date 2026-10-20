@@ -20,6 +20,18 @@ describe("interpretProbe", () => {
     expect(outcome).toMatchObject({ ok: true, mimeType: "video/quicktime", durationSeconds: 3.5 });
   });
 
+  it("reports the shape people see for phone videos recorded with a rotation flag", () => {
+    const phone = (rotation: string) =>
+      interpretProbe(
+        result({ "@type": "General", Format: "MPEG-4", Format_Profile: "QuickTime" }, { "@type": "Video", Format: "HEVC", Width: 1920, Height: 1080, Rotation: rotation, Duration: 4 }),
+        "video",
+      );
+    expect(phone("90.000")).toMatchObject({ ok: true, width: 1080, height: 1920, videoFormat: "HEVC" });
+    expect(phone("270.000")).toMatchObject({ width: 1080, height: 1920 });
+    expect(phone("-90")).toMatchObject({ width: 1080, height: 1920 });
+    expect(phone("180.000")).toMatchObject({ width: 1920, height: 1080 });
+  });
+
   it("reads images", () => {
     expect(interpretProbe(result({ "@type": "General", Format: "PNG" }, { "@type": "Image", Width: 64, Height: 48 }), "image")).toEqual({
       ok: true,

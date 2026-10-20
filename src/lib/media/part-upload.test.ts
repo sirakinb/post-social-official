@@ -5,6 +5,28 @@ import { formatBytes, formatDuration, uploadParts, type PutPart } from "./part-u
 const parts = (count: number) => Array.from({ length: count }, (_, i) => ({ part_number: i + 1, url: `u${i + 1}` }));
 
 describe("uploadParts", () => {
+  it("resumes: skips parts already stored and reports each new one", async () => {
+    const file = new Blob(["aaaa", "bbbb", "cc"]);
+    const sent: string[] = [];
+    const done: number[] = [];
+    const progress: number[] = [];
+    const put: PutPart = async (url, body, onProgress) => {
+      sent.push(url);
+      onProgress(body.size);
+      return `"etag-${url}"`;
+    };
+    const result = await uploadParts({
+      file, partSize: 4, parts: parts(3), putPart: put,
+      completed: [{ part_number: 1, etag: '"old-1"' }],
+      onPartDone: (p) => done.push(p.part_number),
+      onProgress: (f) => progress.push(f),
+    });
+    expect(sent.sort()).toEqual(["u2", "u3"]);
+    expect(done.sort()).toEqual([2, 3]);
+    expect(progress[0]).toBeCloseTo(0.4);
+    expect(result.map((p) => p.etag)).toEqual(['"old-1"', '"etag-u2"', '"etag-u3"']);
+  });
+
   it("sends each slice to its own URL and returns ETags in order", async () => {
     const file = new Blob(["aaaa", "bbbb", "cc"]);
     const seen: Record<string, string> = {};

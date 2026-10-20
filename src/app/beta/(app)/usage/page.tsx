@@ -91,7 +91,7 @@ export default async function BetaUsagePage({ searchParams }: { searchParams: Pr
 
   return (
     <div className="flex flex-col">
-      <main className="w-full max-w-[1100px] flex-1 px-8 pb-12 pt-5">
+      <main className="w-full max-w-[1100px] flex-1 px-4 sm:px-8 pb-12 pt-5">
         {!current ? (
           <p className="text-sm text-ps-muted">You are not a member of any workspace yet.</p>
         ) : !report ? (

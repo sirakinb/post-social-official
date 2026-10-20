@@ -24,14 +24,25 @@ export function normalizeMimeType(mimeType: string) {
   return mimeType.split(";")[0].trim().toLowerCase();
 }
 
+const BY_EXTENSION: Record<string, AllowedMimeType> = { mp4: "video/mp4", m4v: "video/mp4", mov: "video/quicktime", webm: "video/webm", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp" };
+
+// The type a file name suggests, for callers that can't say (Apple Shortcuts). The file is
+// checked for what it really is after upload either way.
+export function mimeTypeFromName(fileName: string): string {
+  return BY_EXTENSION[fileName.split(".").pop()?.toLowerCase() ?? ""] ?? "";
+}
+
 export const UPLOAD_LINK_SECONDS = 60 * 60; // presigned part URLs live for an hour
 
 // R2 multipart rules: parts are 5 MiB to 5 GiB (the last may be smaller), at most 10,000.
 const MIN_PART_BYTES = 8 * 1024 * 1024;
 const MAX_PARTS = 10_000;
 
-export function planParts(sizeBytes: number) {
+// singlePart: the whole file in one part (R2 allows up to 5 GiB), for callers that can only
+// send a file in one request (Apple Shortcuts).
+export function planParts(sizeBytes: number, singlePart = false) {
   if (!Number.isSafeInteger(sizeBytes) || sizeBytes <= 0) throw new Error("File size must be a positive whole number of bytes.");
+  if (singlePart) return { partSize: sizeBytes, partCount: 1 };
   // Aim for about 64 parts so progress is smooth and retries are cheap.
   const partSize = Math.max(MIN_PART_BYTES, Math.ceil(sizeBytes / 64 / (1024 * 1024)) * 1024 * 1024);
   const partCount = Math.ceil(sizeBytes / partSize);
@@ -62,11 +73,13 @@ export function storageKey(workspaceId: string, mediaId: string, fileName: strin
 
 export type UploadRequest = { fileName: string; mimeType: string; sizeBytes: number };
 
-export function uploadProblem(request: UploadRequest): string | null {
+// sizeBytes null: not known yet (a single-part upload; checked when it finishes).
+export function uploadProblem(request: Omit<UploadRequest, "sizeBytes"> & { sizeBytes: number | null }): string | null {
   if (!request.fileName?.trim()) return "Choose a file to upload.";
   if (!mediaTypeFor(request.mimeType ?? "")) {
     return "That file type is not supported. Use MP4, MOV or WebM video, or JPEG, PNG or WebP images.";
   }
+  if (request.sizeBytes === null) return null;
   if (!Number.isSafeInteger(request.sizeBytes) || request.sizeBytes <= 0) return "The file is empty.";
   if (request.sizeBytes > MAX_MEDIA_BYTES) return "Files can be at most 1 GB.";
   return null;
