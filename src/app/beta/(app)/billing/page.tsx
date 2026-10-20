@@ -11,7 +11,8 @@ export type BillingStatus = {
   free_accounts: number;
   subscription: { status: string } | null;
   estimate: { monthly_total: number; credit: number; bands: Array<{ units: number; perAccount: number; amount: number }> } | null;
-  x: { monthly_cap: number; price_per_post: number; price_per_link_post: number; free_monthly: number };
+  // monthly_cap is the cap in force (null: not capped); set_cap is the one the workspace chose.
+  x: { spent: number; posts: number; monthly_cap: number | null; set_cap: number; price_per_post: number; price_per_link_post: number; free_monthly: number };
   can_manage: boolean;
   available: boolean;
 };
@@ -112,6 +113,20 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
               {cents(status.x.price_per_post)} a post, {cents(status.x.price_per_link_post)} with a link
               <span className="mt-1 block text-xs text-ps-subtle">X charges us for every post. The first {money(status.x.free_monthly)} each month is on us.</span>
             </Row>
+            <Row label="This month">
+              {money(status.x.spent)} <span className="text-ps-subtle">{status.x.monthly_cap !== null && `of ${money(status.x.monthly_cap)}`} · {status.x.posts} post{status.x.posts === 1 ? "" : "s"}</span>
+              {status.x.monthly_cap !== null && status.x.monthly_cap > 0 && (
+                <span className="mt-2 block h-1.5 max-w-xs overflow-hidden rounded-full bg-ps-fg/[0.06]" role="progressbar" aria-label="X spend this month" aria-valuenow={Math.round(Math.min(100, (status.x.spent / status.x.monthly_cap) * 100))} aria-valuemin={0} aria-valuemax={100}>
+                  <span className={`block h-full ${status.x.spent >= status.x.monthly_cap * 0.8 ? "bg-warning" : "bg-ps-plum"}`} style={{ width: `${Math.min(100, (status.x.spent / status.x.monthly_cap) * 100)}%` }} />
+                </span>
+              )}
+              {status.x.monthly_cap !== null && status.x.spent >= status.x.monthly_cap * 0.8 && (
+                <span role="status" className="mt-1.5 block text-xs text-ps-attention">
+                  {status.x.spent >= status.x.monthly_cap ? "X posts are paused until next month." : "Over 80% of this month's X cap."}{" "}
+                  {status.subscription ? "Raise the cap below to keep posting." : "Add a card to go past the free $1."}
+                </span>
+              )}
+            </Row>
             <Row label="Monthly cap">
               {status.can_manage ? (
                 <form action={saveXCap} className="flex flex-wrap items-center gap-2">
@@ -124,7 +139,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
                       min={0}
                       max={10000}
                       step={1}
-                      defaultValue={status.x.monthly_cap}
+                      defaultValue={status.x.set_cap}
                       aria-label="Monthly X cap in dollars"
                       className="h-[34px] w-24 rounded-lg border border-ps-fg/[0.12] bg-transparent px-2.5 text-sm tabular-nums"
                     />
@@ -132,9 +147,13 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
                   <button type="submit" className={`${button} border border-ps-fg/[0.12] hover:border-ps-fg/25`}>Save</button>
                 </form>
               ) : (
-                money(status.x.monthly_cap)
+                money(status.x.set_cap)
               )}
-              <span className="mt-1 block text-xs text-ps-subtle">We email you at 80%. At the cap, X posts pause until next month; other platforms keep posting.</span>
+              <span className="mt-1 block text-xs text-ps-subtle">
+                {status.plan.comped
+                  ? "Your plan isn't charged for X posts."
+                  : `At the cap, X posts pause until next month; other platforms keep posting.${status.subscription ? "" : ` Without a card, X stops at the free ${money(status.x.free_monthly)}.`}`}
+              </span>
             </Row>
           </Card>
         </>

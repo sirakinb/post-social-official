@@ -135,13 +135,17 @@ export async function billingStatus(deps: BillingDeps, caller: Caller, input: Pa
   const state = await workspaceState(deps.sql, workspaceId);
   const comped = state.plan_id !== "free" && state.plan_id !== "paid";
   const bill = monthlyBill(state.connected);
+  // Without a working card, X stops at the free $1 (comped plans aren't capped).
+  const billable = state.plan_id === "paid" && PAID_STATUSES.has(state.subscription_status ?? "");
+  const setCap = (state.x_monthly_cap_cents ?? 1000) / 100;
+  const effectiveCap = comped ? null : billable ? setCap : Math.min(setCap, X_PRICES.freeMonthly);
   return {
     plan: { id: state.plan_id, name: state.plan_name, comped },
     connected_accounts: state.connected,
     free_accounts: FREE_ACCOUNTS,
     subscription: state.stripe_subscription_id ? { status: state.subscription_status } : null,
     estimate: comped ? null : { monthly_total: bill.total, credit: bill.credit, bands: bill.bands.filter((b) => b.units > 0) },
-    x: { monthly_cap: (state.x_monthly_cap_cents ?? 1000) / 100, price_per_post: X_PRICES.post, price_per_link_post: X_PRICES.postWithLink, free_monthly: X_PRICES.freeMonthly },
+    x: { ...(await xSpendThisMonth(deps.sql, workspaceId)), monthly_cap: effectiveCap, set_cap: (state.x_monthly_cap_cents ?? 1000) / 100, price_per_post: X_PRICES.post, price_per_link_post: X_PRICES.postWithLink, free_monthly: X_PRICES.freeMonthly },
     can_manage: member.role === "owner" || member.role === "admin",
     available: Boolean(deps.stripe),
   };
@@ -259,8 +263,70 @@ function timingSafeEqual(a: string, b: string) {
 
 type StripeEvent = { type: string; data: { object: Record<string, unknown> } };
 
-// Subscription changes from Stripe (card added, payment failed for good, cancelled).
+const MONTH_NAME = (month: string) => new Date(`${month}T00:00:00Z`).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+
+// A renewal invoice is a draft for about an hour before Stripe charges it: add the X posts
+// not billed yet, month by month, each month's first $1 free.
+export async function addXUsageToInvoice(deps: BillingDeps, invoice: { id: string; customer: string; status?: string; billing_reason?: string }) {
+  if (invoice.status !== "draft" || invoice.billing_reason !== "subscription_cycle") return { added: 0 };
+  const stripe = requireStripe(deps);
+  const months = await deps.sql<{ workspace_id: string; month: string; posts: number; link_posts: number; total_cents: number; billed_cents: number }>(
+    `WITH ws AS (SELECT workspace_id FROM public.workspace_billing WHERE stripe_customer_id = $1)
+     SELECT c.workspace_id, to_char(date_trunc('month', c.created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS month,
+            count(*)::int AS posts, count(*) FILTER (WHERE c.with_link)::int AS link_posts, sum(c.cents)::int AS total_cents,
+            coalesce((SELECT sum(l.cents)::int FROM public.x_invoice_lines l
+                      WHERE l.workspace_id = c.workspace_id AND l.month = date_trunc('month', c.created_at AT TIME ZONE 'UTC')::date), 0) AS billed_cents
+     FROM public.x_charges c JOIN ws USING (workspace_id)
+     GROUP BY 1, 2 ORDER BY 2`,
+    [invoice.customer],
+  );
+  const free = Math.round(X_PRICES.freeMonthly * 100);
+  let added = 0;
+  for (const m of months) {
+    const cents = Math.max(0, m.total_cents - free) - m.billed_cents;
+    if (cents <= 0) continue;
+    // Saved first, so a repeated webhook can't add the same line twice.
+    const [saved] = await deps.sql(
+      `INSERT INTO public.x_invoice_lines (stripe_invoice_id, workspace_id, month, cents) VALUES ($1, $2, $3, $4)
+       ON CONFLICT DO NOTHING RETURNING month`,
+      [invoice.id, m.workspace_id, m.month, cents],
+    );
+    if (!saved) continue;
+    try {
+      await stripe.request("POST", "/v1/invoiceitems", {
+        customer: invoice.customer,
+        invoice: invoice.id,
+        currency: "usd",
+        amount: cents,
+        description: `X posts, ${MONTH_NAME(m.month)}: ${m.posts} post${m.posts === 1 ? "" : "s"}${m.link_posts ? ` (${m.link_posts} with a link)` : ""}, first $${X_PRICES.freeMonthly} free`,
+        metadata: { workspace_id: m.workspace_id, month: m.month },
+      });
+    } catch (error) {
+      await deps.sql(`DELETE FROM public.x_invoice_lines WHERE stripe_invoice_id = $1 AND month = $2`, [invoice.id, m.month]);
+      throw error;
+    }
+    added += cents;
+  }
+  return { added };
+}
+
+// This month's X spend so far, for the Billing page.
+async function xSpendThisMonth(sql: Sql, workspaceId: string) {
+  const [row] = await sql<{ cents: number; posts: number }>(
+    `SELECT coalesce(sum(cents), 0)::int AS cents, count(*)::int AS posts FROM public.x_charges
+     WHERE workspace_id = $1 AND created_at >= date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'`,
+    [workspaceId],
+  );
+  return { spent: (row?.cents ?? 0) / 100, posts: row?.posts ?? 0 };
+}
+
+// Subscription changes from Stripe (card added, payment failed for good, cancelled), and
+// renewal invoices to add X posts to.
 export async function handleStripeEvent(deps: BillingDeps, event: StripeEvent) {
+  if (event.type === "invoice.created") {
+    const result = await addXUsageToInvoice(deps, event.data.object as { id: string; customer: string; status?: string; billing_reason?: string });
+    return { handled: true, ...result };
+  }
   if (!event.type.startsWith("customer.subscription.")) return { handled: false };
   const subscription = event.data.object as { id: string; status: string; customer: string; metadata?: { workspace_id?: string }; items?: { data?: { quantity?: number }[] } };
   const workspaceId = subscription.metadata?.workspace_id;

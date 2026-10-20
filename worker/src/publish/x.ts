@@ -7,12 +7,45 @@
 // Every post is billed to Post Social's X developer account (about 1.5 cents, or 20 cents
 // when the text has a link).
 import { captionFor, linkedinMediaType, type LinkedInOptions, type XOptions } from "../../../backend/lib/publishing/validate";
-import { PublishError, type Adapter, type PublishMedia, type StepContext } from "./types";
+import { X_PRICES } from "../../../backend/lib/pricing";
+import type { Sql } from "../../../backend/lib/access";
+import { PublishError, type Adapter, type Bundle, type PublishMedia, type StepContext } from "./types";
 
 const API = "https://api.x.com/2";
 const PART_BYTES = 4 * 1024 * 1024;
 // X's per-user posting limit is generous; this guards against runaway loops.
 const POSTS_PER_DAY = 300;
+
+// X charges more for a post with a link, and counts anything it would turn into one: an
+// address with http(s), or a name ending in a real domain (2-letter country domains and
+// the common ones). Leaning towards "link" only ever costs a few cents more.
+const DOMAIN_ENDINGS = "com|net|org|io|ai|app|dev|xyz|info|biz|ly|gg|so|shop|store|site|online|tech|link|page|blog|news|club|live|art|design|studio|social|media|world|life|fm|edu|gov|[a-z]{2}";
+const LINK = new RegExp(`https?://\\S|(^|[^@\\w.])(?:[a-z0-9-]+\\.)+(?:${DOMAIN_ENDINGS})(?=$|[\\s/?#:!,;)])`, "i");
+export function hasLink(text: string) {
+  return LINK.test(text);
+}
+
+const toCents = (dollars: number) => Math.round(dollars * 100);
+
+// Each X post is charged to the workspace (see reserve_x_charge in the billing migration).
+export function xCharges(sql: Sql, bundle: Bundle): NonNullable<StepContext["chargeX"]> {
+  return {
+    async reserve(withLink) {
+      const cents = toCents(withLink ? X_PRICES.postWithLink : X_PRICES.post);
+      const [row] = await sql<{ reserve_x_charge: string }>(`SELECT public.reserve_x_charge($1, $2, $3, $4, $5)`, [bundle.destinationId, bundle.workspaceId, cents, withLink, toCents(X_PRICES.freeMonthly)]);
+      if (row?.reserve_x_charge === "over_cap") {
+        throw new PublishError(
+          "x_cap_reached",
+          "This workspace reached its monthly X limit, so this post didn't go out. Raise the X cap on the Billing page (or add a card), then post it again. Other platforms are not affected.",
+          false,
+        );
+      }
+    },
+    async release() {
+      await sql(`DELETE FROM public.x_charges WHERE destination_id = $1`, [bundle.destinationId]);
+    },
+  };
+}
 
 async function failure(response: Response, what: string): Promise<never> {
   const body = (await response.json().catch(() => ({}))) as { title?: string; detail?: string; errors?: Array<{ message?: string }>; type?: string };
@@ -120,15 +153,19 @@ export const publishX: Adapter = async (ctx) => {
   }
 
   await ctx.reserve("x_post", POSTS_PER_DAY, 24 * 3600);
-  await ctx.save({ publish_started_at: new Date(ctx.now()).toISOString() });
   const text = captionFor(options, ctx.bundle.caption).trim();
+  await ctx.chargeX?.reserve(hasLink(text));
+  await ctx.save({ publish_started_at: new Date(ctx.now()).toISOString() });
   let created: Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   try {
     created = await call(ctx, "POST", "/tweets", "Posting to X", JSON.stringify({ ...(text ? { text } : {}), ...(mediaIds.length ? { media: { media_ids: mediaIds } } : {}) }));
   } catch (error) {
     // X answered with a refusal, so nothing was posted and a retry is safe. (A lost
     // connection leaves publish_started_at set and is reported instead.)
-    if (error instanceof PublishError) await ctx.save({ publish_started_at: null });
+    if (error instanceof PublishError) {
+      await ctx.save({ publish_started_at: null });
+      await ctx.chargeX?.release();
+    }
     throw error;
   }
   const id = created.data?.id ? String(created.data.id) : null;

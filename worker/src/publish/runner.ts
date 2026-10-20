@@ -9,7 +9,7 @@ import type { R2 } from "../../../backend/lib/media/r2";
 import { destinationProblems, type DestinationOptions } from "../../../backend/lib/publishing/validate";
 import { publishFacebook } from "./facebook";
 import { publishBluesky } from "./bluesky";
-import { publishX } from "./x";
+import { publishX, xCharges } from "./x";
 import { publishLinkedIn } from "./linkedin";
 import { publishInstagram, publishThreads } from "./meta";
 import { publishTikTok } from "./tiktok";
@@ -128,6 +128,7 @@ export async function runNextPublishJob(deps: PublishDeps): Promise<boolean> {
         );
         if (retryAt) throw new PublishError("rate_limited", "This account reached its safe posting limit for now; it will go out when the limit resets.", true, new Date(retryAt));
       },
+      chargeX: b.platform === "x" ? xCharges(deps.sql, b) : undefined,
       token: () => accountToken(deps, { id: b.account.id, platform: b.platform, displayName: b.account.displayName }, now),
       session: () => accountSession(deps, { id: b.account.id, platform: b.platform, displayName: b.account.displayName }, now),
     };

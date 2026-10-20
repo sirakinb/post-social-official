@@ -18,7 +18,7 @@ const base: BillingStatus = {
   free_accounts: 2,
   subscription: null,
   estimate: { monthly_total: 0, credit: 10, bands: [{ units: 2, perAccount: 5, amount: 10 }] },
-  x: { monthly_cap: 10, price_per_post: 0.02, price_per_link_post: 0.25, free_monthly: 1 },
+  x: { spent: 0.42, posts: 21, monthly_cap: 1, set_cap: 10, price_per_post: 0.02, price_per_link_post: 0.25, free_monthly: 1 },
   can_manage: true,
   available: true,
 };
@@ -35,6 +35,13 @@ describe("BillingPage", () => {
     expect(screen.getAllByText("Free")).toHaveLength(2);
     expect(screen.getByLabelText("Monthly X cap in dollars")).toHaveValue(10);
     expect(screen.getByText(/2¢ a post, 25¢ with a link/)).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "X spend this month" })).toHaveAttribute("aria-valuenow", "42");
+  });
+
+  it("warns near the X cap", async () => {
+    server.status = { ...base, x: { ...base.x, spent: 0.9 } };
+    render(await BillingPage({ searchParams: Promise.resolve({}) }));
+    expect(screen.getByText(/Over 80% of this month's X cap/)).toHaveTextContent("Add a card to go past the free $1.");
   });
 
   it("confirms a checkout on return and shows Manage billing", async () => {

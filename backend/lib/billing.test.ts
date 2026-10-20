@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Sql } from "./access";
-import { accountLimitMessage, billingStatus, confirmCheckout, formEncode, handleStripeEvent, setXCap, startCheckout, syncAccountQuantity, verifyStripeSignature, type Stripe } from "./billing";
+import { accountLimitMessage, addXUsageToInvoice, billingStatus, confirmCheckout, formEncode, handleStripeEvent, setXCap, startCheckout, syncAccountQuantity, verifyStripeSignature, type Stripe } from "./billing";
 
 const WORKSPACE = "22222222-2222-4222-8222-222222222222";
 const person = { userId: "11111111-1111-4111-8111-111111111111", displayName: "Ada", entryPoint: "ui" as const };
@@ -88,7 +88,7 @@ describe("billingStatus", () => {
     const { sql } = fakeSql({ plan_id: "paid", plan_name: "Paid", connected: 12, stripe_subscription_id: "sub_1", subscription_status: "active", billed_quantity: 12, x_monthly_cap_cents: 2500 });
     const status = await billingStatus({ sql, stripe: null, webAppUrl: "" }, person, { workspace_id: WORKSPACE });
     expect(status.estimate).toEqual({ monthly_total: 45, credit: 10, bands: [expect.objectContaining({ units: 10, perAccount: 5 }), expect.objectContaining({ units: 2, perAccount: 2.5 })] });
-    expect(status.x.monthly_cap).toBe(25);
+    expect(status.x).toMatchObject({ monthly_cap: 25, set_cap: 25, spent: 0 });
     expect(status.can_manage).toBe(true);
     expect(status.available).toBe(false);
   });
@@ -98,6 +98,13 @@ describe("billingStatus", () => {
     const status = await billingStatus({ sql, stripe: null, webAppUrl: "" }, person, { workspace_id: WORKSPACE });
     expect(status.plan.comped).toBe(true);
     expect(status.estimate).toBeNull();
+    expect(status.x.monthly_cap).toBeNull();
+  });
+
+  it("caps X at the free $1 without a card", async () => {
+    const { sql } = fakeSql({ plan_id: "free", plan_name: "Free", connected: 2, x_monthly_cap_cents: 1000 });
+    const status = await billingStatus({ sql, stripe: null, webAppUrl: "" }, person, { workspace_id: WORKSPACE });
+    expect(status.x).toMatchObject({ monthly_cap: 1, set_cap: 10 });
   });
 });
 
@@ -181,5 +188,45 @@ describe("handleStripeEvent", () => {
     await handleStripeEvent({ sql, stripe: null, webAppUrl: "" }, { type: "invoice.paid", data: { object: {} } });
     await handleStripeEvent({ sql, stripe: null, webAppUrl: "" }, { type: "customer.subscription.updated", data: { object: { id: "s", status: "active", customer: "c" } } });
     expect(writes).toEqual([]);
+  });
+});
+
+describe("addXUsageToInvoice", () => {
+  const invoice = { id: "in_1", customer: "cus_1", status: "draft", billing_reason: "subscription_cycle" };
+  function db(months: Array<{ month: string; posts: number; link_posts: number; total_cents: number; billed_cents: number }>, alreadySaved = false) {
+    const queries: Array<{ query: string; params: unknown[] }> = [];
+    const sql = (async (query: string, params: unknown[] = []) => {
+      queries.push({ query, params });
+      if (query.includes("FROM public.x_charges c")) return months.map((m) => ({ workspace_id: WORKSPACE, ...m }));
+      if (query.includes("INSERT INTO public.x_invoice_lines")) return alreadySaved ? [] : [{ month: params[2] }];
+      return [];
+    }) as Sql;
+    return { sql, queries };
+  }
+
+  it("adds each month's X posts past the free $1, minus what was billed already", async () => {
+    const { sql } = db([
+      { month: "2026-09-01", posts: 80, link_posts: 2, total_cents: 206, billed_cents: 50 },
+      { month: "2026-10-01", posts: 30, link_posts: 0, total_cents: 60, billed_cents: 0 },
+    ]);
+    const { stripe, calls } = fakeStripe();
+    await expect(addXUsageToInvoice({ sql, stripe, webAppUrl: "" }, invoice)).resolves.toEqual({ added: 56 });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].params).toMatchObject({ customer: "cus_1", invoice: "in_1", currency: "usd", amount: 56, description: "X posts, September 2026: 80 posts (2 with a link), first $1 free" });
+  });
+
+  it("never adds a line twice, and leaves other invoices alone", async () => {
+    const { stripe, calls } = fakeStripe();
+    await addXUsageToInvoice({ sql: db([{ month: "2026-10-01", posts: 100, link_posts: 0, total_cents: 200, billed_cents: 0 }], true).sql, stripe, webAppUrl: "" }, invoice);
+    await addXUsageToInvoice({ sql: db([{ month: "2026-10-01", posts: 100, link_posts: 0, total_cents: 200, billed_cents: 0 }]).sql, stripe, webAppUrl: "" }, { ...invoice, status: "open" });
+    await addXUsageToInvoice({ sql: db([{ month: "2026-10-01", posts: 100, link_posts: 0, total_cents: 200, billed_cents: 0 }]).sql, stripe, webAppUrl: "" }, { ...invoice, billing_reason: "subscription_create" });
+    expect(calls).toEqual([]);
+  });
+
+  it("forgets the saved line when Stripe fails, so the retry adds it", async () => {
+    const { sql, queries } = db([{ month: "2026-10-01", posts: 100, link_posts: 0, total_cents: 200, billed_cents: 0 }]);
+    const stripe: Stripe = { request: async () => { throw new Error("Stripe down"); } };
+    await expect(addXUsageToInvoice({ sql, stripe, webAppUrl: "" }, invoice)).rejects.toThrow("Stripe down");
+    expect(queries.at(-1)!.query).toContain("DELETE FROM public.x_invoice_lines");
   });
 });
