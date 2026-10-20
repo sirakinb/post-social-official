@@ -5,6 +5,7 @@ import { callerForKey } from "../../lib/api/keys";
 import { callerForAccessToken } from "../../lib/oauth/server";
 import { statsPlatforms } from "../../lib/connections/platforms";
 import { createR2 } from "../../lib/media/r2";
+import { createStripe } from "../../lib/billing";
 import { createApiHandler } from "./handler";
 
 declare const Deno: { env: { get(name: string): string | undefined } };
@@ -36,4 +37,7 @@ export default withReporting("api", (name) => Deno.env.get(name), createApiHandl
   userForToken: (token) => userForToken(baseUrl, token),
   allowedOrigins: (Deno.env.get("WEB_APP_ORIGINS") ?? "").split(",").map((o) => o.trim()).filter(Boolean),
   proxySecret: Deno.env.get("INTERNAL_PROXY_SECRET") ?? null,
+  // Billing switches on per environment once STRIPE_SECRET_KEY is set.
+  stripe: Deno.env.get("STRIPE_SECRET_KEY") ? createStripe(Deno.env.get("STRIPE_SECRET_KEY")!) : null,
+  stripeWebhookSecret: Deno.env.get("STRIPE_WEBHOOK_SECRET") ?? null,
 }));

@@ -8,6 +8,7 @@
 //   /keys              API keys and connected apps for the web app, with the person's sign-in token
 //   /waitlist          the landing page's waitlist (public, POST {email})
 //   /internal/limits   sign-in and password-reset limits, for our website only (shared secret)
+//   /stripe/webhook    subscription changes from Stripe (signed)
 import { ApiError, type AgentCaller, type Caller, type Sql } from "../../lib/access";
 import { callerForKey, keyActions } from "../../lib/api/keys";
 import { handleMcp } from "../../lib/api/mcp";
@@ -31,6 +32,7 @@ import {
 } from "../../lib/oauth/server";
 import { usageReport } from "../../lib/usage";
 import { provisionWorkspace } from "../../lib/signup";
+import { billingActions, handleStripeEvent, verifyStripeSignature, type Stripe } from "../../lib/billing";
 import { mediaLinks } from "../../lib/media/links";
 import { tiktokCreatorInfo } from "../../lib/connections/tiktok-creator";
 import type { Settings } from "../../lib/connections/platforms";
@@ -50,6 +52,9 @@ export type ApiHandlerDeps = ApiDeps & {
   setting?: Settings; // secrets, for reading a connected account's live settings (TikTok)
   // Shared with our website, which forwards visitors' addresses (rate limits per address).
   proxySecret?: string | null;
+  // Billing: off (null) where Stripe isn't set up.
+  stripe?: Stripe | null;
+  stripeWebhookSecret?: string | null;
 };
 
 function json(status: number, body: unknown, headers: Record<string, string> = {}) {
@@ -84,6 +89,7 @@ export function createApiHandler(deps: ApiHandlerDeps) {
     if (path === "/oauth/consent") return consentRoute(deps, request);
     if (path === "/waitlist") return waitlistRoute(deps, request);
     if (path === "/internal/limits") return internalLimitsRoute(deps, request);
+    if (path === "/stripe/webhook") return stripeWebhookRoute(deps, request);
 
     if (request.method === "OPTIONS" && (path.startsWith("/.well-known/") || path.startsWith("/oauth/") || path === "/mcp")) {
       return new Response(null, { status: 204, headers: OPEN_CORS });
@@ -149,6 +155,24 @@ async function waitlistRoute(deps: ApiHandlerDeps, request: Request) {
     if (error instanceof ApiError) return json(error.status, errorBody(error.status, error.message), retryHeaders(error));
     reportError(error, { area: "waitlist" });
     return json(500, errorBody(500, "Joining the waitlist failed. Try again."));
+  }
+}
+
+// Stripe tells us when a subscription starts, changes or ends. Signed with the endpoint's
+// secret; anything unsigned or stale is refused.
+async function stripeWebhookRoute(deps: ApiHandlerDeps, request: Request) {
+  if (request.method !== "POST" || !deps.stripeWebhookSecret) return json(404, errorBody(404, "Not found."));
+  const body = await request.text();
+  if (body.length > 512 * 1024 || !(await verifyStripeSignature(body, request.headers.get("stripe-signature"), deps.stripeWebhookSecret))) {
+    return json(400, errorBody(400, "Bad signature."));
+  }
+  try {
+    const result = await handleStripeEvent({ sql: deps.sql, stripe: deps.stripe ?? null, webAppUrl: deps.webAppUrl }, JSON.parse(body));
+    return json(200, { received: true, ...result });
+  } catch (error) {
+    reportError(error, { area: "stripe webhook" });
+    // A 500 makes Stripe retry later.
+    return json(500, errorBody(500, "Could not record the event."));
   }
 }
 
@@ -320,7 +344,8 @@ async function personRoute(deps: ApiHandlerDeps, request: Request) {
         return tiktokCreatorInfo({ sql, setting: deps.setting }, caller, input);
       },
     };
-    const actions = { ...allActions, ...statsActions, ...mediaActions } as Record<string, (sql: Sql, caller: Caller, input: Record<string, unknown>) => Promise<unknown>>;
+    const billing = billingActions({ sql: deps.sql, stripe: deps.stripe ?? null, webAppUrl: deps.webAppUrl });
+    const actions = { ...allActions, ...statsActions, ...mediaActions, ...billing } as Record<string, (sql: Sql, caller: Caller, input: Record<string, unknown>) => Promise<unknown>>;
     if (!Object.hasOwn(actions, name)) throw new ApiError(400, `Unknown action. Use one of: ${Object.keys(actions).join(", ")}.`);
     const caller: Caller = { userId: user.id, displayName: user.name, entryPoint: "ui" };
     return json(200, await actions[name](deps.sql, caller, body), cors);

@@ -17,6 +17,7 @@
 //   GET  /meta/data-deletion/status     ?code=
 //   POST /meta/deauthorize              Meta deauthorize callback
 import { ApiError, type Caller } from "../../lib/access";
+import { accountLimitMessage } from "../../lib/billing";
 import type { SignedInUser } from "../../lib/insforge-admin";
 import { callbackUrl, completeConnection, disconnectAccount, finishingOrigin, isPlatform, startConnection, type ConnectionDeps } from "../../lib/connections/service";
 import { deletionStatus, handleDataDeletion, handleDeauthorize } from "../../lib/connections/meta-deletion";
@@ -120,6 +121,8 @@ export function createConnectionsHandler(deps: ConnectionsHandlerDeps) {
       return json(404, { error: "Not found." });
     } catch (error) {
       if (error instanceof ApiError) return json(error.status, { error: error.message });
+      const overLimit = accountLimitMessage(error, deps.webAppHome.replace(/\/beta\/accounts\/?$/, ""));
+      if (overLimit) return json(402, { error: overLimit });
       if (path.startsWith("/meta/")) return json(400, { error: "The signed request could not be verified." });
       console.error("connections function error", error);
       return json(500, { error: "Something went wrong on our side. Try again in a moment." });

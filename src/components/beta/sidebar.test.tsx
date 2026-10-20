@@ -17,6 +17,7 @@ describe("Sidebar", () => {
     expect(screen.getByRole("link", { name: "Accounts" })).toHaveAttribute("href", "/beta/accounts");
     expect(screen.getByRole("link", { name: "API/MCP" })).toHaveAttribute("href", "/beta/api");
     expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/beta/settings");
+    expect(screen.getByRole("link", { name: "Billing" })).toHaveAttribute("href", "/beta/billing");
   });
 
   it("shows Analytics after Calendar only where a stats source is on", () => {
