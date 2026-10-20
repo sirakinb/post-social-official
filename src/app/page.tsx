@@ -4,8 +4,9 @@ import { CLAUDE_PATH, OPENAI_PATH } from "@/components/beta/marks";
 import { DuskSky } from "@/components/landing/dusk-sky";
 import { ParticleWordmark } from "@/components/landing/particle-wordmark";
 import { Waitlist } from "@/components/landing/waitlist";
+import { PricingCalculator } from "@/components/landing/pricing-calculator";
 import { PlatformCardIcon } from "@/components/platform-logos";
-import { BETA_LOGIN } from "@/lib/insforge/auth-rules";
+import { BETA_LOGIN, BETA_SIGNUP, signupOpen } from "@/lib/insforge/auth-rules";
 import { cn } from "@/lib/utils";
 import { Fraunces, GeistPixelGrid } from "./fonts";
 
@@ -34,7 +35,9 @@ const NAV = [
   { label: "How it works", href: "#how-it-works" },
   { label: "Features", href: "#features" },
   { label: "Platforms", href: "#platforms" },
+  { label: "Pricing", href: "#pricing" },
   { label: "FAQ", href: "#faq" },
+  { label: "Docs", href: "/docs" },
 ];
 
 const FAQ = [
@@ -42,6 +45,7 @@ const FAQ = [
   { q: "What can I publish?", a: "Videos and photo posts on TikTok; photos, Reels and carousels on Instagram; text, links, photos, Reels and videos on Facebook Pages; text, photos, videos and carousels on Threads; Shorts on YouTube; and text, photos and videos on LinkedIn, Bluesky and X. What a given account can post depends on its type and the platform's rules, and Post Social checks each file before it goes out." },
   { q: "Can my AI agent publish for me?", a: "Yes. Connect Claude, ChatGPT, or any AI agent, or call the API from your own automations. Your agent drafts, schedules and publishes exactly as you direct it." },
   { q: "Can I schedule posts?", a: "Yes. Publish now or pick a date and time, then see everything on the calendar and move it if plans change." },
+  { q: "How much does it cost?", a: "Your first 2 accounts are free. After that it's $5 per account each month for accounts 3 to 10, $2.50 for 11 to 100, and $1 from 101 up, billed by the day. X posts cost a little extra (X charges for its API), with a monthly cap you set." },
   { q: "Do you need my social passwords?", a: "No. Each account connects through the platform's own sign-in page, and you can disconnect it at any time." },
   { q: "Is Post Social only for developers?", a: "No. If you can ask an AI agent for something in plain language, you can use Post Social. The web app does everything too, no code required." },
 ];
@@ -108,6 +112,16 @@ function Feature({ label, title, text, points, src, alt, width, height, flip }: 
   );
 }
 
+// The main button: "Start for free" once sign-up is open, the waitlist until then.
+function PrimaryCta({ variant = "lantern", label }: { variant?: "lantern" | "compact"; label?: string }) {
+  if (!signupOpen()) return <Waitlist variant={variant} label={label} />;
+  return (
+    <Link href={BETA_SIGNUP} className={variant === "compact" ? "lp-lantern inline-flex rounded-full px-4 py-1.5 text-[12px]" : "lp-lantern inline-flex h-11 items-center rounded-full px-5 text-sm"}>
+      Start for free
+    </Link>
+  );
+}
+
 export default function LandingPage() {
   return (
     <div className={`lp ${Fraunces.variable} ${GeistPixelGrid.variable} relative isolate overflow-x-clip bg-[#0B0816] text-[#FAF6F0]`}>
@@ -137,7 +151,7 @@ export default function LandingPage() {
             <Link href={BETA_LOGIN} className="rounded-full px-3 py-1.5 text-[13px] text-[#FAF6F0]/70 transition hover:text-[#FAF6F0]">
               Sign in
             </Link>
-            <Waitlist variant="compact" />
+            <PrimaryCta variant="compact" />
           </div>
         </header>
 
@@ -162,7 +176,7 @@ export default function LandingPage() {
             Tell Claude, ChatGPT, or your own agent what to post. Post Social publishes it to every channel, on time, and shows you what happened.
           </p>
           <div className="lp-rise lp-rise-delay-1 mt-8 flex flex-col items-center gap-3 sm:flex-row">
-            <Waitlist />
+            <PrimaryCta />
             <a href="#how-it-works" className="lp-glass inline-flex h-11 items-center rounded-full px-5 text-sm text-[#FAF6F0] transition hover:bg-white/10">
               See how it works
             </a>
@@ -242,7 +256,7 @@ export default function LandingPage() {
             ))}
           </ol>
           <div className="mt-12 flex justify-center">
-            <Waitlist label="Get early access" />
+            <PrimaryCta label="Get early access" />
           </div>
         </section>
 
@@ -302,6 +316,20 @@ export default function LandingPage() {
           </section>
         )}
 
+        {/* ===== Pricing ===== */}
+        <section id="pricing" className="mx-auto max-w-5xl scroll-mt-8 px-5 py-24 sm:px-8 md:py-32">
+          <div className="text-center">
+            <Label>Pricing</Label>
+            <h2 className="lp-h2 mt-3">
+              Pay per account. <span className="lp-display lp-ink">Less as you grow.</span>
+            </h2>
+            <p className="mx-auto mt-4 max-w-xl leading-relaxed text-[#FAF6F0]/65">Your first 2 accounts are free. After that, each account costs less the more you connect.</p>
+          </div>
+          <div className="mt-12">
+            <PricingCalculator />
+          </div>
+        </section>
+
         {/* ===== FAQ ===== */}
         <section id="faq" className="mx-auto max-w-3xl scroll-mt-8 px-5 py-24 sm:px-8 md:py-32">
           <div className="text-center">
@@ -332,9 +360,9 @@ export default function LandingPage() {
             <h2 className="lp-h2 mx-auto mt-4 max-w-2xl">
               Spend less time posting. <span className="lp-display lp-ink">Keep showing up.</span>
             </h2>
-            <p className="mx-auto mt-5 max-w-xl leading-relaxed text-[#FAF6F0]/70 md:text-lg">Publish everywhere from one workspace, or straight from your AI agent. We&apos;re letting people in a few at a time.</p>
+            <p className="mx-auto mt-5 max-w-xl leading-relaxed text-[#FAF6F0]/70 md:text-lg">Publish everywhere from one workspace, or straight from your AI agent. {signupOpen() ? "Your first 2 accounts are free." : "We\u2019re letting people in a few at a time."}</p>
             <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <Waitlist />
+              <PrimaryCta />
               <Link href={BETA_LOGIN} className="lp-glass inline-flex h-11 items-center rounded-full px-5 text-sm text-[#FAF6F0] transition hover:bg-white/10">
                 Sign in
               </Link>
