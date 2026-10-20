@@ -54,44 +54,46 @@ beforeEach(() => {
 });
 
 describe("BillingPage", () => {
-  it("shows the upcoming invoice and offers a card to Free workspaces", async () => {
+  it("shows the month and the rate ladder, and offers a card to Free workspaces", async () => {
     server.status = base;
     render(await BillingPage({ searchParams: Promise.resolve({}) }));
-    const upcoming = within(screen.getByRole("region", { name: "Upcoming invoice" }));
-    expect(upcoming.getByText(/Upcoming invoice · Oct 1 to Oct 31/)).toBeInTheDocument();
-    expect(upcoming.getByText("No card on file. 2 accounts are free.")).toBeInTheDocument();
-    expect(upcoming.getByRole("button", { name: "Add a card" })).toBeInTheDocument();
-    expect(screen.getByLabelText("X monthly cap in dollars")).toHaveValue(10);
-    expect(screen.getByText(/\$0.42 of \$1.00 used/)).toBeInTheDocument();
-    expect(screen.getByText("No invoices yet.")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Switch to Free" })).toBeNull();
+    const month = within(screen.getByRole("region", { name: "Your month" }));
+    expect(month.getByText("To pay")).toBeInTheDocument();
+    expect(month.getByText("You're on the free plan. Add a card when you want account 3.")).toBeInTheDocument();
+    expect(month.getByRole("button", { name: "Add a card" })).toBeInTheDocument();
+    const rate = within(screen.getByRole("region", { name: "Your rate" }));
+    expect(rate.getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Accounts 1–2Free2 of yours", "Accounts 3–10$5/mo\u00a0", "Accounts 11–100$2.50/mo\u00a0", "Accounts 101+$1/mo\u00a0"]);
+    expect(rate.getAllByRole("listitem")[0]).toHaveAttribute("aria-current", "step");
+    expect(screen.getByLabelText("X monthly limit in dollars")).toHaveValue(10);
+    expect(screen.getByText("Receipts show up here after your first charge.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancel paid plan" })).toBeNull();
   });
 
-  it("warns near the X cap", async () => {
+  it("warns near the X limit", async () => {
     server.status = { ...base, x: { ...base.x, spent: 0.9 } };
     render(await BillingPage({ searchParams: Promise.resolve({}) }));
-    expect(screen.getByText("Close to your cap.")).toBeInTheDocument();
+    expect(screen.getByText("Close to your limit.")).toBeInTheDocument();
   });
 
-  it("confirms a checkout on return and shows the card, details and invoices", async () => {
+  it("confirms a checkout on return and shows the next charge, card and receipts", async () => {
     server.status = paid;
     render(await BillingPage({ searchParams: Promise.resolve({ checkout: "cs_test_123" }) }));
     expect(server.calls[0]).toEqual(["billing_confirm", { workspace_id: "w1", session_id: "cs_test_123" }]);
     expect(screen.getAllByRole("status")[0]).toHaveTextContent("Card added");
-    expect(screen.getAllByText("$45.42")).toHaveLength(2);
-    expect(screen.getByText("Charged on Oct 31, 2026.")).toBeInTheDocument();
-    expect(screen.getByText("Visa •••• 4242")).toBeInTheDocument();
-    expect(screen.getByText("Expires 04/2030")).toBeInTheDocument();
-    expect(screen.getByText("ada@example.com")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Change" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Switch to Free" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Download invoice PS-0001/ })).toHaveAttribute("href", "https://pay.stripe.com/in_1.pdf");
+    expect(screen.getByText("$45.42")).toBeInTheDocument();
+    expect(screen.getByText("On October 31, for this month so far.")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Your rate" })).getAllByRole("listitem")[1]).toHaveTextContent("8 of yours");
+    expect(screen.getByText(/Visa ending 4242/)).toBeInTheDocument();
+    expect(screen.getByText("Receipts go to ada@example.com")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Update" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel paid plan" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Receipt for September 2026" })).toHaveAttribute("href", "https://pay.stripe.com/in_1.pdf");
   });
 
-  it("keeps the wording quiet", async () => {
+  it("keeps its own wording", async () => {
     server.status = paid;
     render(await BillingPage({ searchParams: Promise.resolve({}) }));
-    expect(document.body.textContent).not.toMatch(/charges us|by the day|prorat/i);
+    expect(document.body.textContent).not.toMatch(/charges us|by the day|prorat|upcoming invoice|cost controls|payment method|billing details|switch to free/i);
   });
 
   it("says why Billing didn't load", async () => {
@@ -104,7 +106,7 @@ describe("BillingPage", () => {
     server.status = { ...base, can_manage: false };
     render(await BillingPage({ searchParams: Promise.resolve({}) }));
     expect(screen.queryByRole("button", { name: "Add a card" })).toBeNull();
-    expect(screen.queryByLabelText("X monthly cap in dollars")).toBeNull();
+    expect(screen.queryByLabelText("X monthly limit in dollars")).toBeNull();
     expect(screen.getByText("Only owners and admins can change billing.")).toBeInTheDocument();
   });
 });
