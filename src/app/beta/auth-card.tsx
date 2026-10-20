@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { Brand } from "@/components/brand";
 
-// Frame shared by the new sign-in and reset pages; matches the existing /login page.
+// Frame shared by the sign-in and reset pages.
 export function AuthCard({ title, intro, children }: { title: string; intro: string; children: ReactNode }) {
   return (
     // data-ph-mask: replays hide emails shown on the sign-in and reset steps.
