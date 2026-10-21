@@ -474,10 +474,13 @@ creates it, so create each one from the thread you want it to post into.
 
 ---
 
-## Old account's artifacts (save before switching)
+## Old account's artifacts (saved on Aki's Mac)
 
-Plans and mock-ups made on the old account. They may not open from the new
-one, so open each and save or export the ones worth keeping.
+Plans and mock-ups made on the old account. The links may not open from the
+new one, but every artifact below is already saved on Aki's Mac in
+`/Users/sirakinb/Documents/Thought-Social/handoff-export/artifacts/` (PDFs,
+HTML pages, and the design source for the two mock-ups). That folder is kept
+out of git (`.git/info/exclude`), so it never lands in a commit.
 
 | Artifact | Link |
 |---|---|
@@ -522,9 +525,11 @@ The full project memory from the old account is in `docs/claude-memory/`
   and paused on the old account. Pick it up again from scratch.
 - Project files don't move with the account. Brand icon and SVG, email banner
   (also hosted at postsocial.xyz/email/), and landing screenshots mostly exist
-  in `public/` in the repo. The product videos and
-  `marketing/positioning-angles-2026-10-15.md` live only in the old project's
-  files (and on Aki's Mac): download them before switching.
+  in `public/` in the repo. The three product videos (POST SOCIAL 2.mov,
+  POSTSOCIAL VIDEO 1.mov, Publish to Social Media Directly from AI.mp4) and
+  `positioning-angles-2026-10-15.md` are saved on Aki's Mac in
+  `Thought-Social/handoff-export/` (videos under `videos/`, checked against
+  the originals 2026-10-21).
 - Self-serve data deletion doesn't exist on InsForge yet; /data-deletion tells
   people to email support@postsocial.xyz.
 - Post-v1 ideas list: Connections grouping, PostHog funnel events, per-account
