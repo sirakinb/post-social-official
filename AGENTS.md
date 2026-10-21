@@ -11,6 +11,30 @@ required.
 - Never expose secrets or `.env` contents. Confirm with the user before
   production operations, destructive actions, pushes, merges, or releases.
 
+## Working with Aki (owner)
+
+Read `docs/claude-handoff.md`, this file and `docs/environments.md` before starting
+work.
+
+- Aki (GitHub `sirakinb`) is on US Eastern time. Keep replies plain, short and
+  conversational, and keep his manual steps to a minimum. When he must run
+  commands, batch them into one block. Prefer preview URLs over local dev.
+- Merges and prod deploys always wait for Aki's word in the thread. Once he says
+  merge/deploy, do the whole rollout wherever connected services allow.
+- Check with Aki before pushing. An Aligno card moved to In Progress authorizes a
+  PR for it.
+- You may start new sessions to run commands, including on Aki's Mac
+  (`/Users/sirakinb/Documents/Thought-Social`), without asking. Use temporary git
+  worktrees so his working copy isn't touched.
+- Never put secrets in files, memory, or chat. Aki adds secrets to InsForge
+  himself. If a key gets pasted in chat, tell him to rotate it.
+- Real outbound emails to users need Aki's approval in the thread, and always cc
+  aki.b@pentridgemedia.com.
+- The cloud key for `syydd6ck.us-east.insforge.app` (Post Social prod) can write:
+  keep to reads unless Aki asks. `aid258ua.us-west.insforge.app` is Aligno's
+  backend, not Post Social: never touch it.
+- Aligno cards follow the plain-language card style in `docs/claude-handoff.md`.
+
 ## Shipping process (every feature)
 
 1. Work on a feature branch, never directly on `main`.
