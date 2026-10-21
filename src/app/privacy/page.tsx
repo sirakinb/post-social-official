@@ -25,7 +25,7 @@ export default function PrivacyPage() {
           <h1 className="font-display text-3xl font-semibold text-ink">
             Privacy Policy
           </h1>
-          <p className="mt-2 text-sm text-ink-subtle">Effective July 21, 2026 · Updated October 5, 2026</p>
+          <p className="mt-2 text-sm text-ink-subtle">Effective July 21, 2026 · Updated October 20, 2026</p>
 
           <div className="mt-8 space-y-6 text-ink-muted">
             <section>
@@ -136,10 +136,14 @@ export default function PrivacyPage() {
               </h2>
               <p className="mt-2 text-sm leading-relaxed">
                 We use service providers only to operate Post Social: InsForge
-                for the database, sign-in and backend; Cloudflare R2 for media
-                storage; Vercel for hosting the website; Fly.io for the
-                background service that publishes posts; and PostHog for
-                product analytics and error reports. We limit stored permissions to the product features in
+                for the database, sign-in, backend and the background service
+                that publishes posts; Cloudflare R2 for media storage; Vercel
+                for hosting the website; Stripe for payments (Stripe collects
+                and stores your card details; we receive only billing status
+                and invoice records); Resend for sending email; ScrapeCreators
+                to read public view and follower counts for posts and accounts
+                you connect; and PostHog for product analytics and error
+                reports. We limit stored permissions to the product features in
                 use, encrypt platform credentials at rest, and keep a
                 time-stamped security and publishing record. No internet
                 service can guarantee absolute security.

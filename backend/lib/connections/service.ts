@@ -1,6 +1,7 @@
 // Connecting social accounts: start a platform sign-in, finish it on the callback, and
 // disconnect. Tokens are encrypted before they are stored; every change is audited.
 import { ApiError, isAgentCaller, membership, requireUuid, type Caller, type Sql } from "../access";
+import { accountLimitMessage } from "../billing";
 import { trackEvent } from "../telemetry";
 import { importKey, open, randomToken, seal, sha256Hex } from "./crypto";
 import { AtprotoError, finishSignIn, publicProfile, startSignIn, type PendingSignIn } from "./atproto";
@@ -13,6 +14,9 @@ export type ConnectionDeps = {
   // Origins the person may be sent back to after signing in (the web app).
   allowedReturnOrigins: string[];
   http?: typeof fetch;
+  // Called after accounts are added or removed (keeps the billed account count in step).
+  // Best effort: a billing hiccup never undoes a connection.
+  afterAccountsChanged?: (workspaceId: string) => Promise<unknown>;
 };
 
 const STATE_MINUTES = 10;
@@ -226,52 +230,62 @@ export async function completeConnection(deps: ConnectionDeps, platform: Platfor
     const externalId = externalIdOf(identity);
     const sealed = await seal(identity.tokens, key);
     // Reconnecting updates the same row instead of creating a duplicate.
-    const [event] = await deps.sql<{ event_type: string }>(
-      `WITH account AS (
-         INSERT INTO public.connected_accounts
-           (workspace_id, platform, external_account_id, owner_external_id, handle, display_name, avatar_url,
-            scopes, capabilities, health, health_reason, connected_by_actor_id, last_verified_at, disconnected_at, profile_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, 'connected', NULL, $10, now(), NULL,
-                 -- The chosen profile, unless it was deleted while the person was signing in.
-                 (SELECT id FROM public.profiles WHERE id = $16::uuid AND workspace_id = $1))
-         ON CONFLICT (workspace_id, platform, external_account_id) DO UPDATE SET
-           owner_external_id = EXCLUDED.owner_external_id, handle = EXCLUDED.handle, display_name = EXCLUDED.display_name,
-           avatar_url = EXCLUDED.avatar_url, avatar_synced_at = NULL, avatar_attempted_at = NULL, scopes = EXCLUDED.scopes, capabilities = EXCLUDED.capabilities,
-           health = 'connected', health_reason = NULL, last_verified_at = now(), disconnected_at = NULL,
-           -- Reconnecting keeps the account's profile; one chosen now applies only if it had none.
-           profile_id = coalesce(connected_accounts.profile_id, EXCLUDED.profile_id)
-         RETURNING id, (xmax = 0) AS created
-       ), credential AS (
-         INSERT INTO public.credentials
-           (workspace_id, connected_account_id, encrypted_payload, initialization_vector, key_version,
-            access_token_expires_at, refresh_token_expires_at)
-         SELECT $1, id, $11, $12, 1, $13, $14 FROM account
-         ON CONFLICT (connected_account_id) DO UPDATE SET
-           encrypted_payload = EXCLUDED.encrypted_payload, initialization_vector = EXCLUDED.initialization_vector,
-           access_token_expires_at = EXCLUDED.access_token_expires_at, refresh_token_expires_at = EXCLUDED.refresh_token_expires_at,
-           refresh_lease_until = NULL
-       ), usage AS (
-         INSERT INTO public.usage_events (workspace_id, actor_id, event_type, quantity)
-         SELECT $1, $10, 'account_connected', 1 FROM account WHERE created
-       )
-       INSERT INTO public.audit_events (workspace_id, actor_id, entry_point, event_type, entity_type, entity_id, summary, after_values)
-       SELECT $1, $10, 'ui', CASE WHEN created THEN 'account.connected' ELSE 'account.reconnected' END, 'account', id, $15,
-              jsonb_build_object('platform', $2::text, 'handle', $5::text)
-       FROM account
-       RETURNING event_type`,
-      [
-        session.workspace_id, platform, externalId, identity.ownerExternalId ?? null, identity.handle, identity.displayName,
-        identity.avatarUrl ?? null, identity.scopes, JSON.stringify(identity.capabilities), member.actor_id,
-        sealed.encryptedPayload, sealed.initializationVector,
-        identity.accessTokenExpiresAt?.toISOString() ?? null, identity.refreshTokenExpiresAt?.toISOString() ?? null,
-        `Connected ${name} account ${identity.displayName}`,
-        session.profile_id,
-      ],
-    );
+    let event: { event_type: string } | undefined;
+    try {
+      [event] = await deps.sql<{ event_type: string }>(
+        `WITH account AS (
+           INSERT INTO public.connected_accounts
+             (workspace_id, platform, external_account_id, owner_external_id, handle, display_name, avatar_url,
+              scopes, capabilities, health, health_reason, connected_by_actor_id, last_verified_at, disconnected_at, profile_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, 'connected', NULL, $10, now(), NULL,
+                   -- The chosen profile, unless it was deleted while the person was signing in.
+                   (SELECT id FROM public.profiles WHERE id = $16::uuid AND workspace_id = $1))
+           ON CONFLICT (workspace_id, platform, external_account_id) DO UPDATE SET
+             owner_external_id = EXCLUDED.owner_external_id, handle = EXCLUDED.handle, display_name = EXCLUDED.display_name,
+             avatar_url = EXCLUDED.avatar_url, avatar_synced_at = NULL, avatar_attempted_at = NULL, scopes = EXCLUDED.scopes, capabilities = EXCLUDED.capabilities,
+             health = 'connected', health_reason = NULL, last_verified_at = now(), disconnected_at = NULL,
+             -- Reconnecting keeps the account's profile; one chosen now applies only if it had none.
+             profile_id = coalesce(connected_accounts.profile_id, EXCLUDED.profile_id)
+           RETURNING id, (xmax = 0) AS created
+         ), credential AS (
+           INSERT INTO public.credentials
+             (workspace_id, connected_account_id, encrypted_payload, initialization_vector, key_version,
+              access_token_expires_at, refresh_token_expires_at)
+           SELECT $1, id, $11, $12, 1, $13, $14 FROM account
+           ON CONFLICT (connected_account_id) DO UPDATE SET
+             encrypted_payload = EXCLUDED.encrypted_payload, initialization_vector = EXCLUDED.initialization_vector,
+             access_token_expires_at = EXCLUDED.access_token_expires_at, refresh_token_expires_at = EXCLUDED.refresh_token_expires_at,
+             refresh_lease_until = NULL
+         ), usage AS (
+           INSERT INTO public.usage_events (workspace_id, actor_id, event_type, quantity)
+           SELECT $1, $10, 'account_connected', 1 FROM account WHERE created
+         )
+         INSERT INTO public.audit_events (workspace_id, actor_id, entry_point, event_type, entity_type, entity_id, summary, after_values)
+         SELECT $1, $10, 'ui', CASE WHEN created THEN 'account.connected' ELSE 'account.reconnected' END, 'account', id, $15,
+                jsonb_build_object('platform', $2::text, 'handle', $5::text)
+         FROM account
+         RETURNING event_type`,
+        [
+          session.workspace_id, platform, externalId, identity.ownerExternalId ?? null, identity.handle, identity.displayName,
+          identity.avatarUrl ?? null, identity.scopes, JSON.stringify(identity.capabilities), member.actor_id,
+          sealed.encryptedPayload, sealed.initializationVector,
+          identity.accessTokenExpiresAt?.toISOString() ?? null, identity.refreshTokenExpiresAt?.toISOString() ?? null,
+          `Connected ${name} account ${identity.displayName}`,
+          session.profile_id,
+        ],
+      );
+    } catch (error) {
+      // Over the plan's account limit (the database refuses the new row).
+      const overLimit = accountLimitMessage(error);
+      if (!overLimit) throw error;
+      if (connected.length) await deps.afterAccountsChanged?.(session.workspace_id).catch(() => null);
+      return fail(connected.length ? `Connected ${connected.join(", ")}. ${overLimit}` : overLimit);
+    }
     // A step of the new-user funnel; reconnects don't count.
     if (event?.event_type === "account.connected") trackEvent("account_connected", { platform, workspace_id: session.workspace_id }, session.user_id ?? undefined);
     connected.push(identity.displayName);
   }
+  await deps.afterAccountsChanged?.(session.workspace_id).catch(() => null);
   return { returnTo: session.return_to, ok: true, platform, message: `Connected ${connected.join(", ")}.` };
 }
 
@@ -312,5 +326,6 @@ export async function disconnectAccount(deps: ConnectionDeps, caller: Caller, in
      SELECT cancelled FROM done`,
     [accountId, account.workspace_id, member.actor_id, caller.entryPoint, `Disconnected ${DISPLAY_NAMES[account.platform]} account ${account.display_name}`, revoked],
   );
+  await deps.afterAccountsChanged?.(account.workspace_id).catch(() => null);
   return { account_id: accountId, status: "disconnected", revoked, cancelled_destinations: Number(result?.cancelled ?? 0) };
 }

@@ -1,14 +1,19 @@
 "use server";
 
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@insforge/sdk/ssr";
 import { insforgeAuthActions } from "@/lib/insforge/server";
 import {
   BETA_LOGIN,
+  OAUTH_CALLBACK,
+  OAUTH_VERIFIER_COOKIE,
   passwordProblem,
   resetErrorMessage,
   safeNextPath,
   signInErrorMessage,
+  signUpErrorMessage,
+  signupOpen,
 } from "@/lib/insforge/auth-rules";
 import { checkAuthLimit } from "@/lib/security/limits";
 
@@ -31,6 +36,52 @@ export async function signIn(_previous: FormState, formData: FormData): Promise<
   if (error || !data?.user) return { error: signInErrorMessage(error ?? { statusCode: 401 }) ?? undefined };
 
   redirect(safeNextPath(field(formData, "next")));
+}
+
+// Open sign-up with an email and password. The workspace is created on the first visit to
+// the app (loadViewer), the same way as for Google sign-ups.
+export async function signUp(_previous: FormState, formData: FormData): Promise<FormState> {
+  if (!signupOpen()) return { error: "Post Social is invite-only for now." };
+  const name = field(formData, "name").slice(0, 80);
+  const email = field(formData, "email");
+  const password = String(formData.get("password") ?? "");
+  if (!name || !email || !password) return { error: "Enter your name, email and a password." };
+  const problem = passwordProblem(password);
+  if (problem) return { error: problem };
+  const limit = await checkAuthLimit("signup", email);
+  if (limit.blocked) return { error: limit.blocked };
+
+  const auth = await insforgeAuthActions();
+  const { data, error } = await auth.signUp({ email, password, name });
+  if (error) return { error: signUpErrorMessage(error) ?? undefined };
+  if (!data?.user || (data as { requireEmailVerification?: boolean }).requireEmailVerification) {
+    return { notice: "Check your email to confirm your address, then sign in." };
+  }
+  redirect(safeNextPath(field(formData, "next")));
+}
+
+// Google sign-in (and sign-up): sends the person to Google with a PKCE challenge. The
+// verifier waits in a short-lived httpOnly cookie for the callback route to finish.
+export async function startGoogleSignIn(formData: FormData) {
+  if (!signupOpen()) redirect(BETA_LOGIN);
+  const requestHeaders = await headers();
+  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
+  const proto = requestHeaders.get("x-forwarded-proto") ?? (host?.startsWith("localhost") ? "http" : "https");
+  const next = safeNextPath(field(formData, "next"));
+  const callback = new URL(OAUTH_CALLBACK, `${proto}://${host}`);
+  if (next !== "/beta") callback.searchParams.set("next", next);
+
+  const auth = await insforgeAuthActions();
+  const { data, error } = await auth.signInWithOAuth("google", { redirectTo: callback.toString(), skipBrowserRedirect: true });
+  if (error || !data?.url || !data.codeVerifier) redirect(`${BETA_LOGIN}?error=google`);
+  (await cookies()).set(OAUTH_VERIFIER_COOKIE, data.codeVerifier, {
+    httpOnly: true,
+    secure: proto === "https",
+    sameSite: "lax",
+    path: OAUTH_CALLBACK,
+    maxAge: 600,
+  });
+  redirect(data.url);
 }
 
 export async function signOut() {

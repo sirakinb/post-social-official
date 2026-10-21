@@ -16,7 +16,30 @@ describe("Sidebar", () => {
     expect(within(nav).queryByText("Accounts & AI")).toBeNull();
     expect(screen.getByRole("link", { name: "Accounts" })).toHaveAttribute("href", "/beta/accounts");
     expect(screen.getByRole("link", { name: "API/MCP" })).toHaveAttribute("href", "/beta/api");
-    expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/beta/settings");
+  });
+
+  it("keeps General, Billing and On your phone in a Settings dropdown", async () => {
+    const { fireEvent } = await import("@testing-library/react");
+    render(<Sidebar {...props} />);
+    const settings = screen.getByRole("button", { name: "Settings" });
+    expect(settings).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("link", { name: "Billing" })).toBeNull();
+    fireEvent.click(settings);
+    expect(settings).toHaveAttribute("aria-expanded", "true");
+    const menu = within(document.getElementById("settings-menu")!);
+    expect(menu.getAllByRole("link").map((l) => [l.textContent, l.getAttribute("href")])).toEqual([
+      ["General", "/beta/settings"],
+      ["Billing", "/beta/billing"],
+      ["On your phone", "/beta/phone"],
+    ]);
+  });
+
+  it("starts the Settings dropdown open on one of its pages", () => {
+    path.current = "/beta/billing";
+    render(<Sidebar {...props} />);
+    expect(screen.getByRole("button", { name: "Settings" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("link", { name: "Billing" })).toHaveAttribute("aria-current", "page");
+    path.current = "/beta/api";
   });
 
   it("shows Analytics after Calendar only where a stats source is on", () => {

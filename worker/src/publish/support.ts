@@ -21,6 +21,8 @@ const PERSON_CAN_FIX = new Set([
   // A limit on the person's own account; trying later works.
   "rate_limited",
   "x_rate_limited",
+  "x_cap_reached",
+  "over_plan_accounts",
   "linkedin_rate_limited",
   "bluesky_rate_limited",
   "bluesky_video_limit",

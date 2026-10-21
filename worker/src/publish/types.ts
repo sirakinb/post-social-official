@@ -57,6 +57,9 @@ export type StepContext = {
   http: typeof fetch;
   // Counts one call against a platform limit; throws a retryable PublishError when full.
   reserve: (operation: string, limit: number, windowSeconds: number) => Promise<void>;
+  // X only: charges the post to the workspace against its monthly X cap; throws when the
+  // cap is reached. release() undoes it when X refused the post.
+  chargeX?: { reserve: (withLink: boolean) => Promise<void>; release: () => Promise<void> };
   // Keeps the job's lease alive during long uploads.
   renewLease: () => Promise<void>;
   now: () => number;

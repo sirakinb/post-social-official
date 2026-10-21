@@ -14,6 +14,18 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    at: "2026-10-20T20:30:00-04:00",
+    kind: "New",
+    title: "Billing",
+    body: "Your first 2 accounts are free. After that it's usage based: you pay per connected account, from $5 down to $1 the more you connect. The new Billing page (under Settings) shows your next charge, your rate, your card and your receipts. X posts cost a few cents each, with a monthly limit you set.",
+  },
+  {
+    at: "2026-10-20T20:30:00-04:00",
+    kind: "New",
+    title: "Anyone can sign up",
+    body: "Post Social is open to everyone. Start for free with your email or your Google account, no invite needed.",
+  },
+  {
     at: "2026-10-20T02:00:00-04:00",
     kind: "Fixed",
     title: "Scheduled posts show as published",

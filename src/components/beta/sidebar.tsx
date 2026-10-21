@@ -25,10 +25,14 @@ const ITEMS: Item[] = [
   { href: "/beta/api", label: "API/MCP", match: (p) => p.startsWith("/beta/api") || p.startsWith("/beta/keys"), icon: icon(<><path d="m8 8-5 4 5 4" /><path d="m16 8 5 4-5 4" /><path d="m13.5 5-3 14" /></>) },
   { href: "/beta/usage", label: "Usage", match: (p) => p.startsWith("/beta/usage"), icon: icon(<><path d="M21 12a9 9 0 1 1-9-9" /><path d="M21 12h-9V3" /></>) },
 ];
-// Pinned under the main list: the public setup guide (opens in a new tab) and Settings.
+// Pinned under the main list: the public setup guide (opens in a new tab) and Settings, a
+// dropdown holding the workspace settings, Billing and the phone setup page.
 const DOCS = { href: "/docs", label: "Docs", icon: icon(<><path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H19v15H5.5A1.5 1.5 0 0 0 4 19.5z" /><path d="M4 19.5A1.5 1.5 0 0 0 5.5 21H19v-3" /></>) };
 const PHONE: Item = { href: "/beta/phone", label: "On your phone", match: (p) => p.startsWith("/beta/phone"), icon: icon(<><rect x="6" y="2.5" width="12" height="19" rx="2.5" /><path d="M11 18h2" /></>) };
-const SETTINGS: Item = { href: "/beta/settings", label: "Settings", match: (p) => p.startsWith("/beta/settings"), icon: icon(<><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></>) };
+const BILLING: Item = { href: "/beta/billing", label: "Billing", match: (p) => p.startsWith("/beta/billing"), icon: icon(<><rect x="2.5" y="5" width="19" height="14" rx="2" /><path d="M2.5 10h19M7 15h3" /></>) };
+const GENERAL: Item = { href: "/beta/settings", label: "General", match: (p) => p.startsWith("/beta/settings"), icon: icon(<><path d="M4 6h16M4 12h16M4 18h10" /></>) };
+const SETTINGS_ITEMS = [GENERAL, BILLING, PHONE];
+const SETTINGS_ICON = icon(<><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></>);
 
 const linkClass = "flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[13px] transition-colors";
 
@@ -46,6 +50,33 @@ function NavLink({ item, path }: { item: Item; path: string }) {
       {item.icon}
       <span>{item.label}</span>
     </Link>
+  );
+}
+
+function SettingsMenu({ path }: { path: string }) {
+  const inside = SETTINGS_ITEMS.some((item) => item.match(path));
+  // Starts open on any of its pages; otherwise it opens on click.
+  const [toggled, setToggled] = useState<boolean | null>(null);
+  const open = toggled ?? inside;
+  return (
+    <div>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls="settings-menu"
+        onClick={() => setToggled(!open)}
+        className={cn(linkClass, "w-full", inside && !open ? "text-ps-text" : "text-ps-muted hover:bg-ps-fg/[0.03] hover:text-ps-text")}
+      >
+        {SETTINGS_ICON}
+        <span className="flex-1 text-left">Settings</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={cn("text-ps-subtle transition-transform", open && "rotate-180")}><path d="m6 9 6 6 6-6" /></svg>
+      </button>
+      {open && (
+        <div id="settings-menu" className="mt-0.5 flex flex-col gap-0.5 pl-3">
+          {SETTINGS_ITEMS.map((item) => <NavLink key={item.href} item={item} path={path} />)}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -90,8 +121,7 @@ export function Sidebar(props: {
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" className="text-ps-subtle"><path d="M7 17 17 7M8 7h9v9" /></svg>
             <span className="sr-only"> (opens in a new tab)</span>
           </a>
-          <NavLink item={PHONE} path={path} />
-          <NavLink item={SETTINGS} path={path} />
+          <SettingsMenu path={path} />
         </div>
 
         {props.plan && (

@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { XOptions } from "../../../backend/lib/publishing/validate";
-import { publishX } from "./x";
+import { hasLink, publishX, xCharges } from "./x";
+import type { Sql } from "../../../backend/lib/access";
 import { PublishError, type Checkpoint, type StepContext } from "./types";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -95,5 +96,50 @@ describe("X posts", () => {
   it("reports an interrupted post instead of posting twice", async () => {
     const h = harness({ kind: "x" }, [], [], { publish_started_at: "2026-10-10T11:59:00Z" });
     await expect(publishX(h.ctx)).rejects.toMatchObject({ code: "unconfirmed" });
+  });
+});
+
+describe("X charges", () => {
+  const tweet = (status = 201) => (url: URL) => (url.pathname === "/2/tweets" ? json(status === 201 ? { data: { id: "1902" } } : { detail: "Forbidden" }, status) : undefined);
+
+  it("charges the post, with the link price when the text has one", async () => {
+    const charged: boolean[] = [];
+    const h = harness({ kind: "x" }, [], [tweet()]);
+    h.ctx.bundle.caption = "Read this www.postsocial.xyz/docs";
+    h.ctx.chargeX = { reserve: async (withLink) => void charged.push(withLink), release: async () => undefined };
+    await publishX(h.ctx);
+    expect(charged).toEqual([true]);
+  });
+
+  it("stops at the cap without posting", async () => {
+    const h = harness({ kind: "x" }, [], [tweet()]);
+    h.ctx.chargeX = { reserve: async () => { throw new PublishError("x_cap_reached", "cap", false); }, release: async () => undefined };
+    await expect(publishX(h.ctx)).rejects.toMatchObject({ code: "x_cap_reached" });
+    expect(h.calls.filter((c) => c.url.pathname === "/2/tweets")).toHaveLength(0);
+  });
+
+  it("gives the charge back when X refuses the post", async () => {
+    let released = 0;
+    const h = harness({ kind: "x" }, [], [tweet(403)]);
+    h.ctx.chargeX = { reserve: async () => undefined, release: async () => void released++ };
+    await expect(publishX(h.ctx)).rejects.toMatchObject({ code: "x_forbidden" });
+    expect(released).toBe(1);
+  });
+
+  it("asks the database with the price in cents and explains a full cap", async () => {
+    const calls: unknown[][] = [];
+    let answer = "ok";
+    const sql = (async (_q: string, params: unknown[]) => (calls.push(params), [{ reserve_x_charge: answer }])) as Sql;
+    const charges = xCharges(sql, { destinationId: "d1", workspaceId: "w1" } as never);
+    await charges.reserve(false);
+    await charges.reserve(true);
+    expect(calls).toEqual([["d1", "w1", 2, false, 100], ["d1", "w1", 25, true, 100]]);
+    answer = "over_cap";
+    await expect(charges.reserve(false)).rejects.toThrow(/monthly X limit/);
+  });
+
+  it("spots links the way X does", () => {
+    for (const text of ["https://a.co", "see postsocial.xyz", "go to www.example.com/path", "(example.org)"]) expect(hasLink(text)).toBe(true);
+    for (const text of ["Hello X", "e.g. this", "mail me@site", "3.14 is pi", "end of sentence.Next"]) expect(hasLink(text)).toBe(false);
   });
 });
