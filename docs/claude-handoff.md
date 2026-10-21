@@ -20,34 +20,26 @@ Other repo docs to read alongside this one: `AGENTS.md` (shipping rules),
 
 Do these in order. Each step says who does it.
 
-1. **Rotate the keys that were pasted in chat on the old account** (Aki). They
-   live in old chat history, so treat them as exposed:
-   - Resend API key (then update the `RESEND_API_KEY` InsForge secret, dev and prod)
-   - Aligno API key (regenerate at alignopm.com/settings)
-   - LinkedIn client secret (then update `LINKEDIN_CLIENT_SECRET` in InsForge)
-   - Stripe **test** secret key and the dev Stripe webhook secret (then update
-     `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` on dev InsForge)
-   - Aki's email account password that was pasted once (change it if not done)
-2. **Connect GitHub** on the new account and install the Claude GitHub App on
+1. **Connect GitHub** on the new account and install the Claude GitHub App on
    `sirakinb/post-social-official`.
-3. **Create the project** in the new account with the repo
+2. **Create the project** in the new account with the repo
    `github.com/sirakinb/post-social-official`, and paste the "Project
    instructions" section below into its instructions.
-4. **Create the cloud environment** and add its network secrets (see
+3. **Create the cloud environment** and add its network secrets (see
    "Connections to re-create"). The most important are the Post Social prod
    InsForge key, Vercel, and the Aligno key. Start a fresh session after adding
    them; sessions started earlier don't pick them up.
-5. **Reconnect the claude.ai connectors**: Gmail (support@postsocial.xyz lands
+4. **Reconnect the claude.ai connectors**: Gmail (support@postsocial.xyz lands
    in Aki's Gmail), PostHog, Stripe (live account), Resend, Mobbin (design
    research), Claude Docs. Optional: Post Social's own MCP server.
-6. **Approve the Mac folder** `/Users/sirakinb/Documents/Thought-Social` for
+5. **Approve the Mac folder** `/Users/sirakinb/Documents/Thought-Social` for
    Remote Control / folder access, so Claude can run `test:db`, `db:dev`, etc.
-7. **Recreate the six scheduled checks and the hourly Aligno work picker**
+6. **Recreate the six scheduled checks and the hourly Aligno work picker**
    using the prompts in "Scheduled checks" below. Then **turn off the old
    account's copies** so cards aren't filed twice.
-8. **Seed project memory**: ask the new Claude to read this file and save the
+7. **Seed project memory**: ask the new Claude to read this file and save the
    key facts into its project memory.
-9. **Smoke test**: ask the new Claude to probe the live database read-only
+8. **Smoke test**: ask the new Claude to probe the live database read-only
    (`GET https://syydd6ck.us-east.insforge.app/api/database/records/workspaces?select=id&limit=1`
    should return 200), list Aligno tasks, and `GET https://api.vercel.com/v2/user`.
 
@@ -106,16 +98,38 @@ client data. It is not Post Social. Never touch it for Post Social work.
 
 Names and locations only. Aki adds every value himself.
 
+### Where every key lives (summary)
+
+| Where | What's there | Moves with the account? |
+|---|---|---|
+| **InsForge secrets** (dev and prod projects, InsForge dashboard or `scripts/insforge-env.sh`) | Everything the app itself uses: platform app credentials (TikTok, Meta, LinkedIn, X, Bluesky), Resend, Stripe, ScrapeCreators, analytics settings | No action: lives in InsForge, not in Claude |
+| **Vercel env vars** (project `post-social`) | Site settings such as `PUBLIC_SIGNUP`, `ADMIN_EMAILS`, public InsForge URLs | No action |
+| **Stripe dashboard** | Live secret key and webhook signing secret (copied into InsForge) | No action |
+| **Platform developer portals** (TikTok, Meta, LinkedIn, X console, Google) | The source of each app's client id/secret | No action |
+| **Claude cloud environment network secrets** | Keys Claude itself uses: Post Social prod InsForge key, Vercel token, Aligno key, Cloudflare R2 read token, ScrapeCreators key | **Re-add on the new account** |
+| **claude.ai connectors** | Gmail, PostHog, Stripe, Resend, Mobbin, Claude Docs, GitHub (sign-in, no keys to copy) | **Reconnect on the new account** |
+| **Aki's Mac** (`.insforge` login in the repo checkout, Vercel CLI login) | Admin access for `db:promote` and deploys | No action |
+
+Only the network secrets and connectors belong to the old Claude account. Everything the
+running product needs stays where it is.
+
 ### Cloud environment network secrets (host + injected header)
 
 The cloud environment UI has only "Network secrets", no "allowed domains" box.
 A host becomes reachable from cloud sessions once it has a network secret.
 
+Header for each: `Authorization: Bearer <key>` for all of them except
+ScrapeCreators, which uses `x-api-key: <key>`. Where to get a fresh key:
+InsForge dashboard → prod project → API keys; vercel.com/account/tokens
+(scope: app-build-26 team); alignopm.com/settings; dash.cloudflare.com →
+My Profile → API Tokens (Account Analytics: Read + Workers R2 Storage: Read);
+the ScrapeCreators dashboard.
+
 | Host | What it is | Notes |
 |---|---|---|
 | `syydd6ck.us-east.insforge.app` | Post Social **prod** InsForge admin key | Lets checks read the live DB. The key can write: Claude keeps to reads unless Aki asks. |
 | `api.vercel.com` (and `vercel.com`) | Vercel token | Used for site deploys from the cloud. |
-| `alignopm.com` | Aligno API key (`alg_live_…`, bearer) | Generate a fresh one (rotation). |
+| `alignopm.com` | Aligno API key (`alg_live_…`, bearer) | Generate one at alignopm.com/settings. |
 | `api.cloudflare.com` | Cloudflare **read-only** token (Account Analytics: Read + Workers R2 Storage: Read) | For storage-size checks only. |
 | `api.scrapecreators.com` | ScrapeCreators key, header `x-api-key` | For credit-balance checks. |
 
@@ -460,9 +474,32 @@ creates it, so create each one from the thread you want it to post into.
 
 ---
 
+## Old account's artifacts (save before switching)
+
+Plans and mock-ups made on the old account. They may not open from the new
+one, so open each and save or export the ones worth keeping.
+
+| Artifact | Link |
+|---|---|
+| Open sign-up and billing plan | https://claude.ai/artifact/L8araaoLfcmhSpKx4XcHko |
+| Analytics approvals and comment automation plan | https://claude.ai/artifact/KEH288kbcANu51CdQrUNMC |
+| Reverse engineering, Zernio, and what to build next | https://claude.ai/artifact/XWkEGym42ovDNyjRwLYfMh |
+| Post Social on a phone | https://claude.ai/artifact/EvDZeLUtaY9jVGHE2WjrvN |
+| Post Social Analytics mock-up | https://claude.ai/artifact/TVRTvfKpxiEDCrZhqhC9Rv |
+| Post Social light mode directions | https://claude.ai/artifact/S3SXWBtvMHJcdeNNAoGQbE |
+| Post Social iteration system | https://claude.ai/artifact/LZyLJgJk3Qbo4EVa5QSQCm |
+| Beta Welcome Email | https://claude.ai/artifact/KqizTfZU85iWRABSwf2ZWN |
+| Post Social Email Journey | https://claude.ai/artifact/YXCinVzduH1EruVDeVGxQW |
+| Post Social UI refinement plan | https://claude.ai/artifact/TAh1PZMZ36a2MSR6iyHFZe |
+| Post Social Profiles | https://claude.ai/artifact/VmGcY1fru9PGb1oot3Joxe |
+
+The full project memory from the old account is in `docs/claude-memory/`
+(index: `MEMORY.md`). Read it for history and detail this doc leaves out.
+
+---
+
 ## Open items at handoff (2026-10-21)
 
-- Rotate the keys pasted in chat (Day one, step 1).
 - Google sign-in: Aki creates Post Social's own Google OAuth app (Google Cloud
   console: branding "Post Social", External, web client with InsForge's
   callback URL), pastes client id + secret into InsForge Auth → Google (prod),
@@ -481,6 +518,13 @@ creates it, so create each one from the thread you want it to post into.
 - Coming next per Aki: customer service setup. Later: staging branch, a
   "copy the setup prompt" agent onboarding, an 80% X-cap email warning, more
   testimonials on the landing page.
+- Google Search Console + Google Analytics 4 setup for postsocial.xyz: started
+  and paused on the old account. Pick it up again from scratch.
+- Project files don't move with the account. Brand icon and SVG, email banner
+  (also hosted at postsocial.xyz/email/), and landing screenshots mostly exist
+  in `public/` in the repo. The product videos and
+  `marketing/positioning-angles-2026-10-15.md` live only in the old project's
+  files (and on Aki's Mac): download them before switching.
 - Self-serve data deletion doesn't exist on InsForge yet; /data-deletion tells
   people to email support@postsocial.xyz.
 - Post-v1 ideas list: Connections grouping, PostHog funnel events, per-account
