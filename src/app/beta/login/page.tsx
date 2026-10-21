@@ -1,4 +1,4 @@
-import { signupOpen } from "@/lib/insforge/auth-rules";
+import { GOOGLE_SIGNIN, signupOpen } from "@/lib/insforge/auth-rules";
 import { AuthCard } from "../auth-card";
 import { GoogleButton, OrDivider, SignInForm } from "../forms";
 
@@ -11,12 +11,13 @@ export default async function BetaLoginPage({
 }) {
   const { next, reset, error } = await searchParams;
   const open = signupOpen();
+  const google = open && GOOGLE_SIGNIN;
   return (
     <AuthCard
       title="Sign in to Post Social"
-      intro={open ? "Welcome back. Sign in with Google or your email and password." : "Post Social is invite-only for now. Use the email and password from your invitation."}
+      intro={google ? "Welcome back. Sign in with Google or your email and password." : open ? "Welcome back. Sign in with your email and password." : "Post Social is invite-only for now. Use the email and password from your invitation."}
     >
-      {open && (
+      {google && (
         <>
           <GoogleButton next={next} />
           <OrDivider />

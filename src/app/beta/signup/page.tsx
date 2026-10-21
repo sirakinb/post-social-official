@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { signupOpen } from "@/lib/insforge/auth-rules";
+import { GOOGLE_SIGNIN, signupOpen } from "@/lib/insforge/auth-rules";
 import { AuthCard } from "../auth-card";
 import { GoogleButton, OrDivider, SignUpForm } from "../forms";
 
@@ -11,8 +11,12 @@ export default async function BetaSignupPage({ searchParams }: { searchParams: P
   const { next } = await searchParams;
   return (
     <AuthCard title="Start for free" intro="Your first 2 social accounts are free. No card needed.">
-      <GoogleButton next={next} />
-      <OrDivider />
+      {GOOGLE_SIGNIN && (
+        <>
+          <GoogleButton next={next} />
+          <OrDivider />
+        </>
+      )}
       <SignUpForm next={next} />
     </AuthCard>
   );

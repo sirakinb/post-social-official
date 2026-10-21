@@ -19,10 +19,11 @@ describe("BetaLoginPage", () => {
     expect(container.textContent).toMatch(/invite-only/);
     expect(screen.queryByText("google")).not.toBeInTheDocument();
   });
-  it("offers Google once sign-up is open", async () => {
+  it("is email only once sign-up is open, until Google sign-in is switched on", async () => {
     vi.stubEnv("PUBLIC_SIGNUP", "on");
     const { container } = render(await BetaLoginPage({ searchParams: Promise.resolve({}) }));
-    expect(screen.getByText("google")).toBeInTheDocument();
+    expect(screen.queryByText("google")).not.toBeInTheDocument();
+    expect(container.textContent).toMatch(/Sign in with your email and password/);
     expect(container.textContent).not.toMatch(/invite-only/);
   });
 });

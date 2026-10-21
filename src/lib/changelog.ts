@@ -23,7 +23,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     at: "2026-10-20T20:30:00-04:00",
     kind: "New",
     title: "Anyone can sign up",
-    body: "Post Social is open to everyone. Start for free with your email or your Google account, no invite needed.",
+    body: "Post Social is open to everyone. Start for free with your email, no invite needed.",
   },
   {
     at: "2026-10-20T02:00:00-04:00",

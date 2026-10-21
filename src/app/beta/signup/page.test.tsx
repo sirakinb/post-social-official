@@ -8,11 +8,11 @@ vi.mock("next/navigation", () => ({ notFound: () => { throw new Error("NOT_FOUND
 afterEach(() => vi.unstubAllEnvs());
 
 describe("BetaSignupPage", () => {
-  it("offers Google and email sign-up when sign-up is open", async () => {
+  it("offers email sign-up when sign-up is open, with Google hidden for now", async () => {
     vi.stubEnv("PUBLIC_SIGNUP", "on");
     render(await BetaSignupPage({ searchParams: Promise.resolve({}) }));
     expect(screen.getByRole("heading", { name: "Start for free" })).toBeInTheDocument();
-    expect(screen.getByText("google")).toBeInTheDocument();
+    expect(screen.queryByText("google")).not.toBeInTheDocument();
     expect(screen.getByText("email form")).toBeInTheDocument();
   });
   it("does not exist while the site is invite-only", async () => {
