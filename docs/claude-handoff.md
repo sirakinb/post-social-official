@@ -494,6 +494,13 @@ creates it, so create each one from the thread you want it to post into.
 - Coming next per Aki: customer service setup. Later: staging branch, a
   "copy the setup prompt" agent onboarding, an 80% X-cap email warning, more
   testimonials on the landing page.
+- Google Search Console + Google Analytics 4 setup for postsocial.xyz: started
+  and paused on the old account. Pick it up again from scratch.
+- Project files don't move with the account. Brand icon and SVG, email banner
+  (also hosted at postsocial.xyz/email/), and landing screenshots mostly exist
+  in `public/` in the repo. The product videos and
+  `marketing/positioning-angles-2026-10-15.md` live only in the old project's
+  files (and on Aki's Mac): download them before switching.
 - Self-serve data deletion doesn't exist on InsForge yet; /data-deletion tells
   people to email support@postsocial.xyz.
 - Post-v1 ideas list: Connections grouping, PostHog funnel events, per-account
