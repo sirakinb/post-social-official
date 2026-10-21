@@ -21,6 +21,10 @@ export function signupOpen(env: Record<string, string | undefined> = process.env
   return env.PUBLIC_SIGNUP === "on";
 }
 
+// "Continue with Google" is hidden until Post Social has its own Google sign-in app (today
+// Google's screen would name InsForge). Flip to true once it's set up in InsForge.
+export const GOOGLE_SIGNIN = false;
+
 export function isPublicBetaPath(pathname: string) {
   return (PUBLIC_BETA_PATHS as readonly string[]).includes(pathname.replace(/\/+$/, "") || "/");
 }
