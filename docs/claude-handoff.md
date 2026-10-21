@@ -118,6 +118,13 @@ running product needs stays where it is.
 The cloud environment UI has only "Network secrets", no "allowed domains" box.
 A host becomes reachable from cloud sessions once it has a network secret.
 
+Header for each: `Authorization: Bearer <key>` for all of them except
+ScrapeCreators, which uses `x-api-key: <key>`. Where to get a fresh key:
+InsForge dashboard → prod project → API keys; vercel.com/account/tokens
+(scope: app-build-26 team); alignopm.com/settings; dash.cloudflare.com →
+My Profile → API Tokens (Account Analytics: Read + Workers R2 Storage: Read);
+the ScrapeCreators dashboard.
+
 | Host | What it is | Notes |
 |---|---|---|
 | `syydd6ck.us-east.insforge.app` | Post Social **prod** InsForge admin key | Lets checks read the live DB. The key can write: Claude keeps to reads unless Aki asks. |
