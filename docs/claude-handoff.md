@@ -474,6 +474,30 @@ creates it, so create each one from the thread you want it to post into.
 
 ---
 
+## Old account's artifacts (save before switching)
+
+Plans and mock-ups made on the old account. They may not open from the new
+one, so open each and save or export the ones worth keeping.
+
+| Artifact | Link |
+|---|---|
+| Open sign-up and billing plan | https://claude.ai/artifact/L8araaoLfcmhSpKx4XcHko |
+| Analytics approvals and comment automation plan | https://claude.ai/artifact/KEH288kbcANu51CdQrUNMC |
+| Reverse engineering, Zernio, and what to build next | https://claude.ai/artifact/XWkEGym42ovDNyjRwLYfMh |
+| Post Social on a phone | https://claude.ai/artifact/EvDZeLUtaY9jVGHE2WjrvN |
+| Post Social Analytics mock-up | https://claude.ai/artifact/TVRTvfKpxiEDCrZhqhC9Rv |
+| Post Social light mode directions | https://claude.ai/artifact/S3SXWBtvMHJcdeNNAoGQbE |
+| Post Social iteration system | https://claude.ai/artifact/LZyLJgJk3Qbo4EVa5QSQCm |
+| Beta Welcome Email | https://claude.ai/artifact/KqizTfZU85iWRABSwf2ZWN |
+| Post Social Email Journey | https://claude.ai/artifact/YXCinVzduH1EruVDeVGxQW |
+| Post Social UI refinement plan | https://claude.ai/artifact/TAh1PZMZ36a2MSR6iyHFZe |
+| Post Social Profiles | https://claude.ai/artifact/VmGcY1fru9PGb1oot3Joxe |
+
+The full project memory from the old account is in `docs/claude-memory/`
+(index: `MEMORY.md`). Read it for history and detail this doc leaves out.
+
+---
+
 ## Open items at handoff (2026-10-21)
 
 - Google sign-in: Aki creates Post Social's own Google OAuth app (Google Cloud

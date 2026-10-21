@@ -1,0 +1,13 @@
+---
+name: marketing-positioning
+description: Post Social marketing positioning (2026-10-15) — competitors, and the chosen angle "AI-native creators and operators + agents", simple and education-led
+metadata:
+  type: project
+---
+
+2026-10-15 positioning research (file: /mnt/project-files/marketing/positioning-angles-2026-10-15.md). Competitors: Postiz rebranded "The Agentic Social Media Scheduling Platform" (open source AGPL, $29-49/mo, OpenClaw "Larry" TikTok story); Zernio (ex-Late/getlate.dev) unified API for devs + agents, per-account pricing ($6/acct after 2 free); Post Bridge (Jack Friks, build-in-public, $9-99/mo, MCP on all plans, in ChatGPT + Claude directory). So "open source", "one API" AND "AI agents/MCP" are all taken.
+Recommended angle: trust/control — "Your AI posts. You stay in charge." Backed by real code: per-account approval policy (confirm_each / approve_after_draft / autonomous; default autonomous since 2026-10-05), "Only a person can approve", no-time = draft, AI app name in audit log, test keys can't publish. Gap: the web app only exposes this for TikTok — an "Ask me first" switch per account is the suggested pre-launch PR. Content format: build in public with AI running Post Social's own accounts.
+**Aki REJECTED the trust angle (2026-10-15):** "people want their work done by AI... don't care about ask me first." Lead with outcomes, not safety. Follow-up pitch: (1, recommended) "You already pay for ChatGPT, now it's your social media manager", aimed at non-technical owners/creators; (2) "one sentence, every platform" speed demos; (3) AI posts and reports what worked (needs analytics). CHOSEN (Aki, 2026-10-15): angle = "AI-native creators and operators + their agents" (vs Zernio's "developers and agents") — simple, plain words, education/guides teaching people how; MCP/API terms secondary. Analytics also wanted (Aki has a Codex plan doc to share; plan includes native platform analytics access).
+**How to apply:** don't pitch safety/approval features as the marketing headline.
+
+2026-10-20 Zernio feature scan (doc https://claude.ai/code/artifact/f7195eb0-58fd-41a8-b5fe-b3ac221d6bd0): Zernio now sells "marketing infrastructure": analytics (impressions/reach/clicks via official insights approvals), phone numbers/SMS/calls/WhatsApp (~Jun 2026, provider undisclosed), Ads API on 6 networks (Apr 2026), DM/comment inbox. Advice given: reverse engineering (e.g. morluto/rea) can't see server code; use their public docs/openapi.yaml. Recommended order: submit analytics approvals → comments inbox → Meta boost-a-post; hold phone/WhatsApp unless customers ask.
