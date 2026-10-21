@@ -58,9 +58,17 @@ export function passwordProblem(password: string) {
 type MaybeAuthError = { statusCode?: number; error?: string; message?: string } | null | undefined;
 
 // Plain-language messages. Sign-in failures never reveal whether the email exists.
+// The sign-in service turns away a right password while the email is unconfirmed (only
+// when email verification is switched on). It checks the password first, so saying so
+// does not reveal whether an email has an account.
+export function needsEmailVerification(error: MaybeAuthError) {
+  return Boolean(error && error.statusCode === 403 && /verif/i.test(`${error.error ?? ""} ${error.message ?? ""}`));
+}
+
 export function signInErrorMessage(error: MaybeAuthError) {
   if (!error) return null;
   if (error.statusCode === 429) return "Too many attempts. Wait a minute, then try again.";
+  if (needsEmailVerification(error)) return "Confirm your email first. We sent you a code.";
   if (error.statusCode !== undefined && error.statusCode >= 500) {
     return "The sign-in service is not responding. Try again in a moment.";
   }
@@ -77,6 +85,15 @@ export function signUpErrorMessage(error: MaybeAuthError) {
   // Taken addresses get the same answer as other problems, so the form cannot be used to
   // find out who has an account.
   return "We couldn't create an account with that email. If you already have one, sign in instead.";
+}
+
+export function verifyErrorMessage(error: MaybeAuthError) {
+  if (!error) return null;
+  if (error.statusCode === 429) return "Too many attempts. Wait a minute, then try again.";
+  if (error.statusCode !== undefined && error.statusCode >= 500) {
+    return "The sign-in service is not responding. Try again in a moment.";
+  }
+  return "That code is not valid or has expired. Sign in again to get a new one.";
 }
 
 export function resetErrorMessage(error: MaybeAuthError) {
