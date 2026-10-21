@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { completePasswordReset, requestPasswordReset, signIn, signUp, startGoogleSignIn, type FormState } from "./actions";
+import { completePasswordReset, requestPasswordReset, signIn, signUp, startGoogleSignIn, verifyEmailCode, type FormState } from "./actions";
 import { PASSWORD_MIN_LENGTH } from "@/lib/insforge/auth-rules";
 
 function Alert({ state }: { state: FormState }) {
@@ -17,8 +17,27 @@ function Alert({ state }: { state: FormState }) {
   return null;
 }
 
+// Asks for the code from the confirmation email (after sign-up, or a sign-in with an
+// unconfirmed email).
+function VerifyEmailForm({ start, next }: { start: FormState; next?: string }) {
+  const [state, action, pending] = useActionState(verifyEmailCode, {});
+  const shown = state.error ? state : start;
+  return (
+    <>
+      <form className="mt-6 space-y-4" action={action}>
+        <input type="hidden" name="email" value={start.email ?? ""} />
+        <input type="hidden" name="next" value={next ?? ""} />
+        <div className="space-y-2"><label htmlFor="verify-code" className="text-sm font-medium text-ink">Code from the email</label><Input id="verify-code" name="code" inputMode="numeric" autoComplete="one-time-code" required /></div>
+        <Button type="submit" variant="primary" className="w-full" disabled={pending}>{pending ? "Checking…" : "Confirm email"}</Button>
+      </form>
+      <Alert state={shown} />
+    </>
+  );
+}
+
 export function SignInForm({ next, notice, error, signupLink }: { next?: string; notice?: string; error?: string; signupLink?: boolean }) {
   const [state, action, pending] = useActionState(signIn, error ? { error } : notice ? { notice } : {});
+  if (state.step === "verify") return <VerifyEmailForm start={state} next={next} />;
   return (
     <>
       <form className="mt-6 space-y-4" action={action}>
@@ -66,6 +85,7 @@ export function OrDivider() {
 
 export function SignUpForm({ next }: { next?: string }) {
   const [state, action, pending] = useActionState(signUp, {});
+  if (state.step === "verify") return <VerifyEmailForm start={state} next={next} />;
   return (
     <>
       <form className="mt-6 space-y-4" action={action}>

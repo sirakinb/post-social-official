@@ -6,6 +6,7 @@ import { createServerClient } from "@insforge/sdk/ssr";
 import { insforgeAuthActions } from "@/lib/insforge/server";
 import {
   BETA_LOGIN,
+  needsEmailVerification,
   OAUTH_CALLBACK,
   OAUTH_VERIFIER_COOKIE,
   passwordProblem,
@@ -14,10 +15,11 @@ import {
   signInErrorMessage,
   signUpErrorMessage,
   signupOpen,
+  verifyErrorMessage,
 } from "@/lib/insforge/auth-rules";
 import { checkAuthLimit } from "@/lib/security/limits";
 
-export type FormState = { error?: string; notice?: string; step?: "request" | "complete"; email?: string };
+export type FormState = { error?: string; notice?: string; step?: "request" | "complete" | "verify"; email?: string };
 
 function field(formData: FormData, name: string) {
   const value = formData.get(name);
@@ -33,7 +35,40 @@ export async function signIn(_previous: FormState, formData: FormData): Promise<
 
   const auth = await insforgeAuthActions();
   const { data, error } = await auth.signInWithPassword({ email, password });
+  if (needsEmailVerification(error)) return sendVerificationCode(email);
   if (error || !data?.user) return { error: signInErrorMessage(error ?? { statusCode: 401 }) ?? undefined };
+
+  redirect(safeNextPath(field(formData, "next")));
+}
+
+// Right password, unconfirmed email: email a fresh code and ask for it. Sends share the
+// password-reset email cap, so the form can't be used to fill someone's inbox.
+async function sendVerificationCode(email: string): Promise<FormState> {
+  const notice = `Confirm your email to finish signing in. We sent a code to ${email}.`;
+  const limit = await checkAuthLimit("reset_request", email);
+  if (limit.blocked) return { error: limit.blocked };
+  if (limit.send) {
+    const client = createServerClient();
+    const { error } = await client.auth.resendVerificationEmail({ email });
+    if (error && error.statusCode !== undefined && (error.statusCode === 429 || error.statusCode >= 500)) {
+      return { error: verifyErrorMessage(error) ?? undefined };
+    }
+  }
+  return { step: "verify", email, notice };
+}
+
+// The code from the confirmation email. A correct code confirms the email and signs the
+// person in.
+export async function verifyEmailCode(_previous: FormState, formData: FormData): Promise<FormState> {
+  const email = field(formData, "email");
+  const code = field(formData, "code");
+  if (!email || !code) return { step: "verify", email, error: "Enter the code from the email." };
+  const limit = await checkAuthLimit("reset_complete", email);
+  if (limit.blocked) return { step: "verify", email, error: limit.blocked };
+
+  const auth = await insforgeAuthActions();
+  const { data, error } = await auth.verifyEmail({ email, otp: code });
+  if (error || !data?.user) return { step: "verify", email, error: verifyErrorMessage(error ?? { statusCode: 400 }) ?? undefined };
 
   redirect(safeNextPath(field(formData, "next")));
 }
@@ -55,7 +90,7 @@ export async function signUp(_previous: FormState, formData: FormData): Promise<
   const { data, error } = await auth.signUp({ email, password, name });
   if (error) return { error: signUpErrorMessage(error) ?? undefined };
   if (!data?.user || (data as { requireEmailVerification?: boolean }).requireEmailVerification) {
-    return { notice: "Check your email to confirm your address, then sign in." };
+    return { step: "verify", email, notice: `We sent a code to ${email}. Enter it to finish creating your account.` };
   }
   redirect(safeNextPath(field(formData, "next")));
 }
