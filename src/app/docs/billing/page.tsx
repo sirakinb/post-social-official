@@ -121,7 +121,7 @@ export default function BillingDocsPage() {
           <p>Only the workspace owner and admins can change billing. Questions or more than 2,000 accounts: <a href="mailto:support@postsocial.xyz" className="text-accent hover:underline">support@postsocial.xyz</a>.</p>
         </Section>
 
-        <p className="mt-12 text-xs text-ink-subtle"><Link href="/docs" className="hover:underline">Back to the docs</Link> · <Link href="/#pricing" className="hover:underline">Pricing calculator</Link></p>
+        <p className="mt-12 text-xs text-ink-subtle"><Link href="/docs" className="hover:underline">Back to the docs</Link> · <Link href="/pricing" className="hover:underline">Pricing calculator</Link></p>
       </main>
     </div>
   );
