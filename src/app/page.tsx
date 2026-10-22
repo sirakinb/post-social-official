@@ -3,10 +3,9 @@ import Link from "next/link";
 import { CLAUDE_PATH, OPENAI_PATH } from "@/components/beta/marks";
 import { DuskSky } from "@/components/landing/dusk-sky";
 import { ParticleWordmark } from "@/components/landing/particle-wordmark";
-import { Waitlist } from "@/components/landing/waitlist";
-import { PricingCalculator } from "@/components/landing/pricing-calculator";
+import { Label, PrimaryCta, SiteFooter, SiteHeader } from "@/components/landing/site-chrome";
 import { PlatformCardIcon } from "@/components/platform-logos";
-import { BETA_LOGIN, BETA_SIGNUP, signupOpen } from "@/lib/insforge/auth-rules";
+import { BETA_LOGIN, signupOpen } from "@/lib/insforge/auth-rules";
 import { cn } from "@/lib/utils";
 import { Fraunces, GeistPixelGrid } from "./fonts";
 
@@ -30,16 +29,6 @@ const PLATFORMS: { platform: Platform; name: string }[] = [
 // What people say about Post Social. The section stays hidden until there is at least one real quote.
 const TESTIMONIALS: { quote: string; name: string; role: string }[] = [];
 
-const NAV = [
-  { label: "AI agents", href: "#agents" },
-  { label: "How it works", href: "#how-it-works" },
-  { label: "Features", href: "#features" },
-  { label: "Platforms", href: "#platforms" },
-  { label: "Pricing", href: "#pricing" },
-  { label: "FAQ", href: "#faq" },
-  { label: "Docs", href: "/docs" },
-];
-
 const FAQ = [
   { q: "Which platforms are supported?", a: "TikTok, Instagram, Facebook Pages, Threads, YouTube, LinkedIn, Bluesky and X, each through the platform's official API and sign-in." },
   { q: "What can I publish?", a: "Videos and photo posts on TikTok; photos, Reels and carousels on Instagram; text, links, photos, Reels and videos on Facebook Pages; text, photos, videos and carousels on Threads; Shorts on YouTube; and text, photos and videos on LinkedIn, Bluesky and X. What a given account can post depends on its type and the platform's rules, and Post Social checks each file before it goes out." },
@@ -58,10 +47,6 @@ function AiMark({ app, size = 18 }: { app: "claude" | "openai"; size?: number })
       </svg>
     </span>
   );
-}
-
-function Label({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <p className={cn("lp-label", className)}>{children}</p>;
 }
 
 function Check() {
@@ -112,16 +97,6 @@ function Feature({ label, title, text, points, src, alt, width, height, flip }: 
   );
 }
 
-// The main button: "Start for free" once sign-up is open, the waitlist until then.
-function PrimaryCta({ variant = "lantern", label }: { variant?: "lantern" | "compact"; label?: string }) {
-  if (!signupOpen()) return <Waitlist variant={variant} label={label} />;
-  return (
-    <Link href={BETA_SIGNUP} className={variant === "compact" ? "lp-lantern inline-flex rounded-full px-4 py-1.5 text-[12px]" : "lp-lantern inline-flex h-11 items-center rounded-full px-5 text-sm"}>
-      Start for free
-    </Link>
-  );
-}
-
 export default function LandingPage() {
   return (
     <div className={`lp ${Fraunces.variable} ${GeistPixelGrid.variable} relative isolate overflow-x-clip bg-[#0B0816] text-[#FAF6F0]`}>
@@ -134,26 +109,7 @@ export default function LandingPage() {
           <div className="lp-grain" />
         </div>
 
-        <header className="relative z-20 mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-5 sm:px-8">
-          <Link href="/" className="inline-flex items-center gap-2.5" aria-label="Post Social home">
-            {/* eslint-disable-next-line @next/next/no-img-element -- tiny static svg */}
-            <img src="/post-social-icon.svg" alt="" className="size-7 rounded-[8px]" />
-            <span className="lp-wordmark hidden text-[13px] sm:inline">Post Social</span>
-          </Link>
-          <nav aria-label="Landing page" className="lp-glass hidden items-center rounded-full px-1.5 py-1 lg:flex">
-            {NAV.map((item) => (
-              <a key={item.href} href={item.href} className="rounded-full px-3.5 py-1.5 text-[13px] text-[#FAF6F0]/70 transition hover:bg-white/[0.06] hover:text-[#FAF6F0]">
-                {item.label}
-              </a>
-            ))}
-          </nav>
-          <div className="flex items-center gap-2">
-            <Link href={BETA_LOGIN} className="rounded-full px-3 py-1.5 text-[13px] text-[#FAF6F0]/70 transition hover:text-[#FAF6F0]">
-              Sign in
-            </Link>
-            <PrimaryCta variant="compact" />
-          </div>
-        </header>
+        <SiteHeader onLanding />
 
         <div className="relative z-10 mx-auto flex max-w-6xl flex-col items-center px-5 pt-[6vh] text-center sm:px-8">
           <div className="lp-wordmark-canvas w-[min(640px,92vw)]">
@@ -316,20 +272,6 @@ export default function LandingPage() {
           </section>
         )}
 
-        {/* ===== Pricing ===== */}
-        <section id="pricing" className="mx-auto max-w-6xl scroll-mt-8 px-5 py-24 sm:px-8 md:py-32">
-          <div className="text-center">
-            <Label>Pricing</Label>
-            <h2 className="lp-h2 mt-3">
-              <span className="lp-display lp-ink">Start free.</span> Pay only for the accounts you use.
-            </h2>
-            <p className="mx-auto mt-4 max-w-xl leading-relaxed text-[#FAF6F0]/65">Your first 2 accounts are free, no card needed. After that it&apos;s usage based: you pay per account you connect, and every feature is included.</p>
-          </div>
-          <div className="mt-12">
-            <PricingCalculator initial={2} cta={<PrimaryCta />} />
-          </div>
-        </section>
-
         {/* ===== FAQ ===== */}
         <section id="faq" className="mx-auto max-w-3xl scroll-mt-8 px-5 py-24 sm:px-8 md:py-32">
           <div className="text-center">
@@ -371,28 +313,7 @@ export default function LandingPage() {
         </section>
       </main>
 
-      <footer className="border-t border-white/[0.07]">
-        <div className="mx-auto flex max-w-6xl flex-col gap-8 px-5 py-10 sm:px-8 md:flex-row md:items-center md:justify-between">
-          <div>
-            <div className="flex items-center gap-2.5">
-              {/* eslint-disable-next-line @next/next/no-img-element -- tiny static svg */}
-              <img src="/post-social-icon.svg" alt="" className="size-6 rounded-[7px]" />
-              <span className="lp-wordmark text-[12px]">Post Social</span>
-            </div>
-            <p className="mt-3 max-w-xs text-sm text-[#FAF6F0]/45">Social media management for AI-native creators and operators.</p>
-          </div>
-          <nav aria-label="Legal" className="flex flex-wrap gap-6 text-sm text-[#FAF6F0]/55">
-            <Link href="/docs" className="hover:text-[#FAF6F0]">Docs</Link>
-            <Link href="/privacy" className="hover:text-[#FAF6F0]">Privacy</Link>
-            <Link href="/terms" className="hover:text-[#FAF6F0]">Terms</Link>
-            <Link href="/data-deletion" className="hover:text-[#FAF6F0]">Data deletion</Link>
-          </nav>
-        </div>
-        <p className="mx-auto flex max-w-6xl flex-wrap gap-x-4 gap-y-1 px-5 pb-8 text-xs text-[#FAF6F0]/35 sm:px-8">
-          <span>© 2026 Pentridge Media. All rights reserved.</span>
-          <Link href="/changelog" className="hover:text-[#FAF6F0]/70">Changelog</Link>
-        </p>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

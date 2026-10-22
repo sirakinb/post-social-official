@@ -40,6 +40,14 @@ describe("LandingPage", () => {
     }
   });
 
+  it("sends Pricing to its own page and no longer shows pricing on the landing", () => {
+    render(<LandingPage />);
+    const nav = screen.getByRole("navigation", { name: "Landing page" });
+    expect(within(nav).getByRole("link", { name: "Pricing" })).toHaveAttribute("href", "/pricing");
+    expect(document.getElementById("pricing")).toBeNull();
+    expect(screen.queryByLabelText("Number of connected accounts")).toBeNull();
+  });
+
   it("shows real Claude screenshots and stays light on app screens, each described", () => {
     render(<LandingPage />);
     const screens = screen.getAllByTestId("image").filter((i) => /^\/landing\/(app|claude)-/.test(i.getAttribute("data-src") ?? ""));
