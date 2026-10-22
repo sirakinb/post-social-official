@@ -27,7 +27,8 @@ export default function DocsPage() {
       <header className="border-b border-border bg-[#080610]/90">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-4 md:px-8">
           <Brand size="sm" />
-          <nav className="flex gap-4 text-sm">
+          <nav className="flex flex-wrap justify-end gap-x-4 gap-y-1 text-sm">
+            <Link href="/docs/quickstart" className="text-ink-muted hover:text-ink">Quickstart</Link>
             <a href="#connect" className="text-ink-muted hover:text-ink">Connect</a>
             <a href="#cli" className="text-ink-muted hover:text-ink">CLI</a>
             <a href="#api" className="text-ink-muted hover:text-ink">API</a>
@@ -45,9 +46,11 @@ export default function DocsPage() {
           work; you stay in charge of what it does.
         </p>
 
+        <p className="mt-4 text-sm text-ink-muted">New to Post Social? <Link href="/docs/quickstart" className="text-accent hover:underline">Start with the quickstart</Link>.</p>
+
         <h2 id="connect" className="mt-12 text-xl font-semibold text-ink">Connect an AI</h2>
         <p className="mt-1 text-sm text-ink-muted">Everything uses one address: <code className="font-mono text-ink">{MCP_URL}</code>. You sign in to Post Social and approve the app; no key to copy.</p>
-        <div className="mt-4 grid gap-4">
+        <div className="mt-4 grid grid-cols-1 gap-4">
           <Step title="Claude (claude.ai and the desktop app)">
             <p>Settings → Connectors → Add custom connector. Name it Post Social and paste the address above. Claude opens Post Social; sign in and press Allow.</p>
           </Step>
