@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { Brand } from "@/components/brand";
 import { FREE_ACCOUNTS, MONTHLY_CREDIT, PRICE_BANDS, X_PRICES, monthlyBill } from "@/lib/pricing";
 
 export const metadata = {
@@ -14,7 +13,7 @@ const band = (b: (typeof PRICE_BANDS)[number]) => (b.to === Infinity ? `${b.from
 function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h2 id={id} className="mt-12 text-xl font-semibold text-ink">{title}</h2>
+      <h2 id={id} className="mt-12 scroll-mt-24 text-xl font-semibold text-ink">{title}</h2>
       <div className="mt-3 space-y-3 text-sm leading-relaxed text-ink-muted">{children}</div>
     </section>
   );
@@ -39,20 +38,7 @@ function Example({ accounts }: { accounts: number }) {
 
 export default function BillingDocsPage() {
   return (
-    <div className="technical-grid min-h-screen">
-      <header className="border-b border-border bg-[#080610]/90">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-4 md:px-8">
-          <Brand size="sm" />
-          <nav className="flex gap-4 text-sm">
-            <Link href="/docs" className="text-ink-muted hover:text-ink">Docs</Link>
-            <a href="#accounts" className="text-ink-muted hover:text-ink">Accounts</a>
-            <a href="#x" className="text-ink-muted hover:text-ink">X posts</a>
-            <a href="#invoices" className="text-ink-muted hover:text-ink">Invoices</a>
-          </nav>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-4xl px-4 py-12 md:px-8">
+    <div>
         <p className="utility-label text-accent">Post Social / Docs / Billing</p>
         <h1 className="mt-3 text-3xl font-semibold tracking-[-0.035em] text-ink">Pricing and billing</h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-muted">
@@ -122,7 +108,6 @@ export default function BillingDocsPage() {
         </Section>
 
         <p className="mt-12 text-xs text-ink-subtle"><Link href="/docs" className="hover:underline">Back to the docs</Link> · <Link href="/pricing" className="hover:underline">Pricing calculator</Link></p>
-      </main>
     </div>
   );
 }

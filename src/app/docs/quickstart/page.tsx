@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { Brand } from "@/components/brand";
 import { MCP_URL } from "@/lib/api-docs";
 
 export const metadata = {
@@ -9,7 +8,7 @@ export const metadata = {
 
 function Step({ id, number, title, children }: { id: string; number: number; title: string; children: React.ReactNode }) {
   return (
-    <section id={id} className="mt-10 scroll-mt-8">
+    <section id={id} className="mt-10 scroll-mt-24">
       <p className="utility-label text-accent">Step {number}</p>
       <h2 className="mt-2 text-xl font-semibold text-ink">{title}</h2>
       <div className="mt-3 space-y-3 text-sm leading-relaxed text-ink-muted">{children}</div>
@@ -33,19 +32,7 @@ function Screenshot({ children }: { children: string }) {
 
 export default function QuickstartPage() {
   return (
-    <div className="technical-grid min-h-screen">
-      <header className="border-b border-border bg-[#080610]/90">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-4 md:px-8">
-          <Brand size="sm" />
-          <nav className="flex gap-4 text-sm">
-            <Link href="/docs" className="text-ink-muted hover:text-ink">Docs</Link>
-            <Link href="/docs/quickstart" className="text-ink">Quickstart</Link>
-            <Link href="/docs/billing" className="text-ink-muted hover:text-ink">Billing</Link>
-          </nav>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-4xl px-4 py-12 md:px-8">
+    <div>
         <p className="utility-label text-accent">Post Social / Docs / Quickstart</p>
         <h1 className="mt-3 text-3xl font-semibold tracking-[-0.035em] text-ink">Quickstart: your first post</h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-muted">
@@ -90,7 +77,7 @@ export default function QuickstartPage() {
             </div>
           </div>
           <Screenshot>The Add custom connector dialog in Claude, with the Post Social address filled in.</Screenshot>
-          <p>Using Claude Code, Cursor or another MCP app? See <Link href="/docs#connect" className="text-accent hover:underline">Connect an AI</Link>.</p>
+          <p>Using Claude Code, Cursor or another MCP app? See <Link href="/docs/connect" className="text-accent hover:underline">Connect an AI</Link>.</p>
           <p>To check it worked, ask your AI: <span className="text-ink">&ldquo;Which social accounts do I have connected in Post Social?&rdquo;</span> It should list the account from step 1.</p>
         </Step>
 
@@ -137,13 +124,12 @@ export default function QuickstartPage() {
         <section className="mt-12 rounded-xl border border-border bg-surface p-5 text-sm leading-relaxed text-ink-muted">
           <h2 className="text-base font-semibold text-ink">Next steps</h2>
           <ul className="mt-2 list-disc space-y-1 pl-5">
-            <li><Link href="/docs#connect" className="text-accent hover:underline">Connect Claude Code, Cursor or another MCP app</Link></li>
-            <li><Link href="/docs#tools" className="text-accent hover:underline">See everything your AI can do</Link></li>
+            <li><Link href="/docs/connect" className="text-accent hover:underline">Connect Claude Code, Cursor or another MCP app</Link></li>
+            <li><Link href="/docs/tools" className="text-accent hover:underline">See everything your AI can do</Link></li>
             <li><Link href="/docs/billing" className="text-accent hover:underline">Pricing and billing</Link></li>
           </ul>
         </section>
         <p className="mt-8 text-xs text-ink-subtle"><Link href="/docs" className="hover:underline">Back to the docs</Link> · <Link href="/" className="hover:underline">postsocial.xyz</Link></p>
-      </main>
     </div>
   );
 }

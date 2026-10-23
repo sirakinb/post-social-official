@@ -18,9 +18,10 @@ describe("QuickstartPage", () => {
     expect(document.querySelector("img")).toBeNull();
   });
 
-  it("links back to the docs and billing", () => {
+  it("links on to the connect and tools pages, and back to the docs", () => {
     render(<QuickstartPage />);
-    expect(screen.getAllByRole("link", { name: "Docs" })[0]).toHaveAttribute("href", "/docs");
-    expect(screen.getAllByRole("link", { name: "Billing" })[0]).toHaveAttribute("href", "/docs/billing");
+    expect(screen.getByRole("link", { name: "Connect Claude Code, Cursor or another MCP app" })).toHaveAttribute("href", "/docs/connect");
+    expect(screen.getByRole("link", { name: "See everything your AI can do" })).toHaveAttribute("href", "/docs/tools");
+    expect(screen.getByRole("link", { name: "Back to the docs" })).toHaveAttribute("href", "/docs");
   });
 });
