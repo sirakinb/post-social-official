@@ -102,9 +102,9 @@ export default function QuickstartPage() {
           <Example>Schedule &ldquo;New video this Friday&rdquo; to my LinkedIn for tomorrow at 9am.</Example>
           <Figure
             src="/docs/quickstart/first-post.webp"
-            width={1598}
-            height={394}
-            alt="A Claude chat confirming it scheduled a post to LinkedIn for tomorrow at 9:00 a.m. Eastern, followed by a request to show the publishing results."
+            width={1644}
+            height={242}
+            alt="A Claude chat message confirming it scheduled the post 'New video this Friday' to LinkedIn for tomorrow, Saturday, October 24, at 9:00 a.m. Eastern."
           >
             Claude confirms the post is scheduled, with the date and time it understood.
           </Figure>
