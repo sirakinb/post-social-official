@@ -16,6 +16,17 @@ describe("Content-Security-Policy", () => {
   });
 });
 
+describe("DataFast", () => {
+  it("is allowed to load its script and send page views, from its own address only", async () => {
+    const rules = await nextConfig.headers!();
+    const csp = rules[0].headers.find((h) => h.key === "Content-Security-Policy")!.value;
+    const directive = (name: string) => csp.split("; ").find((d) => d.startsWith(name))!.split(" ").slice(1);
+    expect(directive("script-src")).toContain("https://datafa.st");
+    expect(directive("connect-src")).toContain("https://datafa.st");
+    expect(directive("script-src")).not.toContain("https:");
+  });
+});
+
 describe("PostHog through this site", () => {
   it("forwards /ingest to PostHog without widening the content policy", async () => {
     const rewrites = (await nextConfig.rewrites!()) as Array<{ source: string; destination: string }>;
