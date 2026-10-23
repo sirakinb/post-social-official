@@ -1,6 +1,11 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import React from "react";
+import { describe, expect, it, vi } from "vitest";
 import QuickstartPage from "./page";
+
+vi.mock("next/image", () => ({
+  default: ({ src, alt }: { src: string; alt: string }) => React.createElement("img", { src, alt }),
+}));
 
 describe("QuickstartPage", () => {
   it("walks through the five steps, with the connect address", () => {
@@ -12,10 +17,17 @@ describe("QuickstartPage", () => {
     expect(screen.getAllByText("https://www.postsocial.xyz/mcp").length).toBeGreaterThan(0);
   });
 
-  it("marks where screenshots belong instead of showing images", () => {
+  it("shows a screenshot for each of the first four steps, each described", () => {
     render(<QuickstartPage />);
-    expect(screen.getAllByText("Screenshot to add").length).toBeGreaterThanOrEqual(4);
-    expect(document.querySelector("img")).toBeNull();
+    const images = Array.from(document.querySelectorAll("img"));
+    expect(images.map((i) => i.getAttribute("src"))).toEqual([
+      "/docs/quickstart/connect-account.webp",
+      "/docs/quickstart/connect-claude.webp",
+      "/docs/quickstart/first-post.webp",
+      "/docs/quickstart/check-results.webp",
+    ]);
+    for (const image of images) expect(image.getAttribute("alt")?.length).toBeGreaterThan(20);
+    expect(screen.queryByText("Screenshot to add")).toBeNull();
   });
 
   it("links on to the connect and tools pages, and back to the docs", () => {

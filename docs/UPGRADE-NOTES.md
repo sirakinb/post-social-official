@@ -57,7 +57,7 @@ The sidebar, search, and previous/next order all come from one list: `src/lib/do
 - **Plan limits are from migrations**: the live plans table could not be read, so the Free and Paid numbers on `/docs/limits` are unconfirmed against production.
 - **Status page**: none exists.
 - **Recipes**: not written. Each needs to be tried against the real tools.
-- **Screenshots**: the quickstart still has "Screenshot to add" placeholders.
+- **Screenshots**: the quickstart now has real screenshots for steps 1 to 4 (in `public/docs/quickstart/`). The signed-in email in the Claude screen is blurred. Step 5 has none.
 
 ## Screenshots
 

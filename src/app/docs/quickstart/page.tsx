@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { MCP_URL } from "@/lib/api-docs";
 
@@ -20,13 +21,12 @@ function Example({ children }: { children: string }) {
   return <blockquote className="rounded-lg border border-border bg-canvas-ivory px-4 py-3 text-sm leading-relaxed text-ink">{children}</blockquote>;
 }
 
-// Marks where a real screenshot goes, so nothing is invented in its place.
-function Screenshot({ children }: { children: string }) {
+function Figure({ src, width, height, alt, children }: { src: string; width: number; height: number; alt: string; children: React.ReactNode }) {
   return (
-    <div role="img" aria-label={`Screenshot to add: ${children}`} className="rounded-xl border border-dashed border-border bg-surface px-4 py-6 text-center text-xs text-ink-subtle">
-      <span className="utility-label">Screenshot to add</span>
-      <span className="mt-1 block">{children}</span>
-    </div>
+    <figure className="mt-1">
+      <Image src={src} width={width} height={height} alt={alt} sizes="(max-width: 768px) 100vw, 768px" className="h-auto w-full rounded-xl border border-border" />
+      <figcaption className="mt-2 text-xs text-ink-subtle">{children}</figcaption>
+    </figure>
   );
 }
 
@@ -54,7 +54,14 @@ export default function QuickstartPage() {
             <li>Choose a platform: Instagram, Facebook Pages, Threads, YouTube, TikTok, LinkedIn, Bluesky or X.</li>
             <li>Sign in on that platform&apos;s own page and approve access. Post Social never sees your password.</li>
           </ol>
-          <Screenshot>Accounts page with the Connect an account row of platform buttons.</Screenshot>
+          <Figure
+            src="/docs/quickstart/connect-account.webp"
+            width={1068}
+            height={926}
+            alt="Instagram asking whether to allow Post Social to access your account, with Allow and Cancel buttons."
+          >
+            Instagram&apos;s own screen asks you to allow Post Social. Each platform shows its own version of this step.
+          </Figure>
           <p>A few things to know:</p>
           <ul className="list-disc space-y-1 pl-5">
             <li>Instagram needs a Business or Creator account. Facebook connects Pages, so choose at least one Page when Facebook asks.</li>
@@ -76,7 +83,14 @@ export default function QuickstartPage() {
               <p className="mt-2">Settings → Apps &amp; Connectors → Advanced settings → turn on Developer mode. Then Create a connector with the address above and sign in when asked.</p>
             </div>
           </div>
-          <Screenshot>The Add custom connector dialog in Claude, with the Post Social address filled in.</Screenshot>
+          <Figure
+            src="/docs/quickstart/connect-claude.webp"
+            width={1474}
+            height={1336}
+            alt="The Post Social screen asking to connect Claude, listing what Claude will and won't be able to do, with Allow Claude and Cancel buttons."
+          >
+            Post Social asks you to allow Claude. The screen lists what Claude can do (such as publishing and scheduling when you ask) and what it can&apos;t (approving posts, connecting accounts, creating API keys). Press Allow Claude to finish.
+          </Figure>
           <p>Using Claude Code, Cursor or another MCP app? See <Link href="/docs/connect" className="text-accent hover:underline">Connect an AI</Link>.</p>
           <p>To check it worked, ask your AI: <span className="text-ink">&ldquo;Which social accounts do I have connected in Post Social?&rdquo;</span> It should list the account from step 1.</p>
         </Step>
@@ -86,7 +100,14 @@ export default function QuickstartPage() {
           <Example>Post &ldquo;Hello from my AI&rdquo; to my Bluesky account right now.</Example>
           <p>Your AI checks the post against that platform&apos;s rules, then sends it. To post later, give a date and time:</p>
           <Example>Schedule &ldquo;New video this Friday&rdquo; to my LinkedIn for tomorrow at 9am.</Example>
-          <Screenshot>A Claude or ChatGPT chat where the AI confirms it has sent or scheduled the post.</Screenshot>
+          <Figure
+            src="/docs/quickstart/first-post.webp"
+            width={1598}
+            height={394}
+            alt="A Claude chat confirming it scheduled a post to LinkedIn for tomorrow at 9:00 a.m. Eastern, followed by a request to show the publishing results."
+          >
+            Claude confirms the post is scheduled, with the date and time it understood.
+          </Figure>
           <ul className="list-disc space-y-1 pl-5">
             <li><span className="text-ink">Say when.</span> A post goes out only when you ask for it now or give a time. If you give neither, your AI saves a draft and nothing is posted; ask it to send the draft when you&apos;re ready. Posts can be scheduled up to a year ahead.</li>
             <li><span className="text-ink">Photos and videos.</span> Instagram, TikTok and YouTube posts need media. Give your AI a public https link to the file and it imports it into Post Social first.</li>
@@ -104,7 +125,14 @@ export default function QuickstartPage() {
             <li><span className="text-ink">Failed</span>, with the reason in plain language.</li>
             <li><span className="text-ink">Still in progress</span>. Platforms take a short while to process media; check again in a minute.</li>
           </ul>
-          <Screenshot>Publishing results showing a published post with its live link.</Screenshot>
+          <Figure
+            src="/docs/quickstart/check-results.webp"
+            width={1748}
+            height={690}
+            alt="A chat showing the publishing results for an Instagram post: published successfully, with the account, the time, no errors and a link to view the post."
+          >
+            The results show the account, when it was published, any errors, and a link to the live post.
+          </Figure>
           <p>You can also see posts in Post Social itself: Drafts for saved drafts, Calendar for scheduled posts, and Logs for what your AI did.</p>
         </Step>
 
