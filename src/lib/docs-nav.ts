@@ -45,7 +45,7 @@ export const DOCS_NAV: DocsGroup[] = [
   {
     title: "Troubleshooting",
     pages: [
-      { title: "Troubleshooting", href: "/docs/troubleshooting", description: "Fix failed posts and accounts that need attention.", keywords: "error failed reconnect needs attention" },
+      { title: "Troubleshooting", href: "/docs/troubleshooting", description: "Plain-language reasons posts and accounts fail, and how to fix each, with the API error codes.", keywords: "error errors reference failed reconnect needs attention 429 402 limit code" },
     ],
   },
   {

@@ -29,7 +29,7 @@ Branch: `dev`. Preview only; not merged and not deployed. Compares the docs as t
 | `/docs/safety` | New, partly placeholder |
 | `/docs/platforms` | New, verified limits |
 | `/docs/guides` | New, placeholder (Recipes) |
-| `/docs/troubleshooting` | New, short page plus placeholder |
+| `/docs/troubleshooting` | New: troubleshooting and error reference |
 | `/docs/cli` | Moved from `/docs#cli` |
 | `/docs/api` | Moved from `/docs#api` |
 | `/docs/tools` | Moved from `/docs#tools` |
@@ -49,13 +49,13 @@ The sidebar, search, and previous/next order all come from one list: `src/lib/do
 - **MCP instructions** (`backend/lib/api/mcp.ts`): now list all eight platforms, say TikTok goes direct with the audience the person chose (or to the inbox if the account is set to inbox first), and tell the AI how to check with the person before publishing.
 - **Price tiers**: `/docs/billing` now lists 1–2 free, 3–10 at $5, 11–100 at $2.50 and 101+ at $1, and `/llms.txt` says the same. The $10 credit paragraph and worked examples are unchanged. The "more than 2,000 accounts" support line is unchanged.
 - **Approvals**: Concepts and Permissions and safety describe the draft-first way of checking with your AI, verified in `operations.ts`, and say an AI cannot approve a post itself. Holding every AI post for approval is deliberately not a feature, so the docs don't mention it.
+- **Error reference** (`/docs/troubleshooting`): failure messages from the pre-send checks, the publishing worker, the connection flow and billing, each with what to do, plus the REST API status codes. Messages are quoted from the code; fixes are written from the message.
 - **Rate limits** (`/docs/limits`): request limits from `rate-limit.ts` and plan limits from the plans migrations.
 
 ## Still placeholder or undecided
 
 - **Plan limits are from migrations**: the live plans table could not be read, so the Free and Paid numbers on `/docs/limits` are unconfirmed against production.
 - **Status page**: none exists.
-- **Troubleshooting error reference**: the full list of failure reasons and error codes.
 - **Recipes**: not written. Each needs to be tried against the real tools.
 - **Screenshots**: the quickstart still has "Screenshot to add" placeholders.
 
