@@ -48,12 +48,11 @@ The sidebar, search, and previous/next order all come from one list: `src/lib/do
 - **X price in what AIs read**: the X notes in `operations.ts` and `platforms.ts` said about 1.5 cents and 20 cents, which is Post Social's own cost. They now say 2 cents, or 25 cents with a link, taken from `X_PRICES` so they can't drift. Accounts that were connected before this change keep the old note in their saved capabilities until a migration or reconnect refreshes it.
 - **MCP instructions** (`backend/lib/api/mcp.ts`): now list all eight platforms, say TikTok goes direct with the audience the person chose (or to the inbox if the account is set to inbox first), and tell the AI how to check with the person before publishing.
 - **Price tiers**: `/docs/billing` now lists 1–2 free, 3–10 at $5, 11–100 at $2.50 and 101+ at $1, and `/llms.txt` says the same. The $10 credit paragraph and worked examples are unchanged. The "more than 2,000 accounts" support line is unchanged.
-- **Approvals**: Concepts and Permissions and safety now describe the draft-first way of checking with your AI, verified in `operations.ts`, and say an AI cannot approve a post itself.
+- **Approvals**: Concepts and Permissions and safety describe the draft-first way of checking with your AI, verified in `operations.ts`, and say an AI cannot approve a post itself. Holding every AI post for approval is deliberately not a feature, so the docs don't mention it.
 - **Rate limits** (`/docs/limits`): request limits from `rate-limit.ts` and plan limits from the plans migrations.
 
 ## Still placeholder or undecided
 
-- **Account-level approvals**: holding every AI post for approval inside Post Social. The code supports it (`awaiting_approval`), but I found no setting or button that turns it on. Needs Aki to say how users switch it on before it is documented.
 - **Plan limits are from migrations**: the live plans table could not be read, so the Free and Paid numbers on `/docs/limits` are unconfirmed against production.
 - **Status page**: none exists.
 - **Per-platform quirks** (Platforms): review status, how long connections last, platform-specific failure reasons.

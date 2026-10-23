@@ -79,7 +79,7 @@ export default function ConceptsPage() {
       </Section>
 
       <Section id="approvals" title="Approvals">
-        <p>A post can wait for a person to approve it before it goes out. You can also have your AI check in with you first by saving a post as a draft and publishing it only when you say so. Approving is always a person&apos;s decision; an AI cannot approve a post itself. See <Link href="/docs/safety#approvals" className="text-accent hover:underline">permissions and safety</Link>.</p>
+        <p>You can have your AI check in with you before anything goes out: it saves the post as a draft, shows it to you and publishes only when you say so. Approving is always a person&apos;s decision; an AI cannot approve a post itself. See <Link href="/docs/safety#approvals" className="text-accent hover:underline">permissions and safety</Link>.</p>
       </Section>
     </div>
   );
