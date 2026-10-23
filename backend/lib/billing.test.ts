@@ -120,6 +120,20 @@ describe("startCheckout", () => {
     expect(session.success_url).toBe("https://www.postsocial.xyz/beta/billing?checkout={CHECKOUT_SESSION_ID}");
   });
 
+  it("passes DataFast's visitor and session ids on in the checkout's metadata", async () => {
+    const { sql } = fakeSql({ plan_id: "free", plan_name: "Free", connected: 2 });
+    const { stripe, calls } = fakeStripe({ "GET /v1/prices": { data: [{ id: "price_accounts" }] }, "POST /v1/checkout/sessions": { url: "https://checkout.stripe.com/c/pay/cs_test" } });
+    await startCheckout({ sql, stripe, webAppUrl: "" }, person, { workspace_id: WORKSPACE, datafast_visitor_id: "df_visitor-123", datafast_session_id: "df_session.456" });
+    expect(calls.find((c) => c.path === "/v1/checkout/sessions")!.params!.metadata).toEqual({ workspace_id: WORKSPACE, datafast_visitor_id: "df_visitor-123", datafast_session_id: "df_session.456" });
+  });
+
+  it("leaves out DataFast ids that are missing or don't look like ids", async () => {
+    const { sql } = fakeSql({ plan_id: "free", plan_name: "Free", connected: 2 });
+    const { stripe, calls } = fakeStripe({ "GET /v1/prices": { data: [{ id: "price_accounts" }] }, "POST /v1/checkout/sessions": { url: "https://checkout.stripe.com/c/pay/cs_test" } });
+    await startCheckout({ sql, stripe, webAppUrl: "" }, person, { workspace_id: WORKSPACE, datafast_visitor_id: "x".repeat(101), datafast_session_id: "a b<script>" });
+    expect(calls.find((c) => c.path === "/v1/checkout/sessions")!.params!.metadata).toEqual({ workspace_id: WORKSPACE });
+  });
+
   it("sends people back to the copy of the app they came from, if it's allowed", async () => {
     const run = async (origin: string) => {
       const { stripe, calls } = fakeStripe({ "GET /v1/prices": { data: [{ id: "price_accounts" }] } });

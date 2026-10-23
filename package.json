@@ -24,6 +24,7 @@
     "worker:deploy": "scripts/deploy-worker.sh"
   },
   "dependencies": {
+    "@datafast/ai-crawl": "^1.0.9",
     "@insforge/sdk": "^1.5.2",
     "@radix-ui/react-slot": "^1.1.1",
     "aws4fetch": "^1.0.20",

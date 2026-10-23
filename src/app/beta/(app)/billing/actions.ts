@@ -42,8 +42,14 @@ function stripeUrl(url: unknown) {
   return typeof url === "string" && /^https:\/\/(checkout|billing)\.stripe\.com\//.test(url) ? url : null;
 }
 
+// The visitor's DataFast cookies, so the payment is credited to the channel they arrived from.
+async function datafastIds() {
+  const jar = await cookies();
+  return { datafast_visitor_id: jar.get("datafast_visitor_id")?.value, datafast_session_id: jar.get("datafast_session_id")?.value };
+}
+
 export async function addCard(formData: FormData) {
-  const result = await callBilling<{ url: string }>({ action: "billing_checkout", workspace_id: formData.get("workspace_id"), return_origin: await ownOrigin() });
+  const result = await callBilling<{ url: string }>({ action: "billing_checkout", workspace_id: formData.get("workspace_id"), return_origin: await ownOrigin(), ...(await datafastIds()) });
   if (!result.ok) back(result.error);
   const url = result.ok ? stripeUrl(result.data.url) : null;
   if (!url) back(OUR_SIDE);
