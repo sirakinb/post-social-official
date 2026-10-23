@@ -223,6 +223,18 @@ async function stripeDetails(deps: BillingDeps, state: Awaited<ReturnType<typeof
   };
 }
 
+// DataFast ties revenue to the marketing channel a visitor came from. It reads these two ids
+// from the checkout's metadata; the website passes them on from the visitor's cookies. Anything
+// that doesn't look like an id is dropped.
+function datafastMetadata(input: Params) {
+  const metadata: Record<string, string> = {};
+  for (const key of ["datafast_visitor_id", "datafast_session_id"]) {
+    const value = input[key];
+    if (typeof value === "string" && /^[A-Za-z0-9._-]{1,100}$/.test(value)) metadata[key] = value;
+  }
+  return metadata;
+}
+
 // Sends the person to Stripe Checkout to add a card and start the subscription.
 export async function startCheckout(deps: BillingDeps, caller: Caller, input: Params) {
   const workspaceId = requireUuid(input.workspace_id, "Workspace");
@@ -237,7 +249,7 @@ export async function startCheckout(deps: BillingDeps, caller: Caller, input: Pa
     customer: state.stripe_customer_id ?? undefined,
     line_items: [{ price: await accountsPriceId(stripe), quantity: Math.max(1, state.connected) }],
     subscription_data: { metadata: { workspace_id: workspaceId } },
-    metadata: { workspace_id: workspaceId },
+    metadata: { workspace_id: workspaceId, ...datafastMetadata(input) },
     payment_method_collection: "always",
     allow_promotion_codes: true,
     success_url: `${returnBase(deps, input)}/beta/billing?checkout={CHECKOUT_SESSION_ID}`,
