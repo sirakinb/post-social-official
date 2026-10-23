@@ -27,7 +27,7 @@ export const DOCS_NAV: DocsGroup[] = [
     title: "Connect your AI",
     pages: [
       { title: "Connect an AI", href: "/docs/connect", description: "Set up Claude, ChatGPT, Claude Code, Cursor or another MCP app.", keywords: "mcp claude chatgpt claude code cursor connector oauth key" },
-      { title: "Permissions and safety", href: "/docs/safety", description: "What an AI can do on its own and how to stay in control.", keywords: "approval approvals disconnect permissions", soon: true },
+      { title: "Permissions and safety", href: "/docs/safety", description: "What an AI can do on its own and how to stay in control.", keywords: "approval approvals disconnect permissions" },
     ],
   },
   {
@@ -54,7 +54,7 @@ export const DOCS_NAV: DocsGroup[] = [
       { title: "Command line", href: "/docs/cli", description: "Use Post Social from a terminal, script or agent without MCP.", keywords: "cli npx postsocial terminal" },
       { title: "REST API", href: "/docs/api", description: "Base address, authentication, errors and an example request.", keywords: "rest openapi curl idempotency bearer" },
       { title: "Tools", href: "/docs/tools", description: "Every action available over MCP, REST and the command line.", keywords: "operations endpoints mcp tools list create_post" },
-      { title: "Rate limits and status", href: "/docs/limits", description: "Request limits and service status.", keywords: "rate limit 429 status uptime", soon: true },
+      { title: "Rate limits and status", href: "/docs/limits", description: "Request limits and service status.", keywords: "rate limit 429 status uptime" },
     ],
   },
   {

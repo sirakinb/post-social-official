@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ComingSoon, PageHeader, Section } from "@/components/docs/parts";
+import { PageHeader, Section } from "@/components/docs/parts";
 
 export const metadata = {
   title: "Docs: concepts · Post Social",
@@ -79,9 +79,7 @@ export default function ConceptsPage() {
       </Section>
 
       <Section id="approvals" title="Approvals">
-        <ComingSoon>
-          <p>How approvals work, and how to require approval before an AI publishes, is not documented yet. We will add it once it has been checked end to end.</p>
-        </ComingSoon>
+        <p>A post can wait for a person to approve it before it goes out. You can also have your AI check in with you first by saving a post as a draft and publishing it only when you say so. Approving is always a person&apos;s decision; an AI cannot approve a post itself. See <Link href="/docs/safety#approvals" className="text-accent hover:underline">permissions and safety</Link>.</p>
       </Section>
     </div>
   );

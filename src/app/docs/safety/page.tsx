@@ -10,7 +10,7 @@ export default function SafetyPage() {
   return (
     <div>
       <PageHeader label="Post Social / Docs / Connect your AI" title="Permissions and safety">
-        <p>How you stay in charge of what your AI does. This page is partly written; the parts that are not confirmed yet are marked.</p>
+        <p>How you stay in charge of what your AI does. Parts that are not written yet are marked.</p>
       </PageHeader>
 
       <Section id="what-an-ai-cannot-do" title="What an AI cannot do">
@@ -30,9 +30,16 @@ export default function SafetyPage() {
         <p>Everything an AI does is labelled with its name in your activity. See <Link href="/docs/concepts" className="text-accent hover:underline">Concepts</Link> for how keys and accounts fit together.</p>
       </Section>
 
-      <Section id="approvals" title="Approvals">
+      <Section id="approvals" title="Checking with you before it goes out">
+        <p>You can have your AI check in with you before anything is published or scheduled. Ask it to save the post as a draft and show it to you first:</p>
+        <blockquote className="rounded-lg border border-border bg-canvas-ivory px-4 py-3 text-sm leading-relaxed text-ink">Write the post as a draft and show it to me. Don&apos;t publish or schedule anything until I say so.</blockquote>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>A draft is saved but nothing is sent. Your AI can show you the caption and the accounts, and you can ask for changes.</li>
+          <li>When you say go, your AI publishes the draft, either right away or at a time you give.</li>
+          <li>Approving is always a person&apos;s decision: an AI cannot approve a post on its own behalf.</li>
+        </ul>
         <ComingSoon>
-          <p>How to require your approval before an AI publishes is not documented yet. We will add it once it has been checked end to end.</p>
+          <p>Holding every AI post for your approval inside Post Social, as an account setting, is not documented yet.</p>
         </ComingSoon>
       </Section>
     </div>

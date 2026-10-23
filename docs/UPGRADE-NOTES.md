@@ -43,21 +43,23 @@ The sidebar, search, and previous/next order all come from one list: `src/lib/do
 - **Concepts**: workspace and roles (database schema), profile limits (`profiles.ts`: 60-character name, 280-character description, up to 50 profiles), accounts (up to 20 accounts, 35 media files and a 10,000-character caption per post, from `publishing/service.ts`), post statuses (database schema and `operations.ts`, including that `partially_published` means some accounts published and some failed), test and live keys (`operations.ts`, `keys.ts`: up to 50 active keys, owners and admins only).
 - **Platforms**: post types from `platforms.ts` and limits from `validate.ts`, the checks Post Social runs before sending.
 
+## Fixed after review (same branch)
+
+- **X price in what AIs read**: the X notes in `operations.ts` and `platforms.ts` said about 1.5 cents and 20 cents, which is Post Social's own cost. They now say 2 cents, or 25 cents with a link, taken from `X_PRICES` so they can't drift. Accounts that were connected before this change keep the old note in their saved capabilities until a migration or reconnect refreshes it.
+- **MCP instructions** (`backend/lib/api/mcp.ts`): now list all eight platforms, say TikTok goes direct with the audience the person chose (or to the inbox if the account is set to inbox first), and tell the AI how to check with the person before publishing.
+- **Price tiers**: `/docs/billing` now lists 1–2 free, 3–10 at $5, 11–100 at $2.50 and 101+ at $1, and `/llms.txt` says the same. The $10 credit paragraph and worked examples are unchanged. The "more than 2,000 accounts" support line is unchanged.
+- **Approvals**: Concepts and Permissions and safety now describe the draft-first way of checking with your AI, verified in `operations.ts`, and say an AI cannot approve a post itself.
+- **Rate limits** (`/docs/limits`): request limits from `rate-limit.ts` and plan limits from the plans migrations.
+
 ## Still placeholder or undecided
 
-- **Approvals** (Concepts and Permissions and safety): the default is that AI posts go out as directed. I found backend support for asking first, but no setting for it in the web app. Needs a decision before any wording.
-- **Rate limits, plan limits and status** (`/docs/limits`): numbers exist in code but have not been confirmed as public. No status page exists.
-- **Per-platform quirks** (Platforms): review status, how long connections last, platform-specific failure reasons. Not written.
-- **Troubleshooting error reference**: the full list of failure reasons and error codes. The short "Start here" part links to the quickstart's fixes.
+- **Account-level approvals**: holding every AI post for approval inside Post Social. The code supports it (`awaiting_approval`), but I found no setting or button that turns it on. Needs Aki to say how users switch it on before it is documented.
+- **Plan limits are from migrations**: the live plans table could not be read, so the Free and Paid numbers on `/docs/limits` are unconfirmed against production.
+- **Status page**: none exists.
+- **Per-platform quirks** (Platforms): review status, how long connections last, platform-specific failure reasons.
+- **Troubleshooting error reference**: the full list of failure reasons and error codes.
 - **Recipes**: not written. Each needs to be tried against the real tools.
 - **Screenshots**: the quickstart still has "Screenshot to add" placeholders.
-
-## Things found and not changed
-
-- The X price in the tool and account notes that AIs read (about 1.5 cents and 20 cents) differs from the billing page (2 cents and 25 cents). The Platforms page links to billing and states no price.
-- The MCP server's own instructions list five platforms and say TikTok goes to the inbox, while the tools text and docs say eight platforms and direct by default.
-- The billing page says "1 to 10 at $5 minus a $10 monthly credit" while the pricing page says "3 to 10 at $5".
-- `/docs/billing` says "more than 2,000 accounts" with a support email, which may read like an enterprise hint.
 
 ## Screenshots
 
