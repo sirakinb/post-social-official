@@ -25,7 +25,7 @@ export default function PrivacyPage() {
           <h1 className="font-display text-3xl font-semibold text-ink">
             Privacy Policy
           </h1>
-          <p className="mt-2 text-sm text-ink-subtle">Effective July 21, 2026 · Updated October 20, 2026</p>
+          <p className="mt-2 text-sm text-ink-subtle">Effective July 21, 2026 · Updated October 23, 2026</p>
 
           <div className="mt-8 space-y-6 text-ink-muted">
             <section>
@@ -142,8 +142,8 @@ export default function PrivacyPage() {
                 and stores your card details; we receive only billing status
                 and invoice records); Resend for sending email; ScrapeCreators
                 to read public view and follower counts for posts and accounts
-                you connect; and PostHog for product analytics and error
-                reports. We limit stored permissions to the product features in
+                you connect; PostHog for product analytics and error
+                reports; and DataFast for website visitor analytics. We limit stored permissions to the product features in
                 use, encrypt platform credentials at rest, and keep a
                 time-stamped security and publishing record. No internet
                 service can guarantee absolute security.
@@ -164,6 +164,16 @@ export default function PrivacyPage() {
                 ID, never your email. Error reports from our servers contain the
                 error and technical context, with tokens and keys removed. We do
                 not use this data for advertising.
+              </p>
+              <p className="mt-2 text-sm leading-relaxed">
+                On our public website (not inside the signed-in app), DataFast
+                counts visits and where visitors came from, using two cookies
+                (datafast_visitor_id and datafast_session_id); when you add a card,
+                those two IDs are passed to Stripe so DataFast can tell which
+                channel led to a payment. When search engines, AI assistants or
+                other automated crawlers request our public pages, our server
+                sends DataFast the page address, the crawler&apos;s user agent and
+                its IP address; ordinary visits by people are not sent this way.
               </p>
             </section>
 
