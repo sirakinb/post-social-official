@@ -1,14 +1,18 @@
-// Session handling for the web app under /beta, and the visitor's address for requests this
-// site forwards to the API (rate limits).
-import { NextResponse, type NextRequest } from "next/server";
+// Session handling for the web app under /beta, the visitor's address for requests this site
+// forwards to the API (rate limits), and DataFast's tracking of crawler visits to public pages.
+import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
+import { trackAICrawlerRequest } from "@datafast/ai-crawl";
 import { updateSession } from "@insforge/sdk/ssr/middleware";
 import { BETA_HOME, BETA_LOGIN, SIGNED_OUT_ONLY_PATHS, isPublicBetaPath } from "@/lib/insforge/auth-rules";
+import { botTrackingConfig } from "@/lib/analytics/bot-tracking";
 import { forwardingHeaders } from "@/lib/security/client-ip";
 
 // Paths this site forwards to the API function (next.config.ts rewrites).
 const API_PATHS = /^\/(api\/v1(\/|$)|mcp$|oauth\/(register|token|revoke)$|\.well-known\/oauth-)/;
 
-export async function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest, event?: NextFetchEvent) {
+  // Not awaited: it reports in the background and must never slow a page down.
+  trackAICrawlerRequest(request, event, botTrackingConfig());
   if (API_PATHS.test(request.nextUrl.pathname)) return forwardVisitorAddress(request);
   if (!/^\/beta(\/|$)/.test(request.nextUrl.pathname)) return NextResponse.next();
   const response = NextResponse.next({ request });
@@ -49,8 +53,8 @@ function withCookies(target: NextResponse, source: NextResponse) {
   return target;
 }
 
+// Runs on every page, so crawler visits to public pages (and to robots.txt, llms.txt and the
+// sitemap) can be seen; images, scripts and other static files are skipped.
 export const config = {
-  matcher: ["/beta", "/beta/:path*", "/api/v1/:path*", "/mcp", "/oauth/register", "/oauth/token", "/oauth/revoke",
-    "/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/:path*",
-    "/.well-known/oauth-authorization-server", "/.well-known/oauth-authorization-server/:path*"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpe?g|gif|webp|svg|ico|css|js|woff2?|mp4|vtt|webmanifest)$).*)"],
 };
