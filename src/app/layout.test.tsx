@@ -3,6 +3,8 @@ import { createElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import RootLayout from "./layout";
 
+vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
+
 // next/script adds its tag in the browser, so show it as a plain tag to see what it was given.
 vi.mock("next/script", () => ({ default: (props: Record<string, string>) => createElement("script", props) }));
 vi.mock("./fonts", () => ({ GeistSans: { variable: "font-sans" }, GeistMono: { variable: "font-mono" } }));

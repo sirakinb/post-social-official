@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
-import Script from "next/script";
 import { GeistSans, GeistMono } from "./fonts";
 import "./globals.css";
+import { Analytics } from "@/components/analytics";
 import { EnvironmentBadge, resolveAppEnv } from "@/components/environment-badge";
 
 const title = "Post Social — Social media management for AI-native creators and operators";
@@ -28,16 +28,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <head>
-        {/* DataFast visitor analytics. Only on the live site, so previews and staging don't count as visitors. */}
-        {resolveAppEnv() === "production" && (
-          <Script data-website-id="dfid_ev0xid7Q3dcHOMtmozFCa" data-domain="postsocial.xyz" src="https://datafa.st/js/script.js" strategy="afterInteractive" />
-        )}
-      </head>
       <body
         className={`${GeistSans.variable} ${GeistMono.variable} font-sans antialiased min-h-screen`}
       >
         {children}
+        {/* Visitor analytics only on the live site, so previews and staging don't count as visitors. */}
+        {resolveAppEnv() === "production" && <Analytics />}
         <EnvironmentBadge />
       </body>
     </html>
