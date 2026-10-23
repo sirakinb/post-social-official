@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { Brand } from "@/components/brand";
 import { FREE_ACCOUNTS, MONTHLY_CREDIT, PRICE_BANDS, X_PRICES, monthlyBill } from "@/lib/pricing";
 
 export const metadata = {
@@ -11,10 +10,16 @@ const money = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigi
 const cents = (n: number) => `${Math.round(n * 100)}¢`;
 const band = (b: (typeof PRICE_BANDS)[number]) => (b.to === Infinity ? `${b.from}+` : `${b.from}–${b.to}`);
 
+// The first accounts are free, so the first paid step starts after them (the $10 credit below is how that works on the invoice).
+const PRICE_ROWS = [
+  { accounts: `1–${FREE_ACCOUNTS}`, price: "Free" },
+  ...PRICE_BANDS.map((b, i) => ({ accounts: i === 0 ? `${FREE_ACCOUNTS + 1}–${b.to}` : band(b), price: money(b.perAccount) })),
+];
+
 function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h2 id={id} className="mt-12 text-xl font-semibold text-ink">{title}</h2>
+      <h2 id={id} className="mt-12 scroll-mt-24 text-xl font-semibold text-ink">{title}</h2>
       <div className="mt-3 space-y-3 text-sm leading-relaxed text-ink-muted">{children}</div>
     </section>
   );
@@ -39,24 +44,11 @@ function Example({ accounts }: { accounts: number }) {
 
 export default function BillingDocsPage() {
   return (
-    <div className="technical-grid min-h-screen">
-      <header className="border-b border-border bg-[#080610]/90">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-4 md:px-8">
-          <Brand size="sm" />
-          <nav className="flex gap-4 text-sm">
-            <Link href="/docs" className="text-ink-muted hover:text-ink">Docs</Link>
-            <a href="#accounts" className="text-ink-muted hover:text-ink">Accounts</a>
-            <a href="#x" className="text-ink-muted hover:text-ink">X posts</a>
-            <a href="#invoices" className="text-ink-muted hover:text-ink">Invoices</a>
-          </nav>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-4xl px-4 py-12 md:px-8">
+    <div>
         <p className="utility-label text-accent">Post Social / Docs / Billing</p>
         <h1 className="mt-3 text-3xl font-semibold tracking-[-0.035em] text-ink">Pricing and billing</h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-muted">
-          Your first {FREE_ACCOUNTS} accounts are free, with no card needed. After that it&apos;s usage based: you pay per connected account, only while it&apos;s connected, plus a few cents per X post. Every
+          Your first {FREE_ACCOUNTS}{" "}accounts are free, with no card needed. After that it&apos;s usage based: you pay per connected account, only while it&apos;s connected, plus a few cents per X post. Every
           feature is included at every size.
         </p>
 
@@ -69,8 +61,8 @@ export default function BillingDocsPage() {
             <table className="w-full text-sm">
               <thead><tr className="text-left text-xs text-ink-subtle"><th className="px-4 py-2 font-medium">Accounts</th><th className="px-4 py-2 text-right font-medium">Per account, per month</th></tr></thead>
               <tbody className="divide-y divide-border">
-                {PRICE_BANDS.map((b) => (
-                  <tr key={b.from}><td className="px-4 py-2 font-mono text-ink">{band(b)}</td><td className="px-4 py-2 text-right text-ink">{money(b.perAccount)}</td></tr>
+                {PRICE_ROWS.map((row) => (
+                  <tr key={row.accounts}><td className="px-4 py-2 font-mono text-ink">{row.accounts}</td><td className="px-4 py-2 text-right text-ink">{row.price}</td></tr>
                 ))}
               </tbody>
             </table>
@@ -122,7 +114,6 @@ export default function BillingDocsPage() {
         </Section>
 
         <p className="mt-12 text-xs text-ink-subtle"><Link href="/docs" className="hover:underline">Back to the docs</Link> · <Link href="/pricing" className="hover:underline">Pricing calculator</Link></p>
-      </main>
     </div>
   );
 }

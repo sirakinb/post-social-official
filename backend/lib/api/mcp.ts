@@ -10,11 +10,11 @@ export const PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "202
 export const SERVER_VERSION = "1.0.0";
 
 const INSTRUCTIONS = [
-  "Post Social publishes to the person's connected social accounts (Instagram, Facebook Pages, Threads, YouTube Shorts, TikTok).",
+  "Post Social publishes to the person's connected social accounts (Instagram, Facebook Pages, Threads, YouTube Shorts, TikTok, LinkedIn, Bluesky and X).",
   "Start with list_social_accounts to get account ids and limits. Media must be in Post Social first (import_media from a link), and ready, before it can be attached.",
   "The person directs what to post and when: use validate_post to check a post, then create_post with scheduled_at to publish at a time (one call per post when scheduling a series), or with publish: \"now\" only when the person asked for it to go out right away.",
   "create_post without scheduled_at or publish: \"now\" only saves a draft and posts nothing: tell the person it is a draft, and use publish_post when they want it sent.",
-  "TikTok posts go to the creator's TikTok inbox to confirm. Never claim a post is live until list_post_results shows a live link.",
+  "TikTok posts go out directly with the audience the person chose, or to the creator's TikTok inbox when the account is set to inbox first. To check with the person before anything goes out, save the post as a draft (draft: true), show it to them, and call publish_post only when they say to. Never claim a post is live until list_post_results shows a live link.",
   "New accounts are connected by the person: give them the link from request_connect_link.",
 ].join(" ");
 

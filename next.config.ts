@@ -6,6 +6,9 @@ const developmentConnections = process.env.NODE_ENV === "development" ? " ws://l
 // Browsers upload media straight to our Cloudflare R2 account (signed part links).
 const mediaStorage = "https://5e9cbd18080d4f973442560e2140a3e0.r2.cloudflarestorage.com";
 
+// DataFast (visitor analytics) loads its script from, and sends page views to, this address.
+const analytics = "https://datafa.st";
+
 const securityHeaders = [
   { key: "Content-Security-Policy", value: [
     "default-src 'self'",
@@ -14,12 +17,12 @@ const securityHeaders = [
     "frame-ancestors 'none'",
     "frame-src 'none'",
     "object-src 'none'",
-    `script-src 'self' 'unsafe-inline'${developmentSources}`,
+    `script-src 'self' 'unsafe-inline' ${analytics}${developmentSources}`,
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' data:",
     "img-src 'self' data: blob: https:",
     "media-src 'self' blob: https:",
-    `connect-src 'self' ${mediaStorage}${developmentConnections}`,
+    `connect-src 'self' ${mediaStorage} ${analytics}${developmentConnections}`,
     "upgrade-insecure-requests",
   ].join("; ") },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
@@ -31,7 +34,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: process.cwd(),
-  allowedDevOrigins: ["127.0.0.1"],
+  allowedDevOrigins: ["127.0.0.1", "*.instabox.tech"], // the dev preview is served from an instabox.tech address
   images: {
     unoptimized: true,
   },
