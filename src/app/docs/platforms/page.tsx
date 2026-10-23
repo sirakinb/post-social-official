@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ComingSoon, PageHeader, Section } from "@/components/docs/parts";
+import { PageHeader, Section } from "@/components/docs/parts";
 
 export const metadata = {
   title: "Docs: platforms · Post Social",
@@ -132,12 +132,6 @@ export default function PlatformsPage() {
           )}
         </Section>
       ))}
-
-      <Section id="coming-soon" title="Still to come">
-        <ComingSoon>
-          <p>Per-platform quirks and setup tips, such as review status, how long a connection lasts before you reconnect, and platform-specific failure reasons, are not written yet. We will add them once each one has been checked.</p>
-        </ComingSoon>
-      </Section>
     </div>
   );
 }

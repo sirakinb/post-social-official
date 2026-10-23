@@ -49,7 +49,7 @@ export default function QuickstartPage() {
         <Step id="account" number={1} title="Connect your first account">
           <p>You connect your social accounts yourself. An AI can send you a link to do it, but it never signs in for you.</p>
           <ol className="list-decimal space-y-1 pl-5">
-            <li>Sign in to Post Social. If you don&apos;t have an account yet, create one from <Link href="/" className="text-accent hover:underline">postsocial.xyz</Link> (or join the waitlist there if sign-up isn&apos;t open yet).</li>
+            <li>Sign in to Post Social. If you don&apos;t have an account yet, create one from <Link href="/" className="text-accent hover:underline">postsocial.xyz</Link>.</li>
             <li>Open Accounts and find Connect an account.</li>
             <li>Choose a platform: Instagram, Facebook Pages, Threads, YouTube, TikTok, LinkedIn, Bluesky or X.</li>
             <li>Sign in on that platform&apos;s own page and approve access. Post Social never sees your password.</li>

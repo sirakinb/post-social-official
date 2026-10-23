@@ -27,7 +27,7 @@ Branch: `dev`. Preview only; not merged and not deployed. Compares the docs as t
 | `/docs/concepts` | New, verified |
 | `/docs/connect` | Moved from `/docs#connect` |
 | `/docs/safety` | New, partly placeholder |
-| `/docs/platforms` | New, verified limits, quirks placeholder |
+| `/docs/platforms` | New, verified limits |
 | `/docs/guides` | New, placeholder (Recipes) |
 | `/docs/troubleshooting` | New, short page plus placeholder |
 | `/docs/cli` | Moved from `/docs#cli` |
@@ -55,7 +55,6 @@ The sidebar, search, and previous/next order all come from one list: `src/lib/do
 
 - **Plan limits are from migrations**: the live plans table could not be read, so the Free and Paid numbers on `/docs/limits` are unconfirmed against production.
 - **Status page**: none exists.
-- **Per-platform quirks** (Platforms): review status, how long connections last, platform-specific failure reasons.
 - **Troubleshooting error reference**: the full list of failure reasons and error codes.
 - **Recipes**: not written. Each needs to be tried against the real tools.
 - **Screenshots**: the quickstart still has "Screenshot to add" placeholders.
