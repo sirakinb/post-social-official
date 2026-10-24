@@ -8,5 +8,10 @@ export function chatHiddenOn(pathname: string) {
   return HIDDEN.test(pathname);
 }
 
-// Crisp's snippet, plus: start hidden on the pages above, and never add the loader twice.
-export const CRISP_SNIPPET = `window.$crisp=window.$crisp||[];window.CRISP_WEBSITE_ID="${CRISP_WEBSITE_ID}";if(${HIDDEN}.test(location.pathname))window.$crisp.push(["do","chat:hide"]);(function(){if(document.getElementById("crisp-loader"))return;var d=document,s=d.createElement("script");s.id="crisp-loader";s.src="https://client.crisp.chat/l.js";s.async=1;d.getElementsByTagName("head")[0].appendChild(s);})();`;
+// Crisp only offers named colours; deep purple is the closest to Post Social's violet, on the
+// dark look the site uses.
+export const CRISP_THEME = { color: "deep_purple", mode: "dark" } as const;
+
+// Crisp's snippet, plus: Post Social's colours, start hidden on the pages above, and never add
+// the loader twice.
+export const CRISP_SNIPPET = `window.$crisp=window.$crisp||[];window.CRISP_WEBSITE_ID="${CRISP_WEBSITE_ID}";window.$crisp.push(["config","color:theme",["${CRISP_THEME.color}"]]);window.$crisp.push(["config","color:mode",["${CRISP_THEME.mode}"]]);if(${HIDDEN}.test(location.pathname))window.$crisp.push(["do","chat:hide"]);(function(){if(document.getElementById("crisp-loader"))return;var d=document,s=d.createElement("script");s.id="crisp-loader";s.src="https://client.crisp.chat/l.js";s.async=1;d.getElementsByTagName("head")[0].appendChild(s);})();`;
