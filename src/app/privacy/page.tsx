@@ -25,7 +25,7 @@ export default function PrivacyPage() {
           <h1 className="font-display text-3xl font-semibold text-ink">
             Privacy Policy
           </h1>
-          <p className="mt-2 text-sm text-ink-subtle">Effective July 21, 2026 · Updated October 23, 2026</p>
+          <p className="mt-2 text-sm text-ink-subtle">Effective July 21, 2026 · Updated October 24, 2026</p>
 
           <div className="mt-8 space-y-6 text-ink-muted">
             <section>
@@ -143,7 +143,7 @@ export default function PrivacyPage() {
                 and invoice records); Resend for sending email; ScrapeCreators
                 to read public view and follower counts for posts and accounts
                 you connect; PostHog for product analytics and error
-                reports; and DataFast for website visitor analytics. We limit stored permissions to the product features in
+                reports; DataFast for website visitor analytics; and Crisp for the support chat. We limit stored permissions to the product features in
                 use, encrypt platform credentials at rest, and keep a
                 time-stamped security and publishing record. No internet
                 service can guarantee absolute security.
@@ -174,6 +174,12 @@ export default function PrivacyPage() {
                 other automated crawlers request our public pages, our server
                 sends DataFast the page address, the crawler&apos;s user agent and
                 its IP address; ordinary visits by people are not sent this way.
+              </p>
+              <p className="mt-2 text-sm leading-relaxed">
+                The support chat on our website and in the app is run by Crisp.
+                If you use it, Crisp stores the messages you send and any details
+                you choose to give (such as your email address) so we can reply,
+                and sets cookies so your conversation stays open between visits.
               </p>
             </section>
 
