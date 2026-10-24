@@ -3,6 +3,8 @@ import { GeistSans, GeistMono } from "./fonts";
 import "./globals.css";
 import { Analytics } from "@/components/analytics";
 import { EnvironmentBadge, resolveAppEnv } from "@/components/environment-badge";
+import { SupportChatVisibility } from "@/components/support-chat";
+import { CRISP_SNIPPET } from "@/lib/support-chat";
 
 const title = "Post Social — Social media management for AI-native creators and operators";
 const description = "Tell Claude, ChatGPT, or your own agent what to post. Post Social publishes it to TikTok, Instagram, Facebook, Threads, YouTube, LinkedIn, Bluesky and X.";
@@ -28,12 +30,17 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        {/* Crisp support chat: its snippet, in the global <head> as Crisp asks. */}
+        <script id="crisp-chat" dangerouslySetInnerHTML={{ __html: CRISP_SNIPPET }} />
+      </head>
       <body
         className={`${GeistSans.variable} ${GeistMono.variable} font-sans antialiased min-h-screen`}
       >
         {children}
         {/* Visitor analytics only on the live site, so previews and staging don't count as visitors. */}
         {resolveAppEnv() === "production" && <Analytics />}
+        <SupportChatVisibility />
         <EnvironmentBadge />
       </body>
     </html>

@@ -27,6 +27,18 @@ describe("DataFast", () => {
   });
 });
 
+describe("Crisp support chat", () => {
+  it("is allowed to load and connect, and the app's own service worker still runs", async () => {
+    const rules = await nextConfig.headers!();
+    const csp = rules[0].headers.find((h) => h.key === "Content-Security-Policy")!.value;
+    const directive = (name: string) => csp.split("; ").find((d) => d.startsWith(`${name} `))!.split(" ").slice(1);
+    for (const name of ["script-src", "style-src", "font-src", "connect-src", "frame-src", "worker-src"]) expect(directive(name)).toContain("https://*.crisp.chat");
+    expect(directive("connect-src")).toContain("wss://*.relay.crisp.chat");
+    expect(directive("worker-src")).toEqual(expect.arrayContaining(["'self'", "blob:"]));
+    expect(directive("frame-src")).not.toContain("https:");
+  });
+});
+
 describe("PostHog through this site", () => {
   it("forwards /ingest to PostHog without widening the content policy", async () => {
     const rewrites = (await nextConfig.rewrites!()) as Array<{ source: string; destination: string }>;
