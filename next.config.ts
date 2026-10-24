@@ -9,20 +9,27 @@ const mediaStorage = "https://5e9cbd18080d4f973442560e2140a3e0.r2.cloudflarestor
 // DataFast (visitor analytics) loads its script from, and sends page views to, this address.
 const analytics = "https://datafa.st";
 
+// Crisp (support chat) loads its script, styles, fonts and a chat connection from its own
+// domains, and runs short-lived workers from blob: addresses (docs.crisp.chat, "Crisp Domain Names").
+const supportChat = "https://*.crisp.chat";
+const supportChatSockets = "wss://*.relay.crisp.chat wss://*.relay.rescue.crisp.chat";
+
 const securityHeaders = [
   { key: "Content-Security-Policy", value: [
     "default-src 'self'",
     "base-uri 'self'",
     "form-action 'self'",
     "frame-ancestors 'none'",
-    "frame-src 'none'",
+    `frame-src ${supportChat}`,
     "object-src 'none'",
-    `script-src 'self' 'unsafe-inline' ${analytics}${developmentSources}`,
-    "style-src 'self' 'unsafe-inline'",
-    "font-src 'self' data:",
+    `script-src 'self' 'unsafe-inline' ${analytics} ${supportChat}${developmentSources}`,
+    `style-src 'self' 'unsafe-inline' ${supportChat}`,
+    `font-src 'self' data: ${supportChat}`,
     "img-src 'self' data: blob: https:",
     "media-src 'self' blob: https:",
-    `connect-src 'self' ${mediaStorage} ${analytics}${developmentConnections}`,
+    `connect-src 'self' ${mediaStorage} ${analytics} ${supportChat} ${supportChatSockets}${developmentConnections}`,
+    // The app's own service worker (/sw.js) and Crisp's blob: workers.
+    `worker-src 'self' blob: ${supportChat}`,
     "upgrade-insecure-requests",
   ].join("; ") },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },

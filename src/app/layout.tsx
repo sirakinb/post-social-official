@@ -3,6 +3,7 @@ import { GeistSans, GeistMono } from "./fonts";
 import "./globals.css";
 import { Analytics } from "@/components/analytics";
 import { EnvironmentBadge, resolveAppEnv } from "@/components/environment-badge";
+import { SupportChat } from "@/components/support-chat";
 
 const title = "Post Social — Social media management for AI-native creators and operators";
 const description = "Tell Claude, ChatGPT, or your own agent what to post. Post Social publishes it to TikTok, Instagram, Facebook, Threads, YouTube, LinkedIn, Bluesky and X.";
@@ -34,6 +35,7 @@ export default function RootLayout({
         {children}
         {/* Visitor analytics only on the live site, so previews and staging don't count as visitors. */}
         {resolveAppEnv() === "production" && <Analytics />}
+        <SupportChat />
         <EnvironmentBadge />
       </body>
     </html>
