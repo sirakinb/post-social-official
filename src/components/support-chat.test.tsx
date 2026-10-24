@@ -25,6 +25,7 @@ describe("Crisp snippet", () => {
       return (window as unknown as { $crisp: unknown[][] }).$crisp;
     };
     expect(run("/oauth/authorize")).toContainEqual(["do", "chat:hide"]);
+    expect(run("/")).toEqual(expect.arrayContaining([["config", "color:theme", ["deep_purple"]], ["config", "color:mode", ["dark"]]]));
     expect(run("/pricing")).not.toContainEqual(["do", "chat:hide"]);
     expect(document.querySelectorAll("script#crisp-loader")).toHaveLength(1);
   });
