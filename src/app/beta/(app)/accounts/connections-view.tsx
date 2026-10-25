@@ -50,6 +50,7 @@ export function ConnectionsView(props: {
   notice: string | null;
   error: string | null;
   requested: string | null;
+  getStarted?: React.ReactNode; // the get-started steps, while the workspace is new
 }) {
   const router = useRouter();
   const pathname = usePathname() ?? "/beta/accounts";
@@ -222,6 +223,7 @@ export function ConnectionsView(props: {
       </div>
 
       {message && <p role={message.kind === "error" ? "alert" : "status"} className={cn("m-0 rounded-[10px] border px-3.5 py-2.5", message.kind === "error" ? "border-ps-failed/30 bg-ps-failed/[0.08] text-ps-failed-text" : "border-ps-line bg-ps-surface text-ps-muted")}>{message.text}</p>}
+      {props.getStarted}
       {attention.map((a) => (
         <div key={a.id} role="status" className="flex flex-wrap items-center gap-2.5 rounded-[10px] border border-ps-attention/30 bg-ps-attention/[0.07] px-3.5 py-2.5 text-ps-attention-text">
           <span className="h-1.5 w-1.5 rounded-full bg-ps-attention" />
@@ -276,7 +278,7 @@ export function ConnectionsView(props: {
 
 
       {canEdit && (
-        <section aria-labelledby="connect-h" className="rounded-xl border border-ps-line bg-ps-surface">
+        <section id="connect" aria-labelledby="connect-h" className="scroll-mt-6 rounded-xl border border-ps-line bg-ps-surface">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-ps-fg/[0.05] px-4 py-3">
             <h2 id="connect-h" className="m-0 text-sm font-medium">Connect an account</h2>
             <span className="flex-1" />

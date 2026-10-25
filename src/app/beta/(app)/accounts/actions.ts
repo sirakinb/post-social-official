@@ -1,8 +1,10 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { cookies, headers } from "next/headers";
 import { getAccessTokenCookieName } from "@insforge/sdk/ssr";
 import { OUR_SIDE, UNREACHABLE, requestError } from "../../../../../backend/lib/support";
+import { GET_STARTED_HIDDEN_COOKIE } from "@/lib/beta/get-started";
 
 // The web app uses the same `connections` function an AI client will, with the person's
 // own session, so connecting and disconnecting get the same checks and audit trail.
@@ -56,4 +58,10 @@ export async function moveAccount(accountId: string, profileId: string | null) {
 // TikTok only: whether AI posts to this account post directly or go to the TikTok inbox first.
 export async function setTiktokDelivery(accountId: string, delivery: "direct" | "inbox") {
   return callConnections<{ tiktok_delivery: "direct" | "inbox" }>("/accounts/tiktok-delivery", { account_id: accountId, delivery });
+}
+
+// "Hide" on the get-started steps: gone from Accounts and the sidebar in this browser.
+export async function hideGetStarted() {
+  (await cookies()).set(GET_STARTED_HIDDEN_COOKIE, "1", { path: "/", maxAge: 31536000, sameSite: "lax" });
+  revalidatePath("/beta", "layout");
 }

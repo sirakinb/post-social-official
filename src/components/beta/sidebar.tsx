@@ -83,6 +83,7 @@ function SettingsMenu({ path }: { path: string }) {
 export function Sidebar(props: {
   viewer: { name: string; email: string; avatarUrl: string | null };
   plan: { name: string; used: number; limit: number; resets: string } | null;
+  started?: number | null; // get-started steps done (of 3), while the workspace is new
   signOut: () => Promise<void>;
   analytics?: boolean;
 }) {
@@ -111,6 +112,19 @@ export function Sidebar(props: {
         <div className="flex flex-col gap-0.5">
           {ITEMS.filter((item) => props.analytics || item.href !== "/beta/analytics").map((item) => <NavLink key={item.href} item={item} path={path} />)}
         </div>
+
+        {/* Until the three get-started steps are done: how far along, and the way back to them. */}
+        {props.started != null && (
+          <Link href="/beta/accounts#get-started" data-attr="sidebar-get-started" className="block rounded-[10px] border border-ps-plum/30 bg-ps-plum/[0.06] p-3 hover:border-ps-plum/55">
+            <div className="flex justify-between text-xs">
+              <span className="text-ps-text">Get started</span>
+              <span className="font-mono text-ps-muted">{props.started} of 3</span>
+            </div>
+            <div className="mt-2 h-1 overflow-hidden rounded bg-ps-fg/[0.06]">
+              <div className="h-full bg-ps-plum" style={{ width: `${(props.started / 3) * 100}%` }} />
+            </div>
+          </Link>
+        )}
 
         <div className="hidden flex-1 md:block" />
 
