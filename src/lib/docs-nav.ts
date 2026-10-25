@@ -26,7 +26,7 @@ export const DOCS_NAV: DocsGroup[] = [
   {
     title: "Connect your AI",
     pages: [
-      { title: "Connect an AI", href: "/docs/connect", description: "Set up Claude, ChatGPT, Claude Code, Cursor or another MCP app.", keywords: "mcp claude chatgpt claude code cursor connector oauth key" },
+      { title: "Connect an AI", href: "/docs/connect", description: "Set up Claude, ChatGPT, Claude Code, Codex, Cursor, Grok, Muse, Hermes, OpenClaw or another MCP app.", keywords: "mcp claude chatgpt claude code codex cursor grok muse meta hermes openclaw connector oauth key" },
       { title: "Permissions and safety", href: "/docs/safety", description: "What an AI can do on its own and how to stay in control.", keywords: "approval approvals disconnect permissions" },
     ],
   },

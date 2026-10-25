@@ -4,7 +4,7 @@ import { MCP_URL } from "@/lib/api-docs";
 
 export const metadata = {
   title: "Docs: quickstart · Post Social",
-  description: "Connect your first social account, connect Claude or ChatGPT, send your first post by asking in plain language, and check that it went out.",
+  description: "Connect your first social account, connect Claude, ChatGPT or another AI agent, send your first post by asking in plain language, and check that it went out.",
 };
 
 function Step({ id, number, title, children }: { id: string; number: number; title: string; children: React.ReactNode }) {
@@ -36,11 +36,25 @@ export default function QuickstartPage() {
         <p className="utility-label text-accent">Post Social / Docs / Quickstart</p>
         <h1 className="mt-3 text-3xl font-semibold tracking-[-0.035em] text-ink">Quickstart: your first post</h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-muted">
-          You will connect one social account, connect Claude or ChatGPT, and ask your AI to post. It takes about ten minutes, and you don&apos;t need to write any code. Your first 2 accounts are free, with no card needed.
+          You will connect one social account, connect Claude, ChatGPT or another AI agent, and ask your AI to post. It takes about ten minutes, and you don&apos;t need to write any code. Your first 2 accounts are free, with no card needed.
         </p>
+        <figure className="mt-6">
+          <video
+            controls
+            playsInline
+            preload="none"
+            poster="/docs/quickstart/walkthrough-poster.webp"
+            aria-label="The quickstart in one minute: connect an account, connect an AI agent, ask it to post, and check the post is live"
+            className="block aspect-video w-full rounded-xl border border-border bg-[#0b0816]"
+          >
+            <source src="/docs/quickstart/walkthrough.mp4" type="video/mp4" />
+            <track kind="captions" src="/docs/quickstart/walkthrough.vtt" srcLang="en" label="English" />
+          </video>
+          <figcaption className="mt-2 text-xs text-ink-subtle">The four steps below, in one minute.</figcaption>
+        </figure>
         <ol className="mt-5 list-decimal space-y-1 pl-5 text-sm text-ink-muted">
           <li><a href="#account" className="text-accent hover:underline">Connect your first account</a></li>
-          <li><a href="#ai" className="text-accent hover:underline">Connect Claude or ChatGPT</a></li>
+          <li><a href="#ai" className="text-accent hover:underline">Connect Claude, ChatGPT or any AI agent</a></li>
           <li><a href="#post" className="text-accent hover:underline">Send your first post</a></li>
           <li><a href="#check" className="text-accent hover:underline">Check that it went out</a></li>
           <li><a href="#fails" className="text-accent hover:underline">If something fails</a></li>
@@ -71,8 +85,8 @@ export default function QuickstartPage() {
           <p>When it works, the account shows as Connected on the Accounts page.</p>
         </Step>
 
-        <Step id="ai" number={2} title="Connect Claude or ChatGPT">
-          <p>Both use the same address: <code className="font-mono text-ink">{MCP_URL}</code>. You sign in to Post Social and approve the app, so there is no key to copy.</p>
+        <Step id="ai" number={2} title="Connect Claude, ChatGPT or any AI agent">
+          <p>Every AI app uses the same address: <code className="font-mono text-ink">{MCP_URL}</code>. You sign in to Post Social and approve the app, so there is no key to copy. Here is how in Claude and ChatGPT:</p>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-xl border border-border bg-surface p-5">
               <h3 className="text-base font-semibold text-ink">Claude</h3>
@@ -91,7 +105,7 @@ export default function QuickstartPage() {
           >
             Post Social asks you to allow Claude. The screen lists what Claude can do (such as publishing and scheduling when you ask) and what it can&apos;t (approving posts, connecting accounts, creating API keys). Press Allow Claude to finish.
           </Figure>
-          <p>Using Claude Code, Cursor or another MCP app? See <Link href="/docs/connect" className="text-accent hover:underline">Connect an AI</Link>.</p>
+          <p>Using Claude Code, Codex, Cursor, Grok, Muse, Hermes, OpenClaw or another MCP app? See <Link href="/docs/connect" className="text-accent hover:underline">Connect an AI</Link>.</p>
           <p>To check it worked, ask your AI: <span className="text-ink">&ldquo;Which social accounts do I have connected in Post Social?&rdquo;</span> It should list the account from step 1.</p>
         </Step>
 
@@ -152,7 +166,7 @@ export default function QuickstartPage() {
         <section className="mt-12 rounded-xl border border-border bg-surface p-5 text-sm leading-relaxed text-ink-muted">
           <h2 className="text-base font-semibold text-ink">Next steps</h2>
           <ul className="mt-2 list-disc space-y-1 pl-5">
-            <li><Link href="/docs/connect" className="text-accent hover:underline">Connect Claude Code, Cursor or another MCP app</Link></li>
+            <li><Link href="/docs/connect" className="text-accent hover:underline">Connect Claude Code, Codex, Grok or another AI app</Link></li>
             <li><Link href="/docs/tools" className="text-accent hover:underline">See everything your AI can do</Link></li>
             <li><Link href="/docs/billing" className="text-accent hover:underline">Pricing and billing</Link></li>
           </ul>
