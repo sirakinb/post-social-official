@@ -117,7 +117,7 @@ export default function QuickstartPage() {
         </Step>
 
         <Step id="check" number={4} title="Check that it went out">
-          <p>A post is live only when its results show <span className="text-ink">published</span> with a live link. Asking your AI to say it sent the post is not enough. Ask:</p>
+          <p>A post is live only when its results show <span className="text-ink">published</span> with a live link; in Post Social&apos;s calendar it shows as <span className="text-ink">Live</span>. Asking your AI to say it sent the post is not enough. Ask:</p>
           <Example>Show me the publishing results for that post.</Example>
           <p>For each account you will see one of these:</p>
           <ul className="list-disc space-y-1 pl-5">
@@ -133,7 +133,7 @@ export default function QuickstartPage() {
           >
             The results show the account, when it was published, any errors, and a link to the live post.
           </Figure>
-          <p>You can also see posts in Post Social itself: Drafts for saved drafts, Calendar for scheduled posts, and Logs for what your AI did.</p>
+          <p>You can also see posts in Post Social itself: Drafts for saved drafts, Calendar for scheduled and sent posts (Scheduled, Publishing, Live, Partly live or Failed), and Logs for what your AI did.</p>
         </Step>
 
         <Step id="fails" number={5} title="If something fails">

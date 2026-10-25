@@ -6,17 +6,17 @@ export const metadata = {
   description: "Workspaces, profiles, accounts, post states and API keys in plain language.",
 };
 
-// Each status is the one the API reports. Meanings come from the publishing code.
-const STATES: { name: string; meaning: string }[] = [
-  { name: "draft", meaning: "Saved, but nothing is sent. A post made without a time, or with draft turned on, stays a draft until it is published." },
-  { name: "awaiting_approval", meaning: "Waiting for approval in Post Social before it goes out." },
-  { name: "approved", meaning: "Cleared to go out. Posts in this state and in processing are being sent now." },
-  { name: "scheduled", meaning: "Waiting for its time. You can move it or cancel it until it starts sending." },
-  { name: "processing", meaning: "Being sent to the platforms now." },
-  { name: "published", meaning: "Published on every account it went to." },
-  { name: "partially_published", meaning: "Published on some of its accounts, and failed on others." },
-  { name: "failed", meaning: "Published on none of its accounts. Each account's result says why." },
-  { name: "cancelled", meaning: "Stopped before it started sending." },
+// Each status is the one the API reports; calendar labels come from statusOf in calendar-view.tsx.
+const STATES: { name: string; calendar: string; meaning: string }[] = [
+  { name: "draft", calendar: "Drafts page", meaning: "Saved, but nothing is sent. A post made without a time, or with draft turned on, stays a draft until it is published." },
+  { name: "awaiting_approval", calendar: "Waiting", meaning: "Waiting for approval in Post Social before it goes out." },
+  { name: "approved", calendar: "Scheduled", meaning: "Cleared to go out. Posts in this state and in processing are being sent now." },
+  { name: "scheduled", calendar: "Scheduled", meaning: "Waiting for its time. You can move it or cancel it until it starts sending." },
+  { name: "processing", calendar: "Publishing", meaning: "Being sent to the platforms now." },
+  { name: "published", calendar: "Live", meaning: "Published on every account it went to. TikTok posts sent to your inbox show as In drafts until you finish them in TikTok." },
+  { name: "partially_published", calendar: "Partly live", meaning: "Published on some of its accounts, and failed on others." },
+  { name: "failed", calendar: "Failed", meaning: "Published on none of its accounts. Each account's result says why." },
+  { name: "cancelled", calendar: "Cancelled", meaning: "Stopped before it started sending." },
 ];
 
 export default function ConceptsPage() {
@@ -51,21 +51,25 @@ export default function ConceptsPage() {
       </Section>
 
       <Section id="post-states" title="Draft, scheduled and published">
-        <p>Every post has a status. The three you will see most are draft (saved, not sent), scheduled (waiting for its time) and published (live). A post made without a time is only a draft, so nothing goes out by accident. A time can be up to a year ahead.</p>
+        <p>Every post has a status. The three you will see most are draft (saved, not sent), scheduled (waiting for its time) and published (live). Your AI sees the status names below; the calendar in Post Social shows the shorter label next to each. A post made without a time is only a draft, so nothing goes out by accident. A time can be up to a year ahead.</p>
         <div className="overflow-hidden rounded-xl border border-border bg-surface">
           <table className="w-full text-sm">
-            <thead><tr className="text-left text-xs text-ink-subtle"><th className="px-4 py-2 font-medium">Status</th><th className="px-4 py-2 font-medium">What it means</th></tr></thead>
+            <thead><tr className="text-left text-xs text-ink-subtle"><th className="px-4 py-2 font-medium">Status</th><th className="hidden px-4 py-2 font-medium sm:table-cell">In the calendar</th><th className="px-4 py-2 font-medium">What it means</th></tr></thead>
             <tbody className="divide-y divide-border">
               {STATES.map((state) => (
                 <tr key={state.name} className="align-top">
-                  <td className="whitespace-nowrap px-4 py-2 font-mono text-xs text-ink">{state.name}</td>
+                  <td className="whitespace-nowrap px-4 py-2 font-mono text-xs text-ink">
+                    {state.name}
+                    <span className="mt-1 block font-sans text-ink-subtle sm:hidden">{state.calendar}</span>
+                  </td>
+                  <td className="hidden whitespace-nowrap px-4 py-2 text-ink sm:table-cell">{state.calendar}</td>
                   <td className="px-4 py-2">{state.meaning}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <p>A post is live only when its results show published with a live link. Posts that were already sent cannot be cancelled or deleted; they are kept for the record.</p>
+        <p>A post is live only when its results show published with a live link, and the calendar shows it as Live. Posts that were already sent cannot be cancelled or deleted; they are kept for the record.</p>
       </Section>
 
       <Section id="keys" title="Test and live keys">
