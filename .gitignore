@@ -39,3 +39,7 @@ submission/**/*.ass
 # bundled InsForge functions
 .build/
 worker/dist/
+
+# End-to-end test results and run logs
+adzo-tests/.e2e/
+adzo-tests/.e2e-runs/

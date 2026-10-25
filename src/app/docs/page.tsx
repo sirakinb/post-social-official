@@ -4,13 +4,13 @@ import { LegacyAnchors } from "./legacy-anchors";
 
 export const metadata = {
   title: "Docs · Post Social",
-  description: "Connect Claude, ChatGPT, Claude Code, Cursor or your own code to Post Social to publish and schedule social posts.",
+  description: "Connect Claude, ChatGPT, Codex, Grok or any AI agent, or your own code, to Post Social to publish and schedule social posts.",
 };
 
 const CARDS = [
   { href: "/docs/quickstart", title: "Quickstart", text: "Connect an account and an AI, send your first post and check that it went out." },
   { href: "/docs/concepts", title: "Concepts", text: "Workspaces, profiles, accounts, post states and API keys in plain language." },
-  { href: "/docs/connect", title: "Connect your AI", text: "Set up Claude, ChatGPT, Claude Code, Cursor or another MCP app." },
+  { href: "/docs/connect", title: "Connect your AI", text: "Set up Claude, ChatGPT, Claude Code, Codex, Cursor, Grok, Muse or another MCP app." },
   { href: "/docs/platforms", title: "Platforms", text: "What each of the eight platforms can post, and the limits Post Social checks." },
   { href: "/docs/troubleshooting", title: "Troubleshooting", text: "Fix failed posts and accounts that need attention." },
   { href: "/docs/cli", title: "API and CLI reference", text: "The command line, the REST API and every tool your AI can use." },

@@ -18,6 +18,8 @@ export default defineConfig([
     "dist/**",
     "node_modules/**",
     ".build/**",
+    // End-to-end tests run by Adzo, with their own config and packages.
+    "adzo-tests/**",
     "worker/dist/**",
     "ops/convex-forwarder/node_modules/**",
     "ops/convex-forwarder/convex/_generated/**",
