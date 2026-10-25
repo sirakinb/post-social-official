@@ -149,7 +149,7 @@ export default function LandingPage() {
               playsInline
               preload="none"
               poster="/landing/product-video-poster.webp"
-              aria-label="Aki, the founder, shows Post Social: connect your accounts, connect your AI agent, then ask Claude to schedule a post"
+              aria-label="Aki, the founder, walks through Post Social: connect your accounts, connect your AI agent, then ask Claude to schedule a post"
               className="block aspect-video w-full rounded-[14px] border border-white/[0.06] bg-[#140f24]"
             >
               <source src="/landing/product-video.mp4" type="video/mp4" />
