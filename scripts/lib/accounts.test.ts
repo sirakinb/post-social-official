@@ -1,8 +1,8 @@
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
-import { assertReleasableMain, ownerSetupSql, resolveTarget, reviewerSetupSql, slugify, validateRequest } from "./accounts";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { assertReleasableMain, createAccount, ownerSetupSql, resolveTarget, reviewerSetupSql, slugify, validateRequest } from "./accounts";
 
 const owner = {
   role: "owner" as const,
@@ -108,5 +108,33 @@ describe("assertReleasableMain", () => {
     expect(() => assertReleasableMain("/repo", fakeGit({ branch: "phase-1b-auth" }))).toThrow(/only from main/);
     expect(() => assertReleasableMain("/repo", fakeGit({ branch: "main", dirty: true }))).toThrow(/uncommitted/);
     expect(() => assertReleasableMain("/repo", fakeGit({ branch: "main", remote: "def" }))).toThrow(/not in sync/);
+  });
+});
+
+describe("createAccount", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("finds and confirms a sign-in that InsForge holds for email confirmation", async () => {
+    const queries: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init: { body?: string }) => {
+      const body = init.body ? JSON.parse(init.body) : {};
+      if (url.endsWith("/api/auth/users?client_type=server")) return new Response(JSON.stringify({ requireEmailVerification: true }), { status: 200 });
+      queries.push(body.query);
+      if (/FROM public\.workspaces/.test(body.query)) return new Response(JSON.stringify({ rows: [] }));
+      if (/FROM auth\.users/.test(body.query)) return new Response(JSON.stringify({ rows: [{ id: "user-1" }] }));
+      if (/UPDATE auth\.users/.test(body.query)) return new Response(JSON.stringify({ rows: [] }));
+      return new Response(JSON.stringify({ rows: [{ workspace_id: "ws-1" }] }));
+    }));
+    const result = await createAccount({ name: "dev", baseUrl: "https://dev.example", adminKey: "k" }, owner);
+    expect(result).toMatchObject({ userId: "user-1", workspaceId: "ws-1" });
+    expect(queries.some((q) => /UPDATE auth\.users SET email_verified = true/.test(q))).toBe(true);
+  });
+
+  it("still refuses when no sign-in was created", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.endsWith("/api/auth/users?client_type=server")) return new Response(JSON.stringify({ error: "exists" }), { status: 409 });
+      return new Response(JSON.stringify({ rows: [] }));
+    }));
+    await expect(createAccount({ name: "dev", baseUrl: "https://dev.example", adminKey: "k" }, owner)).rejects.toThrow(/Could not create the sign-in/);
   });
 });
