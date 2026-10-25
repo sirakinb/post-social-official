@@ -34,6 +34,9 @@ export default {
     {
       engine: web({
         viewport: { width: 1280, height: 800 },
+        // Fixed, so a capture never shows the machine's own timezone or locale.
+        timezoneId: 'America/New_York',
+        locale: 'en-US',
         screencast: { size: { width: 1280, height: 800 }, quality: 70 },
         // Gets past Vercel's deployment protection on staging and previews.
         ...(process.env.VERCEL_AUTOMATION_BYPASS_SECRET
