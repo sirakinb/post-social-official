@@ -93,8 +93,8 @@ test('tools: capture the video kit screens', async ({ app, screen, browser }) =>
         await new Promise((r) => setTimeout(r, 1500));
       }
       if (s.compose) {
-        // A post being written: Instagram and Threads chosen, a caption, the first photo in the
-        // library, and the Instagram preview showing.
+        // A post being written: Instagram and Threads chosen, a caption, the kiln clip (no people
+        // in it), and the Instagram preview showing.
         await browser.evaluate(() => {
           const chips = Array.from(document.querySelectorAll('section[aria-label="Editor"] button[aria-pressed]')) as HTMLElement[];
           chips.filter((c) => /@lantern\.studio/.test(c.textContent || '')).forEach((c) => c.click());
@@ -103,7 +103,7 @@ test('tools: capture the video kit screens', async ({ app, screen, browser }) =>
         await screen.getByRole('button', 'Add media').tap();
         await new Promise((r) => setTimeout(r, 1500));
         await browser.evaluate(() => {
-          const pick = Array.from(document.querySelectorAll('[role="dialog"][aria-label="Add media"] button[aria-pressed]')).find((b) => b.querySelector('img')) as HTMLElement | undefined;
+          const pick = Array.from(document.querySelectorAll('[role="dialog"][aria-label="Add media"] button[aria-pressed]')).find((b) => (b.textContent || '').includes('kiln.mp4')) as HTMLElement | undefined;
           pick?.click();
         });
         await screen.getByRole('button', 'Done').tap();
