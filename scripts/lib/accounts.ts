@@ -153,12 +153,21 @@ export async function createAccount(target: Target, request: AccountRequest): Pr
     password: request.password,
     name: request.displayName.trim(),
   });
-  const userId = created.body?.user?.id;
+  let userId = created.body?.user?.id;
+  // With email confirmation switched on (insforge.toml), InsForge creates the sign-in but returns
+  // no user while it waits for the emailed code. Accounts made here are made for the person by
+  // us, so find the new user and mark the email confirmed, as it was before confirmation existed.
+  const awaitingConfirmation = created.status < 300 && !userId;
+  if (awaitingConfirmation) {
+    const [row] = await sql<{ id: string }>(target, "SELECT id FROM auth.users WHERE lower(email) = lower($1)", [request.email]);
+    userId = row?.id;
+  }
   if (created.status >= 300 || !userId) {
     throw new Error(`Could not create the sign-in for ${request.email} (${created.status}). It may already exist.`);
   }
 
   try {
+    if (awaitingConfirmation) await sql(target, "UPDATE auth.users SET email_verified = true WHERE id = $1", [userId]);
     const setup = request.role === "owner" ? ownerSetupSql(userId, request) : reviewerSetupSql(userId, request);
     const rows = await sql<{ workspace_id: string }>(target, setup.query, setup.params);
     if (!rows[0]?.workspace_id) throw new Error("Workspace setup returned nothing.");
