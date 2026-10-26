@@ -235,6 +235,23 @@ describe("syncAccountQuantity", () => {
     expect(calls.at(-1)).toEqual({ method: "POST", path: "/v1/subscription_items/si_1", params: { quantity: 3, proration_behavior: "none" } });
   });
 
+  it("never charges a cancelling subscription", async () => {
+    const { sql } = fakeSql({ plan_id: "paid", plan_name: "Paid", connected: 4, stripe_subscription_id: "sub_1", subscription_status: "active", billed_quantity: 3 });
+    const { stripe, calls } = fakeStripe({ "GET /v1/subscriptions/sub_1": { cancel_at_period_end: true, items: { data: [{ id: "si_1", quantity: 3 }] } } });
+    await expect(syncAccountQuantity({ sql, stripe, webAppUrl: "" }, WORKSPACE)).resolves.toBe(3);
+    expect(calls.filter((c) => c.method === "POST")).toEqual([]);
+  });
+
+  it("doesn't raise an older subscription to 3 accounts unless an account was added", async () => {
+    const { stripe, calls } = fakeStripe({ "GET /v1/subscriptions/sub_1": { items: { data: [{ id: "si_1", quantity: 0 }] } } });
+    await syncAccountQuantity({ sql: fakeSql({ plan_id: "paid", plan_name: "Paid", connected: 0, stripe_subscription_id: "sub_1", subscription_status: "active", billed_quantity: 0 }).sql, stripe, webAppUrl: "" }, WORKSPACE);
+    expect(calls.filter((c) => c.method === "POST")).toEqual([]);
+
+    const older = fakeStripe({ "GET /v1/subscriptions/sub_1": { items: { data: [{ id: "si_1", quantity: 2 }] } } });
+    await syncAccountQuantity({ sql: fakeSql({ plan_id: "paid", plan_name: "Paid", connected: 3, stripe_subscription_id: "sub_1", subscription_status: "active", billed_quantity: 2 }).sql, stripe: older.stripe, webAppUrl: "" }, WORKSPACE);
+    expect(older.calls.at(-1)).toEqual({ method: "POST", path: "/v1/subscription_items/si_1", params: { quantity: 3, proration_behavior: "always_invoice" } });
+  });
+
   it("does nothing when the count matches or there is no subscription", async () => {
     const { stripe, calls } = fakeStripe();
     await syncAccountQuantity({ sql: fakeSql({ plan_id: "paid", plan_name: "Paid", connected: 4, stripe_subscription_id: "sub_1", subscription_status: "active", billed_quantity: 4 }).sql, stripe, webAppUrl: "" }, WORKSPACE);
