@@ -162,8 +162,21 @@ export type AuthorizeParams = {
 const METADATA_MAX_BYTES = 16_384;
 const METADATA_TIMEOUT_MS = 5_000;
 
-// Only public https addresses with a path: never this computer, a private network, or a
-// raw IP address, so the server can't be pointed at something internal.
+// We only read these files from the AI companies' own domains, so the server can never be
+// pointed at an address someone else picks (an internal service, or a name that resolves
+// to one). Other apps register themselves instead, which keeps working as before.
+export const METADATA_HOSTS = [
+  "grok.com", "x.ai",
+  "claude.ai", "anthropic.com",
+  "chatgpt.com", "openai.com",
+  "cursor.com", "cursor.sh",
+  "meta.ai", "muse.ai", "meta.com",
+  "github.com", "githubcopilot.com", "vscode.dev",
+  "perplexity.ai", "windsurf.com", "codeium.com",
+  "nousresearch.com", "openclaw.ai",
+];
+
+// A plain https address with a path, on one of those domains (or a subdomain of one).
 export function isMetadataClientId(id: string) {
   if (id.length > 500 || !id.startsWith("https://")) return false;
   let url: URL;
@@ -173,10 +186,10 @@ export function isMetadataClientId(id: string) {
     return false;
   }
   if (url.username || url.password || url.hash || url.port || url.pathname === "/") return false;
+  // "grok.com." is the same name as "grok.com"; refuse it rather than reason about it.
   const host = url.hostname.toLowerCase();
-  if (!host.includes(".") || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return false;
-  if (/^[\d.]+$/.test(host) || host.startsWith("[")) return false;
-  return true;
+  if (host.endsWith(".")) return false;
+  return METADATA_HOSTS.some((domain) => host === domain || host.endsWith(`.${domain}`));
 }
 
 type Fetcher = (url: string, init: RequestInit) => Promise<Response>;
