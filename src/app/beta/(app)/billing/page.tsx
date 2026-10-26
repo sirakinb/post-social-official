@@ -127,7 +127,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
                 </p>
               </div>
               {manage && !paying && (
-                <form action={addCard}>
+                <form action={addCard} data-rewardful="true">
                   <Hidden id={workspace.id} />
                   <button type="submit" className={primary}>Add a card</button>
                 </form>

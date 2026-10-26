@@ -3,6 +3,7 @@ import { GeistSans, GeistMono } from "./fonts";
 import "./globals.css";
 import { Analytics } from "@/components/analytics";
 import { EnvironmentBadge, resolveAppEnv } from "@/components/environment-badge";
+import { Rewardful } from "@/components/rewardful";
 import { SupportChatVisibility } from "@/components/support-chat";
 import { CRISP_SNIPPET } from "@/lib/support-chat";
 
@@ -40,6 +41,8 @@ export default function RootLayout({
         {children}
         {/* Visitor analytics only on the live site, so previews and staging don't count as visitors. */}
         {resolveAppEnv() === "production" && <Analytics />}
+        {/* Affiliate tracking loads everywhere (its key is public), so previews and staging can test referrals. */}
+        <Rewardful />
         <SupportChatVisibility />
         <EnvironmentBadge />
       </body>

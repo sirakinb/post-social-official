@@ -49,7 +49,10 @@ async function datafastIds() {
 }
 
 export async function addCard(formData: FormData) {
-  const result = await callBilling<{ url: string }>({ action: "billing_checkout", workspace_id: formData.get("workspace_id"), return_origin: await ownOrigin(), ...(await datafastIds()) });
+  // Rewardful adds a hidden "referral" field to the form for visitors who came through an
+  // affiliate's link. The server drops anything that isn't a valid referral id.
+  const referral = formData.get("referral");
+  const result = await callBilling<{ url: string }>({ action: "billing_checkout", workspace_id: formData.get("workspace_id"), return_origin: await ownOrigin(), referral: typeof referral === "string" ? referral : undefined, ...(await datafastIds()) });
   if (!result.ok) back(result.error);
   const url = result.ok ? stripeUrl(result.data.url) : null;
   if (!url) back(OUR_SIDE);

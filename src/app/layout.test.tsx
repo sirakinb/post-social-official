@@ -25,3 +25,14 @@ describe("RootLayout analytics", () => {
     expect(renderToStaticMarkup(<RootLayout>x</RootLayout>)).not.toContain("datafa.st");
   });
 });
+
+describe("RootLayout affiliate tracking", () => {
+  it("loads Rewardful with the public key on every environment", () => {
+    for (const env of ["production", "preview"]) {
+      vi.stubEnv("NEXT_PUBLIC_APP_ENV", env);
+      const html = renderToStaticMarkup(<RootLayout>x</RootLayout>);
+      expect(html).toContain("https://r.wdfl.co/rw.js");
+      expect(html).toContain('data-rewardful="a0dcca"');
+    }
+  });
+});

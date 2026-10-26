@@ -1,0 +1,123 @@
+import type { Metadata } from "next";
+import { Label, SiteFooter, SiteHeader } from "@/components/landing/site-chrome";
+import { Fraunces, GeistPixelGrid } from "../fonts";
+
+export const metadata: Metadata = {
+  title: "Affiliate program · Post Social",
+  description: "Earn 20% of what the customers you refer pay Post Social, every month for 24 months.",
+};
+
+// WAITING ON AKI: the affiliate sign-up link from the Rewardful campaign. Until it is set this
+// points back at this page's own sign-up section, so nothing broken ships. Replace it with the
+// real address (Rewardful, campaign, Links & sign-up) before the page goes to production.
+const AFFILIATE_SIGNUP_URL = "#sign-up";
+
+const WHO_FOR = [
+  { title: "Creators", text: "You already post about the tools you use. Share the one that runs your posting." },
+  { title: "Social media managers", text: "You set up accounts for other people. Refer them and earn on what they pay." },
+  { title: "Agencies", text: "You manage many brands. Recommend Post Social to the ones that fit." },
+];
+
+const STEPS = [
+  { title: "Sign up", text: "Join the program through the sign-up link. It takes a minute." },
+  { title: "Share your link", text: "You get a personal link. Anyone who signs up through it is tracked to you." },
+  { title: "Get paid", text: "Commissions and payouts are handled through Rewardful, where you can see what you've earned." },
+];
+
+const FAQ = [
+  { q: "How much do I earn?", a: "20% of what the customers you refer pay Post Social, on every paid invoice, for 24 months." },
+  { q: "Which payments earn commission?", a: "Payments that have been made and not refunded. Refunded payments don't earn commission." },
+  { q: "Can I refer myself?", a: "No. Referring your own account doesn't earn commission." },
+  { q: "How are referrals tracked?", a: "When someone visits Post Social through your link, a cookie remembers it, and their payment is credited to you." },
+  { q: "Who pays me?", a: "Payouts are handled through Rewardful, the service that runs the program." },
+  { q: "Where are the full terms?", a: "In the affiliate program section of our terms of service." },
+];
+
+export default function AffiliatesPage() {
+  return (
+    <div className={`lp ${Fraunces.variable} ${GeistPixelGrid.variable} relative isolate min-h-screen overflow-x-clip bg-[#0B0816] text-[#FAF6F0]`}>
+      <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[520px] bg-[radial-gradient(60%_60%_at_50%_0%,rgba(155,108,255,0.18),transparent_70%)]" />
+      <SiteHeader />
+      <main className="mx-auto max-w-3xl px-5 pb-24 pt-12 sm:px-8 md:pb-32 md:pt-20">
+        <div className="text-center">
+          <Label>Affiliate program</Label>
+          <h1 className="lp-h2 mt-3">
+            <span className="lp-display lp-ink">Earn 20%</span> for 24 months.
+          </h1>
+          <p className="mx-auto mt-4 max-w-xl leading-relaxed text-[#FAF6F0]/65">
+            Refer people to Post Social and earn 20% of what they pay, every month for 24 months.
+          </p>
+          <div className="mt-8">
+            <a href={AFFILIATE_SIGNUP_URL} className="lp-lantern inline-flex h-11 items-center rounded-full px-5 text-sm">
+              Become an affiliate
+            </a>
+          </div>
+        </div>
+
+        <section aria-labelledby="who-for" className="mt-20">
+          <Label>Who it&apos;s for</Label>
+          <h2 id="who-for" className="lp-h2 mt-3">People who talk about social media tools.</h2>
+          <ul className="mt-8 grid gap-3 sm:grid-cols-3">
+            {WHO_FOR.map((item) => (
+              <li key={item.title} className="lp-card p-5">
+                <h3 className="font-medium">{item.title}</h3>
+                <p className="mt-2 text-[15px] leading-relaxed text-[#FAF6F0]/65">{item.text}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section aria-labelledby="offer" className="mt-20">
+          <Label>The offer</Label>
+          <h2 id="offer" className="lp-h2 mt-3">20% recurring commission.</h2>
+          <div className="lp-card mt-8 p-6">
+            <p className="text-5xl font-medium tracking-[-0.03em] text-[#FFC48A]">20%</p>
+            <p className="mt-3 leading-relaxed text-[#FAF6F0]/75">
+              of what the customers you refer pay, on every payment for 24 months. Not just the first one.
+            </p>
+          </div>
+        </section>
+
+        <section aria-labelledby="how-it-works" className="mt-20">
+          <Label>How it works</Label>
+          <h2 id="how-it-works" className="lp-h2 mt-3">Three steps.</h2>
+          <ol className="mt-8 space-y-3">
+            {STEPS.map((step, index) => (
+              <li key={step.title} className="lp-card flex gap-4 p-5">
+                <span className="lp-label flex-none pt-1">0{index + 1}</span>
+                <div>
+                  <h3 className="font-medium">{step.title}</h3>
+                  <p className="mt-1 text-[15px] leading-relaxed text-[#FAF6F0]/65">{step.text}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        <section id="sign-up" aria-labelledby="faq" className="mt-20 scroll-mt-8">
+          <Label>FAQ</Label>
+          <h2 id="faq" className="lp-h2 mt-3">Questions, answered.</h2>
+          <div className="mt-8 space-y-3">
+            {FAQ.map((item) => (
+              <details key={item.q} className="lp-card group open:bg-white/[0.06]">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 font-medium [&::-webkit-details-marker]:hidden">
+                  {item.q}
+                  <svg viewBox="0 0 16 16" aria-hidden="true" className="size-4 flex-none text-[#FAF6F0]/50 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                    <path d="m6 3.5 4.5 4.5L6 12.5" />
+                  </svg>
+                </summary>
+                <p className="px-5 pb-5 text-[15px] leading-relaxed text-[#FAF6F0]/65">{item.a}</p>
+              </details>
+            ))}
+          </div>
+          <div className="mt-10 text-center">
+            <a href={AFFILIATE_SIGNUP_URL} className="lp-lantern inline-flex h-11 items-center rounded-full px-5 text-sm">
+              Become an affiliate
+            </a>
+          </div>
+        </section>
+      </main>
+      <SiteFooter />
+    </div>
+  );
+}
