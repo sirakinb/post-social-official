@@ -426,6 +426,7 @@ export async function submitPost(deps: PostsDeps, caller: Caller, input: Record<
     const status = (await deps.sql<{ start_publishing: string }>(`SELECT public.start_publishing($1)`, [postId]))[0].start_publishing;
     // A step of the new-user funnel: the person scheduled a post or sent one out now.
     trackEvent("post_submitted", { workspace_id: post.workspace_id, when: status === "scheduled" ? "later" : "now", source: caller.entryPoint, destinations: destinations.length }, await personFor(deps, caller));
+    if (status === "scheduled") trackEvent("post_scheduled", { workspace_id: post.workspace_id, source: caller.entryPoint, destinations: destinations.length }, await personFor(deps, caller));
     await audit(deps, post.workspace_id, member.actor_id, caller, postId, "post.submitted", status === "scheduled" ? `Scheduled for ${post.scheduled_at}` : "Sent for publishing now");
   }
   return view(deps, postId);

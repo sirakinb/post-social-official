@@ -7,6 +7,7 @@
 import { ApiError, membership, requireUuid, type Caller, type Sql } from "./access";
 import { FREE_ACCOUNTS, X_PRICES, monthlyBill } from "./pricing";
 import { originAllowedFor } from "./connections/service";
+import { trackEvent } from "./telemetry";
 
 export const ACCOUNTS_PRICE_LOOKUP_KEY = "post_social_accounts_monthly";
 
@@ -416,6 +417,10 @@ export async function handleStripeEvent(deps: BillingDeps, event: StripeEvent) {
   const workspaceId = subscription.metadata?.workspace_id;
   if (!workspaceId || !/^[0-9a-f-]{36}$/i.test(workspaceId)) return { handled: false };
   const status = event.type === "customer.subscription.deleted" ? "canceled" : subscription.status;
-  await recordSubscription(deps.sql, workspaceId, { ...subscription, status });
+  const paid = await recordSubscription(deps.sql, workspaceId, { ...subscription, status });
+  // The last step of the funnel: a workspace going paid.
+  if (event.type === "customer.subscription.created" && paid) {
+    trackEvent("subscription_started", { workspace_id: workspaceId, accounts: subscription.items?.data?.[0]?.quantity ?? null });
+  }
   return { handled: true };
 }

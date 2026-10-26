@@ -10,6 +10,18 @@ export type AccountRef = { id: string; platform: Platform; displayName: string }
 
 type Row = { id: string; encrypted_payload: string; initialization_vector: string; access_token_expires_at: string | null };
 
+// Whoever asked for the access (publishing, stats, avatars, TikTok settings), an account that
+// can no longer be used is flagged so the person is asked to reconnect it.
+async function needsReconnect(deps: CredentialDeps, account: AccountRef, error: PublishError) {
+  await deps
+    .sql(`UPDATE public.connected_accounts SET health = 'needs_attention', health_reason = $2 WHERE id = $1 AND health = 'connected'`, [
+      account.id,
+      "Access expired. Reconnect this account to keep posting.",
+    ])
+    .catch(() => undefined);
+  return error;
+}
+
 export async function accountToken(deps: CredentialDeps, account: AccountRef, now: () => number = Date.now) {
   return (await accountSession(deps, account, now)).accessToken;
 }
@@ -22,7 +34,7 @@ export async function accountSession(deps: CredentialDeps, account: AccountRef, 
       `SELECT id, encrypted_payload, initialization_vector, access_token_expires_at FROM public.credentials WHERE connected_account_id = $1`,
       [account.id],
     );
-    if (!credential) throw new PublishError("credential_missing", `${account.displayName} has no saved access. Reconnect it.`, false, undefined, true);
+    if (!credential) throw await needsReconnect(deps, account, new PublishError("credential_missing", `${account.displayName} has no saved access. Reconnect it.`, false, undefined, true));
     const tokens = await open({ encryptedPayload: credential.encrypted_payload, initializationVector: credential.initialization_vector }, key);
     // Bluesky's expiry is inside the session (its access lasts minutes, see refreshTokens).
     const expires = typeof tokens.accessExpiresAt === "number" ? tokens.accessExpiresAt : credential.access_token_expires_at ? Date.parse(credential.access_token_expires_at) : Infinity;
@@ -60,12 +72,12 @@ export async function accountSession(deps: CredentialDeps, account: AccountRef, 
   }
 
   try {
-    const refreshed = await refreshTokens(account.platform, tokens, deps.setting, deps.http).catch((error) => {
-      throw new PublishError("access_expired", `${account.displayName}'s access expired and could not be renewed (${error instanceof Error ? error.message : "unknown"}). Reconnect it.`, false, undefined, true);
+    const refreshed = await refreshTokens(account.platform, tokens, deps.setting, deps.http).catch(async (error) => {
+      throw await needsReconnect(deps, account, new PublishError("access_expired", `${account.displayName}'s access expired and could not be renewed (${error instanceof Error ? error.message : "unknown"}). Reconnect it.`, false, undefined, true));
     });
     if (!refreshed) {
       // Nothing to renew with (LinkedIn without a refresh token).
-      if (expires <= now()) throw new PublishError("access_expired", `${account.displayName}'s access expired. Reconnect it.`, false, undefined, true);
+      if (expires <= now()) throw await needsReconnect(deps, account, new PublishError("access_expired", `${account.displayName}'s access expired. Reconnect it.`, false, undefined, true));
       return tokens;
     }
     const sealed = await seal(refreshed.tokens, key);

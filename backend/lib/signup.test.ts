@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Sql } from "./access";
+import { flushReports, setErrorReporter } from "./telemetry";
 import { SAMPLE_DRAFT, addSampleDraft, provisionWorkspace, slugBase, workspaceNameFor } from "./signup";
 
 describe("slugBase", () => {
@@ -76,5 +77,19 @@ describe("addSampleDraft", () => {
     const sql = (async (query: string) => { queries.push(query); return [{ workspace_id: "w1" }]; }) as Sql;
     await provisionWorkspace(sql, { userId: "11111111-1111-4111-8111-111111111111", displayName: "Ada", entryPoint: "ui" }, {}, () => "abc123");
     expect(queries[1]).toContain("INSERT INTO public.posts");
+  });
+});
+
+describe("provisionWorkspace analytics", () => {
+  const person = { userId: "11111111-1111-4111-8111-111111111111", displayName: "Ada", entryPoint: "ui" as const };
+
+  it("records a signed_up event for the person, with the workspace so test accounts can be filtered out", async () => {
+    const sent: Array<{ event: string; properties: Record<string, unknown>; distinctId?: string }> = [];
+    setErrorReporter({ captureException: async () => undefined, capture: async (event, properties, distinctId) => void sent.push({ event, properties: properties ?? {}, distinctId }) });
+    const sql = (async () => [{ workspace_id: "w1" }]) as Sql;
+    await provisionWorkspace(sql, person, {}, () => "abc123");
+    await flushReports();
+    setErrorReporter(null);
+    expect(sent).toEqual([{ event: "signed_up", properties: { workspace_id: "w1" }, distinctId: person.userId }]);
   });
 });
