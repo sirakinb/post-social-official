@@ -18,8 +18,8 @@ Rewardful runs the affiliate program (20% recurring commission for 24 months, se
 
 ## Rewardful dashboard (not in code)
 
-- Campaign: 20% recurring for 24 months. Stripe connected with read-write access.
-- The affiliate sign-up link goes in `AFFILIATE_SIGNUP_URL` in `src/app/affiliates/page.tsx`.
+- Campaign "Friends of Post Social": 20% of every payment, maximum commission period 24 months (set 2026-10-26; it was blank, which pays forever), commissions due after 30 days, 60-day cookie, first-touch attribution. Stripe connected with read-write access.
+- Joining is by approval. The Starter plan has no approval step and "Make this campaign private" needs Growth, so `/affiliates` asks people to apply by email to hello@postsocial.xyz and Aki invites them from Rewardful (Affiliates, Invite affiliates). The open sign-up link (https://post-social.getrewardful.com/signup) is deliberately not on the site.
 - The API secret is not used by the site. Keep it out of files and chat.
 
 ## Checking it works

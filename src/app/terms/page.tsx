@@ -184,9 +184,9 @@ export default function TermsPage() {
                 10. Affiliate program
               </h2>
               <p className="mt-2 text-sm leading-relaxed">
-                Affiliates in our program earn a commission of 20% of the paid
-                invoices of customers they refer, for 24 months from when the
-                customer subscribes. Commission is earned only on payments that
+                Joining the affiliate program is by approval. Affiliates earn a
+                commission of 20% of the paid invoices of customers they refer,
+                for 24 months from the customer&apos;s first payment. Commission is earned only on payments that
                 have been made and not refunded. You may not refer yourself or an
                 account you control. Commissions are tracked and paid out through
                 Rewardful, and you agree to Rewardful&apos;s terms for that. We

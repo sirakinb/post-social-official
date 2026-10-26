@@ -7,10 +7,9 @@ export const metadata: Metadata = {
   description: "Earn 20% of what the customers you refer pay Post Social, every month for 24 months.",
 };
 
-// WAITING ON AKI: the affiliate sign-up link from the Rewardful campaign. Until it is set this
-// points back at this page's own sign-up section, so nothing broken ships. Replace it with the
-// real address (Rewardful, campaign, Links & sign-up) before the page goes to production.
-const AFFILIATE_SIGNUP_URL = "#sign-up";
+// Joining is by approval: people apply by email and Aki invites the ones that fit from Rewardful.
+// Rewardful's plan has no approval step, so its open sign-up link is deliberately not shown here.
+const APPLY_URL = "mailto:hello@postsocial.xyz?subject=Affiliate%20application";
 
 const WHO_FOR = [
   { title: "Friends of Post Social", text: "You like Post Social and know people who would too. Share it with them." },
@@ -19,12 +18,13 @@ const WHO_FOR = [
 ];
 
 const STEPS = [
-  { title: "Sign up", text: "Join the program through the sign-up link. It takes a minute." },
+  { title: "Apply", text: "Email hello@postsocial.xyz with a little about you and where you'd share Post Social. If it's a fit, you get an invite to join." },
   { title: "Share your link", text: "You get a personal link. Anyone who signs up through it is tracked to you." },
   { title: "Get paid", text: "Commissions and payouts are handled through Rewardful, where you can see what you've earned." },
 ];
 
 const FAQ = [
+  { q: "How do I join?", a: "Email hello@postsocial.xyz. We review each application and send an invite to the people we partner with." },
   { q: "How much do I earn?", a: "20% of what the customers you refer pay Post Social, on every paid invoice, for 24 months." },
   { q: "Which payments earn commission?", a: "Payments that have been made and not refunded. Refunded payments don't earn commission." },
   { q: "Can I refer myself?", a: "No. Referring your own account doesn't earn commission." },
@@ -48,8 +48,8 @@ export default function AffiliatesPage() {
             Refer people to Post Social and earn 20% of what they pay, every month for 24 months.
           </p>
           <div className="mt-8">
-            <a href={AFFILIATE_SIGNUP_URL} className="lp-lantern inline-flex h-11 items-center rounded-full px-5 text-sm">
-              Become an affiliate
+            <a href={APPLY_URL} className="lp-lantern inline-flex h-11 items-center rounded-full px-5 text-sm">
+              Apply to join
             </a>
           </div>
         </div>
@@ -100,8 +100,8 @@ export default function AffiliatesPage() {
             ))}
           </div>
           <div className="mt-10 text-center">
-            <a href={AFFILIATE_SIGNUP_URL} className="lp-lantern inline-flex h-11 items-center rounded-full px-5 text-sm">
-              Become an affiliate
+            <a href={APPLY_URL} className="lp-lantern inline-flex h-11 items-center rounded-full px-5 text-sm">
+              Apply to join
             </a>
           </div>
         </section>
