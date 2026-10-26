@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Sql } from "./access";
-import { NUDGE_COPY_TO, NUDGE_FROM, composeEmail, findDue, linkToken, resendSender, runNudgeSweep, unsubscribeUrl, validLinkToken, type Due } from "./nudges";
+import { NUDGE_COPY_TO, NUDGE_FROM, NUDGE_REPLY_TO, composeEmail, findDue, linkToken, resendSender, runNudgeSweep, unsubscribeUrl, validLinkToken, type Due } from "./nudges";
 
 const USER = "11111111-1111-4111-8111-111111111111";
 const due = (kind: Due["kind"], extra: Partial<Due> = {}): Due => ({ user_id: USER, email: "nia@example.com", name: "Nia Test", workspace_id: "w1", kind, ...extra });
@@ -29,7 +29,8 @@ describe("composeEmail", () => {
       const email = composeEmail(due(kind, { platform: "instagram", live_url: "https://instagram.com/p/x" }), app, "https://www.postsocial.xyz/email/unsubscribe?u=1&t=2");
       expect(email.to).toBe("nia@example.com");
       expect(email.text.startsWith("Hi Nia,")).toBe(true);
-      expect(email.text).toContain("Aki\nFounder, Post Social");
+      expect(email.text).toContain("Aki\nPost Social");
+      expect(email.html).toContain("Post Social</td>");
       expect(email.text).toContain("Unsubscribe: https://www.postsocial.xyz/email/unsubscribe?u=1&t=2");
       expect(email.html).toContain('href="https://www.postsocial.xyz/email/unsubscribe?u=1&amp;t=2"');
       expect(email.text).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);
@@ -41,12 +42,22 @@ describe("composeEmail", () => {
     expect(composeEmail(due("no_ai"), app, "u").text).toContain(`${app}/beta/api`);
     const live = composeEmail(due("first_post_live", { platform: "tiktok", live_url: "https://tiktok.com/@a/video/1" }), app, "u");
     expect(live.subject).toBe("Your first post is live");
-    expect(live.text).toContain("went live on TikTok: https://tiktok.com/@a/video/1");
+    expect(live.text).toContain("went live on TikTok.");
+    expect(live.text).toContain("See your post: https://tiktok.com/@a/video/1");
+    expect(live.html).toContain('href="https://tiktok.com/@a/video/1"');
+    // Anything that isn't a plain https link is never put in a button.
+    expect(composeEmail(due("first_post_live", { live_url: "javascript:alert(1)" }), app, "u").html).not.toContain("javascript:");
   });
 
   it("says hello without a name, and escapes names in the HTML", () => {
     expect(composeEmail(due("no_account", { name: null }), app, "u").text.startsWith("Hi there,")).toBe(true);
     expect(composeEmail(due("no_account", { name: "<b>Eve</b>" }), app, "u").html).not.toContain("<b>Eve");
+  });
+
+  it("loads the logo from the public site even when links point elsewhere (dev links go to staging)", () => {
+    const email = composeEmail(due("no_account"), "https://post-social-git-staging-app-build-26.vercel.app", "u");
+    expect(email.html).toContain('src="https://www.postsocial.xyz/email/post-social-icon.png"');
+    expect(email.text).toContain("https://post-social-git-staging-app-build-26.vercel.app/beta/accounts");
   });
 });
 
@@ -109,6 +120,8 @@ describe("resendSender", () => {
     const ok = await resendSender("key", fetchImpl)(composeEmail(due("no_ai"), "https://www.postsocial.xyz", "https://www.postsocial.xyz/email/unsubscribe?u=1&t=2"));
     expect(ok).toBe(true);
     expect(body.from).toBe(NUDGE_FROM);
+    expect(NUDGE_FROM).toBe("Aki <aki@postsocial.xyz>");
+    expect(body.reply_to).toBe(NUDGE_REPLY_TO);
     expect(body.to).toEqual(["nia@example.com"]);
     expect(body.bcc).toEqual([NUDGE_COPY_TO]);
     expect((body.headers as Record<string, string>)["List-Unsubscribe"]).toBe("<https://www.postsocial.xyz/email/unsubscribe?u=1&t=2>");

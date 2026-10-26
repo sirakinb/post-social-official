@@ -3,7 +3,7 @@
 // or stored, except when the email fails to send (see the script).
 import { randomInt } from "node:crypto";
 
-export const BETA_FROM = "Akinyemi <akinyemi@postsocial.xyz>";
+export const BETA_FROM = "Aki <aki@postsocial.xyz>";
 export const BETA_REPLY_TO = "aki.b@pentridgemedia.com";
 export const BETA_SUBJECT = "You're in. Welcome to the Post Social beta";
 export const PROD_SITE_URL = "https://www.postsocial.xyz";

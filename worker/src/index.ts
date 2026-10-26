@@ -144,7 +144,9 @@ if (analyticsPlatforms.length || publicPlatforms.length) {
 // Nudge emails to new customers (backend/lib/nudges.ts), hourly. Off unless NUDGE_EMAILS is
 // "on" and the Resend key, the unsubscribe link secret and the website address are set.
 const nudgeSecret = process.env.EMAIL_LINK_SECRET || "";
-const webAppUrl = (process.env.WEB_APP_HOME || "").replace(/\/beta\/accounts\/?$/, "");
+// Links in the emails: EMAIL_APP_URL if set (dev points it at staging, since dev's WEB_APP_HOME
+// is a local address), otherwise the website from WEB_APP_HOME.
+const webAppUrl = (process.env.EMAIL_APP_URL || process.env.WEB_APP_HOME || "").replace(/\/beta\/accounts\/?$/, "").replace(/\/+$/, "");
 const nudgesOn = process.env.NUDGE_EMAILS === "on" && Boolean(process.env.RESEND_API_KEY && nudgeSecret && webAppUrl);
 log("nudge emails", { on: nudgesOn });
 if (nudgesOn) {
