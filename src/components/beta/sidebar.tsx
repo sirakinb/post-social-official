@@ -89,6 +89,8 @@ export function Sidebar(props: {
 }) {
   const path = usePathname() ?? "/beta";
   const percent = props.plan && props.plan.limit > 0 ? Math.min(100, (props.plan.used / props.plan.limit) * 100) : 0;
+  // The monthly post count lives on the Usage page; the sidebar only warns when it is close.
+  const nearLimit = percent >= 80;
   // On phones the menu folds into a bar at the top; it opens with Menu and closes on arrival.
   const [openOn, setOpenOn] = useState<string | null>(null);
   const open = openOn === path;
@@ -138,7 +140,7 @@ export function Sidebar(props: {
           <SettingsMenu path={path} />
         </div>
 
-        {props.plan && (
+        {props.plan && nearLimit && (
           <Link href="/beta/usage" className="block rounded-[10px] border border-ps-line bg-ps-surface p-3 hover:border-ps-line-strong">
             <div className="flex justify-between text-xs">
               <span className="text-ps-muted">Posts this month</span>
@@ -147,7 +149,7 @@ export function Sidebar(props: {
             <div className="mt-2 h-1 overflow-hidden rounded bg-ps-fg/[0.06]">
               <div className="h-full bg-ps-plum" style={{ width: `${percent}%` }} />
             </div>
-            <div className="mt-2 text-[11px] text-ps-subtle">{props.plan.name} plan · resets {props.plan.resets}</div>
+            <div className="mt-2 text-[11px] text-ps-subtle">Posts reset {props.plan.resets}</div>
           </Link>
         )}
 
