@@ -35,6 +35,7 @@ export async function provisionWorkspace(sql: Sql, caller: Caller, _input: Recor
         [caller.userId, name, slug, caller.displayName.trim() || "Owner", "Workspace created at sign-up"],
       );
       if (!row?.workspace_id) throw new ApiError(500, "Setting up your workspace failed. Try again.");
+      await addSampleDraft(sql, row.workspace_id, caller.userId);
       return { workspace_id: row.workspace_id };
     } catch (error) {
       if (attempt < 2 && /workspaces_slug|duplicate key/i.test(String((error as Error)?.message))) continue;
@@ -42,4 +43,25 @@ export async function provisionWorkspace(sql: Sql, caller: Caller, _input: Recor
     }
   }
   throw new ApiError(500, "Setting up your workspace failed. Try again.");
+}
+
+// One example draft in a brand-new workspace, so Drafts and Create aren't empty on day one.
+export const SAMPLE_DRAFT = "Hello from Post Social. (This is an example draft: change the words, pick your accounts, then post it now or schedule it. You can delete it any time.)";
+
+// Only in a workspace this person created in the last few minutes and that has no posts yet,
+// so a returning or invited person never gets one. Best effort: sign-up never fails over it.
+export async function addSampleDraft(sql: Sql, workspaceId: string, userId: string) {
+  try {
+    await sql(
+      `INSERT INTO public.posts (workspace_id, actor_id, entry_point, caption, status, effective_approval_policy)
+       SELECT w.id, a.id, 'ui', $3, 'draft', w.default_approval_policy
+       FROM public.workspaces w
+       JOIN public.actors a ON a.workspace_id = w.id AND a.user_id = $2 AND a.kind = 'user'
+       WHERE w.id = $1 AND w.created_by = $2 AND w.created_at > now() - interval '10 minutes'
+         AND NOT EXISTS (SELECT 1 FROM public.posts p WHERE p.workspace_id = w.id)`,
+      [workspaceId, userId, SAMPLE_DRAFT],
+    );
+  } catch {
+    // The workspace is ready either way.
+  }
 }

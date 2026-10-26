@@ -32,6 +32,7 @@ import {
 } from "../../lib/oauth/server";
 import { usageReport } from "../../lib/usage";
 import { provisionWorkspace } from "../../lib/signup";
+import { optOut, validLinkToken } from "../../lib/nudges";
 import { billingActions, handleStripeEvent, verifyStripeSignature, type Stripe } from "../../lib/billing";
 import { mediaLinks } from "../../lib/media/links";
 import { tiktokCreatorInfo } from "../../lib/connections/tiktok-creator";
@@ -88,6 +89,7 @@ export function createApiHandler(deps: ApiHandlerDeps) {
     if (path === "/keys") return personRoute(deps, request);
     if (path === "/oauth/consent") return consentRoute(deps, request);
     if (path === "/waitlist") return waitlistRoute(deps, request);
+    if (path === "/email/unsubscribe") return unsubscribeRoute(deps, request);
     if (path === "/internal/limits") return internalLimitsRoute(deps, request);
     if (path === "/stripe/webhook") return stripeWebhookRoute(deps, request);
 
@@ -155,6 +157,34 @@ async function waitlistRoute(deps: ApiHandlerDeps, request: Request) {
     if (error instanceof ApiError) return json(error.status, errorBody(error.status, error.message), retryHeaders(error));
     reportError(error, { area: "waitlist" });
     return json(500, errorBody(500, "Joining the waitlist failed. Try again."));
+  }
+}
+
+// The unsubscribe link at the bottom of nudge emails: the web page posts its signed user id
+// here. No sign-in needed; the signature is the proof. Saying it twice is fine.
+async function unsubscribeRoute(deps: ApiHandlerDeps, request: Request) {
+  if (request.method !== "POST") return json(405, errorBody(405, "Send a POST with {\"u\": ..., \"t\": ...}."), { Allow: "POST" });
+  let secret = "";
+  try {
+    secret = deps.setting?.("EMAIL_LINK_SECRET") ?? "";
+  } catch {
+    // Not set up in this environment.
+  }
+  if (!secret) return json(404, errorBody(404, "Not found."));
+  try {
+    const text = await request.text();
+    if (text.length > 1024) throw new ApiError(413, "The request is too large.");
+    let input: { u?: unknown; t?: unknown } | null = null;
+    try { input = JSON.parse(text); } catch { /* answered below */ }
+    const userId = typeof input?.u === "string" ? input.u : "";
+    const token = typeof input?.t === "string" ? input.t : "";
+    if (!(await validLinkToken(secret, userId, token))) throw new ApiError(400, "This unsubscribe link isn't valid. Use the link from the email, or write to support@postsocial.xyz.");
+    await optOut(deps.sql, userId);
+    return json(200, { unsubscribed: true });
+  } catch (error) {
+    if (error instanceof ApiError) return json(error.status, errorBody(error.status, error.message));
+    reportError(error, { area: "unsubscribe" });
+    return json(500, errorBody(500, "Unsubscribing failed. Try again, or write to support@postsocial.xyz."));
   }
 }
 
