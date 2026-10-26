@@ -112,8 +112,10 @@ export default function TermsPage() {
                 charge. Connecting more requires a payment card and a monthly
                 subscription priced per connected account, as shown on our{" "}
                 <Link href="/docs/billing" className="text-accent hover:text-accent-hover underline">pricing and billing page</Link>.
-                Changes in the number of connected accounts during a billing
-                month are charged or credited by the day on the next invoice.
+                The first paid account is charged when you add it. Accounts
+                added later in a billing month are charged right away for the
+                days left in that month; removing an account lowers later
+                charges and is not refunded for the current month.
                 Posts to X are charged per post at the listed rates, up to the
                 monthly limit you set; at that limit, X posts pause until the
                 next month.

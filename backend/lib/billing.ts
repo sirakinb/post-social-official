@@ -1,10 +1,12 @@
 // Billing with Stripe. Each workspace has at most one subscription with one item, "Post
-// Social accounts", whose quantity is the number of connected accounts. The price is
-// graduated (first 2 free, then $5, $2.50, $1), so Stripe works out the sliding scale and
-// prorates every change by the day. An active subscription puts the workspace on the Paid
-// plan; without one it stays on Free (2 accounts). Cards, invoices and cancelling happen on
+// Social accounts", whose quantity is the number of connected accounts, and never less than 3:
+// paying starts with the 3rd account, charged in full at checkout. The price is graduated
+// (first 2 free, then $5, $2.50, $1), so Stripe works out the sliding scale. Each account added
+// later is charged at once for the days left in the billing month; removing one lowers the
+// next bill without a refund. An active subscription puts the workspace on the Paid plan;
+// without one it stays on Free (2 accounts). Cards, invoices and cancelling happen on
 // Stripe's own pages (Checkout and the customer portal); we never see card details.
-import { ApiError, membership, requireUuid, type Caller, type Sql } from "./access";
+import { ApiError, isAgentCaller, membership, requireUuid, type Caller, type Sql } from "./access";
 import { FREE_ACCOUNTS, X_PRICES, monthlyBill } from "./pricing";
 import { originAllowedFor } from "./connections/service";
 import { trackEvent } from "./telemetry";
@@ -13,6 +15,9 @@ export const ACCOUNTS_PRICE_LOOKUP_KEY = "post_social_accounts_monthly";
 
 // Statuses that keep the Paid plan. past_due keeps it while Stripe retries the card.
 const PAID_STATUSES = new Set(["active", "trialing", "past_due"]);
+
+// What the subscription bills for: the connected accounts, and at least the first paid one.
+export const billedQuantity = (connected: number) => Math.max(connected, FREE_ACCOUNTS + 1);
 
 type Params = Record<string, unknown>;
 
@@ -121,19 +126,30 @@ export async function recordSubscription(sql: Sql, workspaceId: string, subscrip
   return paid;
 }
 
-// Brings the subscription's quantity in line with the connected accounts. Stripe prorates
-// the change by the day. Safe to call often: it does nothing when they already match.
+// Brings the subscription's quantity in line with the connected accounts. Only connecting an
+// account charges anything: right away, for the days left in the billing month (always_invoice),
+// so the next charge stays the plain monthly price. A removed one just lowers the next bill (no
+// refund). A subscription that is cancelling is left alone, and one billed for fewer than 3
+// accounts (from before checkout started at 3) is never raised just to reach 3.
+// Safe to call often: it does nothing when they already match.
 export async function syncAccountQuantity(deps: BillingDeps, workspaceId: string) {
   if (!deps.stripe) return null;
   const state = await workspaceState(deps.sql, workspaceId);
   if (!state?.stripe_subscription_id || !PAID_STATUSES.has(state.subscription_status ?? "")) return null;
-  if (state.billed_quantity === state.connected) return state.connected;
-  const subscription = await deps.stripe.request<{ items: { data: { id: string }[] } }>("GET", `/v1/subscriptions/${state.stripe_subscription_id}`);
+  if (state.billed_quantity === billedQuantity(state.connected)) return state.billed_quantity;
+  const subscription = await deps.stripe.request<{ cancel_at_period_end?: boolean; cancel_at?: number | null; items: { data: { id: string; quantity?: number }[] } }>("GET", `/v1/subscriptions/${state.stripe_subscription_id}`);
   const item = subscription.items.data[0];
   if (!item) throw new Error(`Subscription ${state.stripe_subscription_id} has no items`);
-  await deps.stripe.request("POST", `/v1/subscription_items/${item.id}`, { quantity: state.connected, proration_behavior: "create_prorations" });
-  await deps.sql(`UPDATE public.workspace_billing SET billed_quantity = $2, updated_at = now() WHERE workspace_id = $1`, [workspaceId, state.connected]);
-  return state.connected;
+  const current = item.quantity ?? state.billed_quantity ?? 0;
+  const cancelling = Boolean(subscription.cancel_at_period_end || subscription.cancel_at);
+  const quantity = state.connected > current ? billedQuantity(state.connected) : Math.min(current, billedQuantity(state.connected));
+  if (cancelling || quantity === current) {
+    await deps.sql(`UPDATE public.workspace_billing SET billed_quantity = $2, updated_at = now() WHERE workspace_id = $1`, [workspaceId, current]);
+    return current;
+  }
+  await deps.stripe.request("POST", `/v1/subscription_items/${item.id}`, { quantity, proration_behavior: quantity > current ? "always_invoice" : "none" });
+  await deps.sql(`UPDATE public.workspace_billing SET billed_quantity = $2, updated_at = now() WHERE workspace_id = $1`, [workspaceId, quantity]);
+  return quantity;
 }
 
 // The Billing page: plan, accounts, this month's estimate, X cap, and what the person can do.
@@ -163,6 +179,8 @@ export async function billingStatus(deps: BillingDeps, caller: Caller, input: Pa
 }
 
 type Card = { brand: string; last4: string; exp_month: number; exp_year: number };
+// A saved payment method: a card, or Stripe Link (a card kept in the person's Link account).
+type PaymentMethod = { type?: string; card?: Card; link?: { email?: string | null } };
 type StripeInvoice = { id: string; number: string | null; created: number; period_start: number; period_end: number; total: number; status: string; invoice_pdf: string | null; hosted_invoice_url: string | null };
 const iso = (seconds: number | null | undefined) => (seconds ? new Date(seconds * 1000).toISOString() : null);
 const monthStart = () => {
@@ -185,14 +203,14 @@ async function stripeDetails(deps: BillingDeps, state: Awaited<ReturnType<typeof
       ...(xSpent > 0 ? [xLine(xBillable)] : []),
     ],
   };
-  const empty = { upcoming: comped ? null : ourUpcoming, card: null as Card | null, details: null as { email: string | null; name: string | null; address: string | null } | null, invoices: [] as Array<Record<string, unknown>> };
+  const empty = { upcoming: comped ? null : ourUpcoming, card: null as Card | null, link: null as { email: string | null } | null, details: null as { email: string | null; name: string | null; address: string | null } | null, invoices: [] as Array<Record<string, unknown>> };
   if (!deps.stripe || !state.stripe_customer_id) return empty;
   const stripe = deps.stripe;
   const customerId = state.stripe_customer_id;
   const [customer, subscription, invoices, preview] = await Promise.all([
-    stripe.request<{ email: string | null; name: string | null; address: Record<string, string | null> | null; invoice_settings?: { default_payment_method?: { card?: Card } | null } }>("GET", `/v1/customers/${customerId}`, { expand: ["invoice_settings.default_payment_method"] }).catch(() => null),
+    stripe.request<{ email: string | null; name: string | null; address: Record<string, string | null> | null; invoice_settings?: { default_payment_method?: PaymentMethod | null } }>("GET", `/v1/customers/${customerId}`, { expand: ["invoice_settings.default_payment_method"] }).catch(() => null),
     state.stripe_subscription_id
-      ? stripe.request<{ default_payment_method?: { card?: Card } | null }>("GET", `/v1/subscriptions/${state.stripe_subscription_id}`, { expand: ["default_payment_method"] }).catch(() => null)
+      ? stripe.request<{ default_payment_method?: PaymentMethod | null }>("GET", `/v1/subscriptions/${state.stripe_subscription_id}`, { expand: ["default_payment_method"] }).catch(() => null)
       : null,
     stripe.request<{ data: StripeInvoice[] }>("GET", "/v1/invoices", { customer: customerId, limit: 12 }).catch(() => null),
     state.stripe_subscription_id && PAID_STATUSES.has(state.subscription_status ?? "")
@@ -200,7 +218,8 @@ async function stripeDetails(deps: BillingDeps, state: Awaited<ReturnType<typeof
       : null,
   ]);
   const a = customer?.address;
-  const card = subscription?.default_payment_method?.card ?? customer?.invoice_settings?.default_payment_method?.card ?? null;
+  const method = subscription?.default_payment_method ?? customer?.invoice_settings?.default_payment_method ?? null;
+  const card = method?.card ?? null;
   const upcoming = preview
     ? {
         total: Math.round((preview.total / 100 + xBillable) * 100) / 100,
@@ -215,6 +234,7 @@ async function stripeDetails(deps: BillingDeps, state: Awaited<ReturnType<typeof
   return {
     upcoming: comped ? null : upcoming,
     card: card ? { brand: card.brand, last4: card.last4, exp_month: card.exp_month, exp_year: card.exp_year } : null,
+    link: !card && method?.type === "link" ? { email: method.link?.email ?? null } : null,
     details: customer
       ? { email: customer.email, name: customer.name, address: a ? [a.line1, a.line2, a.city, a.state, a.postal_code, a.country].filter(Boolean).join(", ") || null : null }
       : null,
@@ -245,7 +265,8 @@ function rewardfulReferral(input: Params) {
   return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) ? value : null;
 }
 
-// Sends the person to Stripe Checkout to add a card and start the subscription.
+// Sends the person to Stripe Checkout to start the subscription: the 3rd account (or every
+// account past the free 2, if they already have more) is charged there and then.
 export async function startCheckout(deps: BillingDeps, caller: Caller, input: Params) {
   const workspaceId = requireUuid(input.workspace_id, "Workspace");
   await managerOf(deps.sql, caller, workspaceId);
@@ -254,13 +275,16 @@ export async function startCheckout(deps: BillingDeps, caller: Caller, input: Pa
   if (state.plan_id !== "free" && state.plan_id !== "paid") throw new ApiError(409, "This workspace isn't billed. Contact support@postsocial.xyz to change that.");
   if (state.stripe_subscription_id && PAID_STATUSES.has(state.subscription_status ?? "")) throw new ApiError(409, "Billing is already set up. Use Manage billing to change your card.");
   const referral = rewardfulReferral(input);
+  // Receipts go to the person paying; without this, Stripe Link's saved email would win.
+  const email = state.stripe_customer_id || isAgentCaller(caller) ? null : await signedInEmail(deps.sql, caller.userId);
   const session = await stripe.request<{ url: string }>("POST", "/v1/checkout/sessions", {
     mode: "subscription",
     // The workspace is in the metadata below; this field carries the affiliate's referral when
     // there is one (the workspace id otherwise, as before).
     client_reference_id: referral ?? workspaceId,
     customer: state.stripe_customer_id ?? undefined,
-    line_items: [{ price: await accountsPriceId(stripe), quantity: Math.max(1, state.connected) }],
+    customer_email: email ?? undefined,
+    line_items: [{ price: await accountsPriceId(stripe), quantity: billedQuantity(state.connected) }],
     subscription_data: { metadata: { workspace_id: workspaceId } },
     metadata: { workspace_id: workspaceId, ...datafastMetadata(input) },
     payment_method_collection: "always",
@@ -269,6 +293,11 @@ export async function startCheckout(deps: BillingDeps, caller: Caller, input: Pa
     cancel_url: `${returnBase(deps, input)}/beta/billing`,
   });
   return { url: session.url };
+}
+
+async function signedInEmail(sql: Sql, userId: string) {
+  const [row] = await sql<{ email: string | null }>(`SELECT email FROM auth.users WHERE id = $1`, [userId]).catch(() => []);
+  return row?.email ?? null;
 }
 
 // Back from Checkout: confirms the session belongs to this workspace and turns on Paid,
@@ -324,7 +353,7 @@ export function accountLimitMessage(error: unknown, webAppUrl?: string): string 
   const match = message.match(/Your (.+?) plan allows (\d+) connected accounts/);
   if (!match) return null;
   if (match[1] === "Free") {
-    return `Your first ${FREE_ACCOUNTS} accounts are free. To connect more, add a card on the Billing page${webAppUrl ? ` (${webAppUrl}/beta/billing)` : ""}: $5 a month per account, billed by the day.`;
+    return `Your first ${FREE_ACCOUNTS} accounts are free. To connect more, upgrade on the Billing page${webAppUrl ? ` (${webAppUrl}/beta/billing)` : ""}: $5 a month per account.`;
   }
   return `Your ${match[1]} plan allows ${match[2]} connected accounts. Disconnect one first, or contact support@postsocial.xyz.`;
 }
