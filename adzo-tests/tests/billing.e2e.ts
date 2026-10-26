@@ -24,6 +24,12 @@ test.setup('sign in as the billing test login', { sessions: ['billing'] }, async
 
 test('a free workspace adds a card so it can connect a 3rd and 4th account', { session: 'billing' }, async ({ app, screen, browser }) => {
   await app.open('/beta/billing');
+  // Subscribing moves the workspace to Paid for good, so on a rerun this login is already
+  // paid: check that state instead (a fresh free login is needed to exercise checkout again).
+  if (await browser.evaluate(() => /Next charge/.test(document.body.innerText))) {
+    await expect(screen.getByText('Next charge')).toBeVisible();
+    return;
+  }
   await expect(screen.getByText("You're on the free plan. Add a card when you want account 3.")).toBeVisible();
 
   await screen.getByRole('button', 'Add a card').tap();

@@ -18,7 +18,7 @@ describe("Sidebar", () => {
     expect(screen.getByRole("link", { name: "API/MCP" })).toHaveAttribute("href", "/beta/api");
   });
 
-  it("keeps General, Billing and On your phone in a Settings dropdown", async () => {
+  it("keeps General and Billing in a Settings dropdown, with no phone setup page", async () => {
     const { fireEvent } = await import("@testing-library/react");
     render(<Sidebar {...props} />);
     const settings = screen.getByRole("button", { name: "Settings" });
@@ -30,7 +30,6 @@ describe("Sidebar", () => {
     expect(menu.getAllByRole("link").map((l) => [l.textContent, l.getAttribute("href")])).toEqual([
       ["General", "/beta/settings"],
       ["Billing", "/beta/billing"],
-      ["On your phone", "/beta/phone"],
     ]);
   });
 
@@ -104,5 +103,18 @@ describe("Sidebar", () => {
     expect(card).toHaveTextContent("1 of 3");
     rerender(<Sidebar {...props} started={null} />);
     expect(screen.queryByRole("link", { name: /Get started/ })).toBeNull();
+  });
+
+  it("keeps the monthly post count out of the sidebar until the limit is close", () => {
+    const plan = { name: "Paid", used: 10, limit: 3000, resets: "Nov 1" };
+    const { rerender } = render(<Sidebar {...props} plan={plan} />);
+    expect(screen.queryByText("Posts this month")).toBeNull();
+    rerender(<Sidebar {...props} plan={{ ...plan, used: 2399 }} />);
+    expect(screen.queryByText("Posts this month")).toBeNull();
+    rerender(<Sidebar {...props} plan={{ ...plan, used: 2400 }} />);
+    const card = screen.getByRole("link", { name: /Posts this month/ });
+    expect(card).toHaveAttribute("href", "/beta/usage");
+    expect(card).toHaveTextContent("2,400 / 3,000");
+    expect(card).toHaveTextContent("Posts reset Nov 1");
   });
 });

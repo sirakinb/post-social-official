@@ -26,12 +26,11 @@ const ITEMS: Item[] = [
   { href: "/beta/usage", label: "Usage", match: (p) => p.startsWith("/beta/usage"), icon: icon(<><path d="M21 12a9 9 0 1 1-9-9" /><path d="M21 12h-9V3" /></>) },
 ];
 // Pinned under the main list: the public setup guide (opens in a new tab) and Settings, a
-// dropdown holding the workspace settings, Billing and the phone setup page.
+// dropdown holding the workspace settings and Billing.
 const DOCS = { href: "/docs", label: "Docs", icon: icon(<><path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H19v15H5.5A1.5 1.5 0 0 0 4 19.5z" /><path d="M4 19.5A1.5 1.5 0 0 0 5.5 21H19v-3" /></>) };
-const PHONE: Item = { href: "/beta/phone", label: "On your phone", match: (p) => p.startsWith("/beta/phone"), icon: icon(<><rect x="6" y="2.5" width="12" height="19" rx="2.5" /><path d="M11 18h2" /></>) };
 const BILLING: Item = { href: "/beta/billing", label: "Billing", match: (p) => p.startsWith("/beta/billing"), icon: icon(<><rect x="2.5" y="5" width="19" height="14" rx="2" /><path d="M2.5 10h19M7 15h3" /></>) };
 const GENERAL: Item = { href: "/beta/settings", label: "General", match: (p) => p.startsWith("/beta/settings"), icon: icon(<><path d="M4 6h16M4 12h16M4 18h10" /></>) };
-const SETTINGS_ITEMS = [GENERAL, BILLING, PHONE];
+const SETTINGS_ITEMS = [GENERAL, BILLING];
 const SETTINGS_ICON = icon(<><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></>);
 
 const linkClass = "flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[13px] transition-colors";
@@ -89,6 +88,8 @@ export function Sidebar(props: {
 }) {
   const path = usePathname() ?? "/beta";
   const percent = props.plan && props.plan.limit > 0 ? Math.min(100, (props.plan.used / props.plan.limit) * 100) : 0;
+  // The monthly post count lives on the Usage page; the sidebar only warns when it is close.
+  const nearLimit = percent >= 80;
   // On phones the menu folds into a bar at the top; it opens with Menu and closes on arrival.
   const [openOn, setOpenOn] = useState<string | null>(null);
   const open = openOn === path;
@@ -138,7 +139,7 @@ export function Sidebar(props: {
           <SettingsMenu path={path} />
         </div>
 
-        {props.plan && (
+        {props.plan && nearLimit && (
           <Link href="/beta/usage" className="block rounded-[10px] border border-ps-line bg-ps-surface p-3 hover:border-ps-line-strong">
             <div className="flex justify-between text-xs">
               <span className="text-ps-muted">Posts this month</span>
@@ -147,7 +148,7 @@ export function Sidebar(props: {
             <div className="mt-2 h-1 overflow-hidden rounded bg-ps-fg/[0.06]">
               <div className="h-full bg-ps-plum" style={{ width: `${percent}%` }} />
             </div>
-            <div className="mt-2 text-[11px] text-ps-subtle">{props.plan.name} plan · resets {props.plan.resets}</div>
+            <div className="mt-2 text-[11px] text-ps-subtle">Posts reset {props.plan.resets}</div>
           </Link>
         )}
 
