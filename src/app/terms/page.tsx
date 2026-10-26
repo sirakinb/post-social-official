@@ -184,7 +184,8 @@ export default function TermsPage() {
                 10. Affiliate program
               </h2>
               <p className="mt-2 text-sm leading-relaxed">
-                Joining the affiliate program is by approval. Affiliates earn a
+                Anyone may join the affiliate program, and we may remove an
+                affiliate at any time. Affiliates earn a
                 commission of 20% of the paid invoices of customers they refer,
                 for 24 months from the customer&apos;s first payment. Commission is earned only on payments that
                 have been made and not refunded. You may not refer yourself or an
