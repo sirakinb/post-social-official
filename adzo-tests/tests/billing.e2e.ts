@@ -22,10 +22,13 @@ async function codeFor(address: string, since: number, timeoutMs = 120_000): Pro
   throw new Error('No code arrived for ' + address);
 }
 
+// A login that hasn't paid yet: switch to a fresh one to run checkout again.
+const LOGIN = 'billing_3rd_b';
+
 // Signs the billing login up on its first run and in after that (an unconfirmed one gets a
 // code, like at sign-up).
-test.setup('sign in as the billing test login', { sessions: ['billing_3rd'] }, async ({ app, screen, session, browser }) => {
-  const user = credentials.user('billing_3rd');
+test.setup('sign in as the billing test login', { sessions: [LOGIN] }, async ({ app, screen, session, browser }) => {
+  const user = credentials.user(LOGIN);
   await app.open('/beta/signup');
   await screen.getByLabel('Name').fill('Billie Test');
   await screen.getByLabel('Email').fill(user.username);
@@ -46,11 +49,11 @@ test.setup('sign in as the billing test login', { sessions: ['billing_3rd'] }, a
     await screen.getByRole('button', 'Confirm email').tap();
   }
   await browser.waitForURL(/\/beta\/accounts/, { timeout: 60_000 });
-  await session.save('billing_3rd');
+  await session.save(LOGIN);
 });
 
-test('a free workspace pays $5 for its 3rd account', { session: 'billing_3rd' }, async ({ app, screen, browser }) => {
-  const user = credentials.user('billing_3rd');
+test('a free workspace pays $5 for its 3rd account', { session: LOGIN }, async ({ app, screen, browser }) => {
+  const user = credentials.user(LOGIN);
   await app.open('/beta/billing');
   // Paying moves the workspace to Paid for good, so on a rerun this login is already paid:
   // check that state instead (a fresh free login is needed to exercise checkout again).
