@@ -235,11 +235,15 @@ describe("syncAccountQuantity", () => {
     expect(calls.at(-1)).toEqual({ method: "POST", path: "/v1/subscription_items/si_1", params: { quantity: 3, proration_behavior: "none" } });
   });
 
-  it("never charges a cancelling subscription", async () => {
-    const { sql } = fakeSql({ plan_id: "paid", plan_name: "Paid", connected: 4, stripe_subscription_id: "sub_1", subscription_status: "active", billed_quantity: 3 });
-    const { stripe, calls } = fakeStripe({ "GET /v1/subscriptions/sub_1": { cancel_at_period_end: true, items: { data: [{ id: "si_1", quantity: 3 }] } } });
-    await expect(syncAccountQuantity({ sql, stripe, webAppUrl: "" }, WORKSPACE)).resolves.toBe(3);
-    expect(calls.filter((c) => c.method === "POST")).toEqual([]);
+  it("leaves a cancelling subscription alone unless an account is added, which is still charged", async () => {
+    const idle = fakeStripe({ "GET /v1/subscriptions/sub_1": { cancel_at_period_end: true, items: { data: [{ id: "si_1", quantity: 0 }] } } });
+    await syncAccountQuantity({ sql: fakeSql({ plan_id: "paid", plan_name: "Paid", connected: 0, stripe_subscription_id: "sub_1", subscription_status: "active", billed_quantity: 0 }).sql, stripe: idle.stripe, webAppUrl: "" }, WORKSPACE);
+    await syncAccountQuantity({ sql: fakeSql({ plan_id: "paid", plan_name: "Paid", connected: 1, stripe_subscription_id: "sub_1", subscription_status: "active", billed_quantity: 5 }).sql, stripe: fakeStripe({ "GET /v1/subscriptions/sub_1": { cancel_at_period_end: true, items: { data: [{ id: "si_1", quantity: 5 }] } } }).stripe, webAppUrl: "" }, WORKSPACE);
+    expect(idle.calls.filter((c) => c.method === "POST")).toEqual([]);
+
+    const adding = fakeStripe({ "GET /v1/subscriptions/sub_1": { cancel_at_period_end: true, items: { data: [{ id: "si_1", quantity: 3 }] } } });
+    await syncAccountQuantity({ sql: fakeSql({ plan_id: "paid", plan_name: "Paid", connected: 4, stripe_subscription_id: "sub_1", subscription_status: "active", billed_quantity: 3 }).sql, stripe: adding.stripe, webAppUrl: "" }, WORKSPACE);
+    expect(adding.calls.at(-1)).toEqual({ method: "POST", path: "/v1/subscription_items/si_1", params: { quantity: 4, proration_behavior: "always_invoice" } });
   });
 
   it("doesn't raise an older subscription to 3 accounts unless an account was added", async () => {
