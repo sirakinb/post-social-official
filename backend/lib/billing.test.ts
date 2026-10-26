@@ -15,6 +15,7 @@ function fakeSql(state: State, role = "owner") {
   const sql = (async (query: string, params: unknown[] = []) => {
     if (query.includes("FROM public.workspace_members m")) return [{ role, actor_id: "actor-1" }];
     if (query.includes("FROM public.plans p")) return [state];
+    if (query.includes("FROM auth.users")) return [{ email: "ada@example.com" }];
     writes.push({ query, params });
     return [];
   }) as Sql;
@@ -111,14 +112,15 @@ describe("billingStatus", () => {
 });
 
 describe("startCheckout", () => {
-  it("opens Stripe Checkout for this workspace at its account count", async () => {
+  it("opens Stripe Checkout charging the 3rd account, with the signed-in email for receipts", async () => {
     const { sql } = fakeSql({ plan_id: "free", plan_name: "Free", connected: 2 });
     const { stripe, calls } = fakeStripe({ "GET /v1/prices": { data: [{ id: "price_accounts" }] }, "POST /v1/checkout/sessions": { url: "https://checkout.stripe.com/c/pay/cs_test" } });
     const result = await startCheckout({ sql, stripe, webAppUrl: "https://www.postsocial.xyz" }, person, { workspace_id: WORKSPACE });
     expect(result.url).toBe("https://checkout.stripe.com/c/pay/cs_test");
     const session = calls.find((c) => c.path === "/v1/checkout/sessions")!.params!;
     expect(session).toMatchObject({ mode: "subscription", client_reference_id: WORKSPACE, metadata: { workspace_id: WORKSPACE }, subscription_data: { metadata: { workspace_id: WORKSPACE } } });
-    expect(session.line_items).toEqual([{ price: "price_accounts", quantity: 2 }]);
+    expect(session.line_items).toEqual([{ price: "price_accounts", quantity: 3 }]);
+    expect(session.customer_email).toBe("ada@example.com");
     expect(session.success_url).toBe("https://www.postsocial.xyz/beta/billing?checkout={CHECKOUT_SESSION_ID}");
   });
 
@@ -218,17 +220,25 @@ describe("confirmCheckout", () => {
 });
 
 describe("syncAccountQuantity", () => {
-  it("updates Stripe's quantity with proration when accounts changed", async () => {
+  it("charges a new account right away for the rest of the billing month", async () => {
     const { sql, writes } = fakeSql({ plan_id: "paid", plan_name: "Paid", connected: 5, stripe_subscription_id: "sub_1", subscription_status: "active", billed_quantity: 4 });
-    const { stripe, calls } = fakeStripe({ "GET /v1/subscriptions/sub_1": { items: { data: [{ id: "si_1" }] } } });
+    const { stripe, calls } = fakeStripe({ "GET /v1/subscriptions/sub_1": { items: { data: [{ id: "si_1", quantity: 4 }] } } });
     await expect(syncAccountQuantity({ sql, stripe, webAppUrl: "" }, WORKSPACE)).resolves.toBe(5);
-    expect(calls.at(-1)).toEqual({ method: "POST", path: "/v1/subscription_items/si_1", params: { quantity: 5, proration_behavior: "create_prorations" } });
+    expect(calls.at(-1)).toEqual({ method: "POST", path: "/v1/subscription_items/si_1", params: { quantity: 5, proration_behavior: "always_invoice" } });
     expect(writes[0].params).toEqual([WORKSPACE, 5]);
+  });
+
+  it("lowers the next bill when an account goes, without a refund, and never below the 3rd account", async () => {
+    const { sql } = fakeSql({ plan_id: "paid", plan_name: "Paid", connected: 1, stripe_subscription_id: "sub_1", subscription_status: "active", billed_quantity: 5 });
+    const { stripe, calls } = fakeStripe({ "GET /v1/subscriptions/sub_1": { items: { data: [{ id: "si_1", quantity: 5 }] } } });
+    await expect(syncAccountQuantity({ sql, stripe, webAppUrl: "" }, WORKSPACE)).resolves.toBe(3);
+    expect(calls.at(-1)).toEqual({ method: "POST", path: "/v1/subscription_items/si_1", params: { quantity: 3, proration_behavior: "none" } });
   });
 
   it("does nothing when the count matches or there is no subscription", async () => {
     const { stripe, calls } = fakeStripe();
     await syncAccountQuantity({ sql: fakeSql({ plan_id: "paid", plan_name: "Paid", connected: 4, stripe_subscription_id: "sub_1", subscription_status: "active", billed_quantity: 4 }).sql, stripe, webAppUrl: "" }, WORKSPACE);
+    await syncAccountQuantity({ sql: fakeSql({ plan_id: "paid", plan_name: "Paid", connected: 2, stripe_subscription_id: "sub_1", subscription_status: "active", billed_quantity: 3 }).sql, stripe, webAppUrl: "" }, WORKSPACE);
     await syncAccountQuantity({ sql: fakeSql({ plan_id: "free", plan_name: "Free", connected: 2 }).sql, stripe, webAppUrl: "" }, WORKSPACE);
     expect(calls).toEqual([]);
   });

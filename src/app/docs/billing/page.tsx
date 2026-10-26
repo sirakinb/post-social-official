@@ -80,12 +80,12 @@ export default function BillingDocsPage() {
 
         <Section id="usage" title="Only pay for what you use">
           <p>
-            You pay at the start of each billing month for the accounts you have then. Connect an account halfway through the month and the next invoice includes it for the days you had it;
-            disconnect one and the unused days are credited back. Nothing to switch on: connecting and disconnecting in Post Social is enough.
+            Your {FREE_ACCOUNTS + 1}rd account is charged when you add it, and that day becomes your billing date. Each account you connect after that is charged right away for the days left in your
+            billing month, then it&apos;s part of your monthly charge. Disconnect one and your next charge goes down. Nothing to switch on: connecting and disconnecting in Post Social is enough.
           </p>
           <p>
-            Example: you have 4 accounts ({money(monthlyBill(4).total)} a month) and connect a 5th halfway through. The next invoice adds about {money((monthlyBill(5).total - monthlyBill(4).total) / 2)} for
-            the half month, then {money(monthlyBill(5).total)} for the month ahead.
+            Example: you have 4 accounts ({money(monthlyBill(4).total)} a month) and connect a 5th halfway through your billing month. You&apos;re charged about{" "}
+            {money((monthlyBill(5).total - monthlyBill(4).total) / 2)} that day, then {money(monthlyBill(5).total)} a month from your next billing date.
           </p>
         </Section>
 
