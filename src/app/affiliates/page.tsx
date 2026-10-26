@@ -13,9 +13,9 @@ export const metadata: Metadata = {
 const AFFILIATE_SIGNUP_URL = "#sign-up";
 
 const WHO_FOR = [
-  { title: "Creators", text: "You already post about the tools you use. Share the one that runs your posting." },
-  { title: "Social media managers", text: "You set up accounts for other people. Refer them and earn on what they pay." },
-  { title: "Agencies", text: "You manage many brands. Recommend Post Social to the ones that fit." },
+  { title: "Friends of Post Social", text: "You like Post Social and know people who would too. Share it with them." },
+  { title: "Creators who use AI tools", text: "You already work with Claude, ChatGPT or your own agent. Show people how you post with it." },
+  { title: "Agencies and operators", text: "You run social media for other people or brands. Recommend Post Social to the ones that fit." },
 ];
 
 const STEPS = [
@@ -56,7 +56,7 @@ export default function AffiliatesPage() {
 
         <section aria-labelledby="who-for" className="mt-20">
           <Label>Who it&apos;s for</Label>
-          <h2 id="who-for" className="lp-h2 mt-3">People who talk about social media tools.</h2>
+          <h2 id="who-for" className="lp-h2 mt-3">People who&apos;d recommend Post Social.</h2>
           <ul className="mt-8 grid gap-3 sm:grid-cols-3">
             {WHO_FOR.map((item) => (
               <li key={item.title} className="lp-card p-5">
@@ -65,17 +65,6 @@ export default function AffiliatesPage() {
               </li>
             ))}
           </ul>
-        </section>
-
-        <section aria-labelledby="offer" className="mt-20">
-          <Label>The offer</Label>
-          <h2 id="offer" className="lp-h2 mt-3">20% recurring commission.</h2>
-          <div className="lp-card mt-8 p-6">
-            <p className="text-5xl font-medium tracking-[-0.03em] text-[#FFC48A]">20%</p>
-            <p className="mt-3 leading-relaxed text-[#FAF6F0]/75">
-              of what the customers you refer pay, on every payment for 24 months. Not just the first one.
-            </p>
-          </div>
         </section>
 
         <section aria-labelledby="how-it-works" className="mt-20">

@@ -15,13 +15,13 @@ describe("AffiliatesPage", () => {
 
   it("says who it is for, how it works and answers common questions", () => {
     render(<AffiliatesPage />);
-    for (const name of ["Creators", "Social media managers", "Agencies", "Sign up", "Share your link", "Get paid"]) expect(screen.getByRole("heading", { level: 3, name })).toBeInTheDocument();
+    for (const name of ["Friends of Post Social", "Creators who use AI tools", "Agencies and operators", "Sign up", "Share your link", "Get paid"]) expect(screen.getByRole("heading", { level: 3, name })).toBeInTheDocument();
     expect(screen.getByText("Can I refer myself?")).toBeInTheDocument();
   });
 
   it("makes no claims about earnings, user counts or badges", () => {
     render(<AffiliatesPage />);
-    expect(screen.getByRole("main").textContent).not.toMatch(/\$\d|per month on average|users|featured|\bAI\b/);
+    expect(screen.getByRole("main").textContent).not.toMatch(/\$\d|per month on average|users|featured/);
   });
 
   it("links to the affiliate page from the footer", () => {
