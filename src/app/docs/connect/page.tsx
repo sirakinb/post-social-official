@@ -43,8 +43,8 @@ export default function ConnectPage() {
           <Code>{`grok mcp add --transport http post-social ${MCP_URL}`}</Code>
         </Card>
         <Card id="muse" title="Meta Muse">
-          <p>Muse has no connector form, so it uses an API key. Create one under API keys on the API/MCP page in Post Social, then send Muse this message and paste the key when it asks:</p>
-          <Code>{`Connect a custom MCP server called Post Social at ${MCP_URL}. It uses HTTP with a bearer token. Save it as a skill.`}</Code>
+          <p>Muse connects with an API key. On the API/MCP page in Post Social, open the Muse tab and choose Create a key for Muse. Then send Muse this message and paste the key into Muse&apos;s secure form when it asks (never into the chat):</p>
+          <Code>{`Connect a custom MCP server called Post Social at ${MCP_URL}. It's a remote MCP server (streamable HTTP, JSON-RPC over POST) that takes a bearer token in the Authorization header. Don't open the address in a browser: it only answers MCP requests. Use "Muse" as the clientInfo name when you initialize. Ask me for the token in your secure credential form, then list the tools to check it works and save it as a skill.`}</Code>
         </Card>
         <Card id="hermes" title="Hermes">
           <p>Add this to <code className="font-mono text-ink">~/.hermes/config.yaml</code>, then run <code className="font-mono text-ink">/reload-mcp</code>. Hermes prints a link to approve Post Social the first time:</p>

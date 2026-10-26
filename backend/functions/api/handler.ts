@@ -62,6 +62,21 @@ function json(status: number, body: unknown, headers: Record<string, string> = {
   return new Response(JSON.stringify(body), { status, headers: { ...headers, "Content-Type": "application/json", "Cache-Control": "no-store" } });
 }
 
+// Someone (or an AI's browser tool) opened the MCP address in a browser. Explain what it
+// is instead of showing a bare error. MCP clients ask for JSON or an event stream, not HTML.
+const wantsHtml = (request: Request) => /text\/html/i.test(request.headers.get("accept") ?? "");
+
+function mcpBrowserPage(webAppUrl: string) {
+  const site = webAppUrl.replace(/\/+$/, "");
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Post Social MCP server</title>
+<style>body{margin:0;background:#0e0b1a;color:#ece8f6;font:15px/1.6 system-ui,sans-serif}main{max-width:560px;margin:12vh auto;padding:0 20px}h1{font-size:20px;font-weight:600;margin:0 0 8px}p{color:#b8b0cc;margin:0 0 14px}code{background:#1c1630;border:1px solid #2e2648;border-radius:6px;padding:2px 6px;color:#ece8f6}a{color:#c9b3ff}</style></head>
+<body><main><h1>This is Post Social's address for AI apps</h1>
+<p>It works: AI apps connect here to post and schedule for you. There's nothing to see in a browser.</p>
+<p>To connect, paste <code>${site}/mcp</code> into your AI app's connector settings (Claude, ChatGPT, Codex, Grok, Muse and others).</p>
+<p>Step-by-step setup for each app: <a href="${site}/docs/connect">${site}/docs/connect</a></p></main></body></html>`;
+  return new Response(html, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+}
+
 const bearer = (request: Request) => request.headers.get("authorization")?.match(/^Bearer\s+(\S+)$/i)?.[1] ?? null;
 
 // OAuth discovery and token endpoints are called from AI apps, some running in a browser.
@@ -105,6 +120,7 @@ export function createApiHandler(deps: ApiHandlerDeps) {
     }
 
     if (path === "/mcp") {
+      if (request.method === "GET" && wantsHtml(request)) return mcpBrowserPage(deps.webAppUrl);
       if (request.method !== "POST") return json(405, errorBody(405, "This MCP server answers POST requests only (no event stream)."), { Allow: "POST" });
       const flood = await addressLimit(deps, request);
       if (flood) return json(429, errorBody(429, "Too many requests from this network. Try again shortly."), { ...OPEN_CORS, "Retry-After": String(flood) });

@@ -14,6 +14,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    at: "2026-10-26T12:00:00-04:00",
+    kind: "Improved",
+    title: "Easier to connect Grok and Muse",
+    body: "Grok can now sign in to Post Social from grok.com/connectors. Muse has a one-click Create a key for Muse button and a clearer setup message. Logs and Drafts now show Muse, Grok, Hermes and OpenClaw by name, and our connection address shows a short explainer if you open it in a browser.",
+  },
+  {
     at: "2026-10-20T20:30:00-04:00",
     kind: "New",
     title: "Billing",
