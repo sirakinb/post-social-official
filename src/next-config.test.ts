@@ -27,6 +27,18 @@ describe("DataFast", () => {
   });
 });
 
+describe("Rewardful", () => {
+  it("loads its script from r.wdfl.co and reports to api.getrewardful.com, nothing broader", async () => {
+    const rules = await nextConfig.headers!();
+    const csp = rules[0].headers.find((h) => h.key === "Content-Security-Policy")!.value;
+    const directive = (name: string) => csp.split("; ").find((d) => d.startsWith(`${name} `))!.split(" ").slice(1);
+    expect(directive("script-src")).toContain("https://r.wdfl.co");
+    expect(directive("connect-src")).toContain("https://api.getrewardful.com");
+    expect(directive("script-src")).not.toContain("https://api.getrewardful.com");
+    expect(directive("connect-src")).not.toContain("https://r.wdfl.co");
+  });
+});
+
 describe("Crisp support chat", () => {
   it("is allowed to load and connect, and the app's own service worker still runs", async () => {
     const rules = await nextConfig.headers!();

@@ -4,6 +4,7 @@ import { flushReports, setErrorReporter } from "./telemetry";
 import { accountLimitMessage, addXUsageToInvoice, billingStatus, confirmCheckout, formEncode, handleStripeEvent, setXCap, startCheckout, syncAccountQuantity, verifyStripeSignature, type Stripe } from "./billing";
 
 const WORKSPACE = "22222222-2222-4222-8222-222222222222";
+const REFERRAL = "98288128-0d5f-45a9-88b3-ef95b229f798";
 const person = { userId: "11111111-1111-4111-8111-111111111111", displayName: "Ada", entryPoint: "ui" as const };
 
 type State = { plan_id: string; plan_name: string; connected: number; stripe_customer_id?: string | null; stripe_subscription_id?: string | null; subscription_status?: string | null; billed_quantity?: number | null; x_monthly_cap_cents?: number };
@@ -135,6 +136,29 @@ describe("startCheckout", () => {
     expect(calls.find((c) => c.path === "/v1/checkout/sessions")!.params!.metadata).toEqual({ workspace_id: WORKSPACE });
   });
 
+  it("uses the workspace as the checkout reference when there is no referral", async () => {
+    const { sql } = fakeSql({ plan_id: "free", plan_name: "Free", connected: 2 });
+    const { stripe, calls } = fakeStripe({ "GET /v1/prices": { data: [{ id: "price_accounts" }] }, "POST /v1/checkout/sessions": { url: "https://checkout.stripe.com/c/pay/cs_test" } });
+    await startCheckout({ sql, stripe, webAppUrl: "" }, person, { workspace_id: WORKSPACE, referral: "" });
+    expect(calls.find((c) => c.path === "/v1/checkout/sessions")!.params!.client_reference_id).toBe(WORKSPACE);
+  });
+
+  it("passes a Rewardful referral as the checkout reference and keeps the workspace in metadata", async () => {
+    const { sql } = fakeSql({ plan_id: "free", plan_name: "Free", connected: 2 });
+    const { stripe, calls } = fakeStripe({ "GET /v1/prices": { data: [{ id: "price_accounts" }] }, "POST /v1/checkout/sessions": { url: "https://checkout.stripe.com/c/pay/cs_test" } });
+    await startCheckout({ sql, stripe, webAppUrl: "" }, person, { workspace_id: WORKSPACE, referral: REFERRAL });
+    expect(calls.find((c) => c.path === "/v1/checkout/sessions")!.params!).toMatchObject({ client_reference_id: REFERRAL, metadata: { workspace_id: WORKSPACE }, subscription_data: { metadata: { workspace_id: WORKSPACE } } });
+  });
+
+  it("drops a referral that isn't a UUID", async () => {
+    for (const referral of ["not-a-uuid", "98288128-0d5f-45a9-88b3-ef95b229f79", `${REFERRAL}x`, " ", 42, null]) {
+      const { sql } = fakeSql({ plan_id: "free", plan_name: "Free", connected: 2 });
+      const { stripe, calls } = fakeStripe({ "GET /v1/prices": { data: [{ id: "price_accounts" }] }, "POST /v1/checkout/sessions": { url: "https://checkout.stripe.com/c/pay/cs_test" } });
+      await startCheckout({ sql, stripe, webAppUrl: "" }, person, { workspace_id: WORKSPACE, referral });
+      expect(calls.find((c) => c.path === "/v1/checkout/sessions")!.params!.client_reference_id).toBe(WORKSPACE);
+    }
+  });
+
   it("sends people back to the copy of the app they came from, if it's allowed", async () => {
     const run = async (origin: string) => {
       const { stripe, calls } = fakeStripe({ "GET /v1/prices": { data: [{ id: "price_accounts" }] } });
@@ -164,6 +188,25 @@ describe("confirmCheckout", () => {
     const { stripe } = fakeStripe({ "GET /v1/checkout/sessions/": { client_reference_id: WORKSPACE, status: "complete", subscription: { id: "sub_1", status: "active", customer: "cus_1", items: { data: [{ quantity: 2 }] } } } });
     await expect(confirmCheckout({ sql, stripe, webAppUrl: "" }, person, { workspace_id: WORKSPACE, session_id: "cs_test_abcdefghijkl" })).resolves.toEqual({ paid: true });
     expect(writes[0].params).toEqual([WORKSPACE, "cus_1", "sub_1", "active", 2, true]);
+  });
+
+  it("recognises the workspace from the metadata when the reference holds a referral", async () => {
+    const { sql, writes } = fakeSql({ plan_id: "free", plan_name: "Free", connected: 2 });
+    const { stripe } = fakeStripe({ "GET /v1/checkout/sessions/": { client_reference_id: REFERRAL, metadata: { workspace_id: WORKSPACE }, status: "complete", subscription: { id: "sub_1", status: "active", customer: "cus_1", items: { data: [{ quantity: 2 }] } } } });
+    await expect(confirmCheckout({ sql, stripe, webAppUrl: "" }, person, { workspace_id: WORKSPACE, session_id: "cs_test_abcdefghijkl" })).resolves.toEqual({ paid: true });
+    expect(writes[0].params).toEqual([WORKSPACE, "cus_1", "sub_1", "active", 2, true]);
+  });
+
+  it("still accepts a checkout started before referrals, which has no metadata", async () => {
+    const { sql } = fakeSql({ plan_id: "free", plan_name: "Free", connected: 2 });
+    const { stripe } = fakeStripe({ "GET /v1/checkout/sessions/": { client_reference_id: WORKSPACE, metadata: {}, status: "complete", subscription: { id: "sub_1", status: "active", customer: "cus_1", items: { data: [{ quantity: 2 }] } } } });
+    await expect(confirmCheckout({ sql, stripe, webAppUrl: "" }, person, { workspace_id: WORKSPACE, session_id: "cs_test_abcdefghijkl" })).resolves.toEqual({ paid: true });
+  });
+
+  it("refuses a session whose metadata names another workspace, whatever its reference says", async () => {
+    const { sql } = fakeSql({ plan_id: "free", plan_name: "Free", connected: 2 });
+    const { stripe } = fakeStripe({ "GET /v1/checkout/sessions/": { client_reference_id: WORKSPACE, metadata: { workspace_id: "33333333-3333-4333-8333-333333333333" }, status: "complete", subscription: null } });
+    await expect(confirmCheckout({ sql, stripe, webAppUrl: "" }, person, { workspace_id: WORKSPACE, session_id: "cs_test_abcdefghijkl" })).rejects.toMatchObject({ status: 404 });
   });
 
   it("refuses another workspace's checkout and malformed ids", async () => {

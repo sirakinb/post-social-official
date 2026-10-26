@@ -145,7 +145,7 @@ export default function PrivacyPage() {
                 and invoice records); Resend for sending email; ScrapeCreators
                 to read public view and follower counts for posts and accounts
                 you connect; PostHog for product analytics and error
-                reports; DataFast for website visitor analytics; and Crisp for the support chat. We limit stored permissions to the product features in
+                reports; DataFast for website visitor analytics; Rewardful for affiliate tracking; and Crisp for the support chat. We limit stored permissions to the product features in
                 use, encrypt platform credentials at rest, and keep a
                 time-stamped security and publishing record. No internet
                 service can guarantee absolute security.
@@ -176,6 +176,13 @@ export default function PrivacyPage() {
                 other automated crawlers request our public pages, our server
                 sends DataFast the page address, the crawler&apos;s user agent and
                 its IP address; ordinary visits by people are not sent this way.
+              </p>
+              <p className="mt-2 text-sm leading-relaxed">
+                On our public website and the billing page, Rewardful, which runs
+                our affiliate program, sets a referral cookie when a visitor
+                arrives through an affiliate&apos;s link. When you add a card, the
+                referral ID is passed to Stripe and Rewardful so the affiliate can
+                be credited for the payment.
               </p>
               <p className="mt-2 text-sm leading-relaxed">
                 The support chat on our website and in the app is run by Crisp.

@@ -236,6 +236,15 @@ function datafastMetadata(input: Params) {
   return metadata;
 }
 
+// Rewardful (affiliate tracking) credits a signup to an affiliate through the checkout's
+// client_reference_id, and documents the referral id as a UUID. Anything else is dropped, so a
+// bad value only skips attribution: Stripe rejects a blank client_reference_id, and we never
+// want the referral to stop a payment.
+function rewardfulReferral(input: Params) {
+  const value = input.referral;
+  return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) ? value : null;
+}
+
 // Sends the person to Stripe Checkout to add a card and start the subscription.
 export async function startCheckout(deps: BillingDeps, caller: Caller, input: Params) {
   const workspaceId = requireUuid(input.workspace_id, "Workspace");
@@ -244,9 +253,12 @@ export async function startCheckout(deps: BillingDeps, caller: Caller, input: Pa
   const state = await workspaceState(deps.sql, workspaceId);
   if (state.plan_id !== "free" && state.plan_id !== "paid") throw new ApiError(409, "This workspace isn't billed. Contact support@postsocial.xyz to change that.");
   if (state.stripe_subscription_id && PAID_STATUSES.has(state.subscription_status ?? "")) throw new ApiError(409, "Billing is already set up. Use Manage billing to change your card.");
+  const referral = rewardfulReferral(input);
   const session = await stripe.request<{ url: string }>("POST", "/v1/checkout/sessions", {
     mode: "subscription",
-    client_reference_id: workspaceId,
+    // The workspace is in the metadata below; this field carries the affiliate's referral when
+    // there is one (the workspace id otherwise, as before).
+    client_reference_id: referral ?? workspaceId,
     customer: state.stripe_customer_id ?? undefined,
     line_items: [{ price: await accountsPriceId(stripe), quantity: Math.max(1, state.connected) }],
     subscription_data: { metadata: { workspace_id: workspaceId } },
@@ -267,12 +279,15 @@ export async function confirmCheckout(deps: BillingDeps, caller: Caller, input: 
   const stripe = requireStripe(deps);
   const sessionId = typeof input.session_id === "string" && /^cs_[A-Za-z0-9_]{10,200}$/.test(input.session_id) ? input.session_id : null;
   if (!sessionId) throw new ApiError(400, "That checkout link isn't valid.");
-  const session = await stripe.request<{ client_reference_id: string | null; status: string; subscription: { id: string; status: string; customer: string; items: { data: { quantity: number }[] } } | null }>(
+  const session = await stripe.request<{ client_reference_id: string | null; metadata?: Record<string, string> | null; status: string; subscription: { id: string; status: string; customer: string; items: { data: { quantity: number }[] } } | null }>(
     "GET",
     `/v1/checkout/sessions/${sessionId}`,
     { expand: ["subscription"] },
   );
-  if (session.client_reference_id !== workspaceId) throw new ApiError(404, "That checkout wasn't for this workspace.");
+  // Sessions started before referrals carry the workspace in client_reference_id only. Now that
+  // field can hold a referral, so it counts only when the session has no workspace metadata.
+  const sessionWorkspace = session.metadata?.workspace_id ?? session.client_reference_id;
+  if (sessionWorkspace !== workspaceId) throw new ApiError(404, "That checkout wasn't for this workspace.");
   if (session.status !== "complete" || !session.subscription) return { paid: false };
   return { paid: await recordSubscription(deps.sql, workspaceId, session.subscription) };
 }
