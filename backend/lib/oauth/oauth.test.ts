@@ -53,17 +53,24 @@ describe("apps whose id is a web address", () => {
   };
   const serve = (body: unknown, status = 200) => async () => new Response(typeof body === "string" ? body : JSON.stringify(body), { status });
 
-  it("only accepts public https addresses with a path", () => {
+  it("only reads files from the AI companies' own domains", () => {
     expect(isMetadataClientId(GROK)).toBe(true);
+    expect(isMetadataClientId("https://console.x.ai/oauth/client.json")).toBe(true);
+    expect(isMetadataClientId("https://claude.ai/oauth/mcp-client.json")).toBe(true);
     expect(isMetadataClientId("psc_abc123")).toBe(false);
     expect(isMetadataClientId("http://grok.com/oauth/mcp-client.json")).toBe(false);
     expect(isMetadataClientId("https://grok.com/")).toBe(false);
+    // Anyone else's address, however public it looks.
+    expect(isMetadataClientId("https://evil.example/x.json")).toBe(false);
+    expect(isMetadataClientId("https://grok.com.evil.example/x.json")).toBe(false);
+    expect(isMetadataClientId("https://notgrok.com/x.json")).toBe(false);
+    // This computer and private networks, including the trailing-dot spelling.
     expect(isMetadataClientId("https://localhost/x.json")).toBe(false);
+    expect(isMetadataClientId("https://localhost./x.json")).toBe(false);
+    expect(isMetadataClientId("https://grok.com./oauth/mcp-client.json")).toBe(false);
     expect(isMetadataClientId("https://127.0.0.1/x.json")).toBe(false);
     expect(isMetadataClientId("https://[::1]/x.json")).toBe(false);
     expect(isMetadataClientId("https://169.254.169.254/latest")).toBe(false);
-    expect(isMetadataClientId("https://intranet/x.json")).toBe(false);
-    expect(isMetadataClientId("https://box.internal/x.json")).toBe(false);
     expect(isMetadataClientId("https://user:pw@grok.com/x.json")).toBe(false);
     expect(isMetadataClientId("https://grok.com:8443/x.json")).toBe(false);
   });
