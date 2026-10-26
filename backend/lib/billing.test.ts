@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Sql } from "./access";
+import { flushReports, setErrorReporter } from "./telemetry";
 import { accountLimitMessage, addXUsageToInvoice, billingStatus, confirmCheckout, formEncode, handleStripeEvent, setXCap, startCheckout, syncAccountQuantity, verifyStripeSignature, type Stripe } from "./billing";
 
 const WORKSPACE = "22222222-2222-4222-8222-222222222222";
@@ -205,6 +206,19 @@ describe("handleStripeEvent", () => {
     const event = { type: "customer.subscription.deleted", data: { object: { id: "sub_1", status: "active", customer: "cus_1", metadata: { workspace_id: WORKSPACE } } } };
     await expect(handleStripeEvent({ sql, stripe: null, webAppUrl: "" }, event)).resolves.toEqual({ handled: true });
     expect(writes[0].params).toEqual([WORKSPACE, "cus_1", "sub_1", "canceled", null, false]);
+  });
+
+  it("records a subscription_started event when a paid subscription is created", async () => {
+    const sent: Array<{ event: string; properties: Record<string, unknown> }> = [];
+    setErrorReporter({ captureException: async () => undefined, capture: async (event, properties) => void sent.push({ event, properties: properties ?? {} }) });
+    const { sql } = fakeSql({ plan_id: "paid", plan_name: "Paid", connected: 3 });
+    const created = (status: string) => ({ type: "customer.subscription.created", data: { object: { id: "sub_1", status, customer: "cus_1", metadata: { workspace_id: WORKSPACE }, items: { data: [{ quantity: 3 }] } } } });
+    await handleStripeEvent({ sql, stripe: null, webAppUrl: "" }, created("active"));
+    await handleStripeEvent({ sql, stripe: null, webAppUrl: "" }, created("incomplete"));
+    await handleStripeEvent({ sql, stripe: null, webAppUrl: "" }, { type: "customer.subscription.updated", data: { object: { id: "sub_1", status: "active", customer: "cus_1", metadata: { workspace_id: WORKSPACE } } } });
+    await flushReports();
+    setErrorReporter(null);
+    expect(sent).toEqual([{ event: "subscription_started", properties: { workspace_id: WORKSPACE, accounts: 3 } }]);
   });
 
   it("ignores other events and subscriptions without a workspace", async () => {
