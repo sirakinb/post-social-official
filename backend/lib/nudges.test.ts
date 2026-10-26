@@ -53,6 +53,12 @@ describe("composeEmail", () => {
     expect(composeEmail(due("no_account", { name: null }), app, "u").text.startsWith("Hi there,")).toBe(true);
     expect(composeEmail(due("no_account", { name: "<b>Eve</b>" }), app, "u").html).not.toContain("<b>Eve");
   });
+
+  it("loads the logo from the public site even when links point elsewhere (dev links go to staging)", () => {
+    const email = composeEmail(due("no_account"), "https://post-social-git-staging-app-build-26.vercel.app", "u");
+    expect(email.html).toContain('src="https://www.postsocial.xyz/email/post-social-icon.png"');
+    expect(email.text).toContain("https://post-social-git-staging-app-build-26.vercel.app/beta/accounts");
+  });
 });
 
 describe("findDue", () => {

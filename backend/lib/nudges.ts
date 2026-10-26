@@ -97,6 +97,8 @@ function content(due: Due, appUrl: string): Content {
   };
 }
 
+// Images always load from the public site, whatever address the links use (dev links go to staging).
+const ASSETS = "https://www.postsocial.xyz";
 const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif";
 const MONO = "'SFMono-Regular',Menlo,Consolas,monospace";
 const linkify = (s: string) => escape(s).replace(/(https:\/\/[^\s<]+?)(?=[.,]?(\s|$))/g, '<a href="$1" style="color:#C9A8FF;text-decoration:none;">$1</a>');
@@ -109,7 +111,7 @@ function html(c: Content, appUrl: string, unsubscribe: string) {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#0B0816;"><tr><td align="center" style="padding:28px 12px 40px;">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;">
   <tr><td style="padding:0 8px 20px;"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-    <td style="vertical-align:middle;"><img src="${appUrl}/email/post-social-icon.png" width="28" height="28" alt="" style="display:block;border:0;border-radius:7px;"></td>
+    <td style="vertical-align:middle;"><img src="${ASSETS}/email/post-social-icon.png" width="28" height="28" alt="" style="display:block;border:0;border-radius:7px;"></td>
     <td style="vertical-align:middle;padding-left:10px;font-family:Fraunces,Georgia,'Times New Roman',serif;font-size:12px;letter-spacing:4px;text-transform:uppercase;color:#FAF6F0;">Post Social</td>
   </tr></table></td></tr>
   <tr><td style="background:#130E24;border:1px solid #2A2142;border-radius:18px;padding:32px 36px 30px;font-family:${FONT};">

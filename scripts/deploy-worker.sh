@@ -45,10 +45,11 @@ trap 'rm -f "$env_file"' EXIT
   echo "RESEND_API_KEY=$(secret RESEND_API_KEY 2>/dev/null || true)"
   echo "ALERT_CREDITS_BELOW=$(secret ALERT_CREDITS_BELOW 2>/dev/null || echo 1000)"
   # Nudge emails to new customers: "on" to send, the unsubscribe link secret, and the website
-  # address for links. All optional; without them no nudge email goes out.
+  # address for links (EMAIL_APP_URL overrides WEB_APP_HOME; dev sets it to staging). All optional; without them no nudge email goes out.
   echo "NUDGE_EMAILS=$(secret NUDGE_EMAILS 2>/dev/null || true)"
   echo "EMAIL_LINK_SECRET=$(secret EMAIL_LINK_SECRET 2>/dev/null || true)"
   echo "WEB_APP_HOME=$(secret WEB_APP_HOME 2>/dev/null || true)"
+  echo "EMAIL_APP_URL=$(secret EMAIL_APP_URL 2>/dev/null || true)"
   # Monitoring (PostHog): the project's public key; optional.
   echo "POSTHOG_KEY=$(secret POSTHOG_KEY 2>/dev/null || true)"
   # "production" or "dev", matching the website's labels in PostHog.
