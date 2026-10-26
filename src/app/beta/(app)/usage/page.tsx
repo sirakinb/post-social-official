@@ -49,7 +49,7 @@ async function loadReport(workspaceId: string, period: string): Promise<Report |
   return (await response.json()) as Report;
 }
 
-function LimitCard({ title, limit, format }: { title: string; limit: Limit; format: (n: number) => string }) {
+function LimitCard({ title, limit, format, note }: { title: string; limit: Limit; format: (n: number) => string; note?: string }) {
   const percent = Math.min(100, limit.percent ?? 0);
   const tone = percent >= 90 ? "bg-error" : percent >= 70 ? "bg-warning" : "bg-ps-plum";
   return (
@@ -61,6 +61,7 @@ function LimitCard({ title, limit, format }: { title: string; limit: Limit; form
       <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-ps-fg/[0.06]" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100} aria-label={title}>
         <div className={`h-full ${tone}`} style={{ width: `${percent}%` }} />
       </div>
+      {note && <p className="mt-2 text-xs text-ps-subtle">{note}</p>}
     </div>
   );
 }
@@ -120,7 +121,7 @@ export default async function BetaUsagePage({ searchParams }: { searchParams: Pr
             <section className="mt-8" aria-label="Plan limits">
               <h2 className="text-sm font-semibold text-ps-text">Plan limits</h2>
               <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <LimitCard title="Posts published this month" limit={report.plan.limits.posts_per_month} format={count} />
+                <LimitCard title="Posts published this month" limit={report.plan.limits.posts_per_month} format={count} note="Resets on the 1st of each month" />
                 <LimitCard title="API calls today" limit={report.plan.limits.api_calls_per_day} format={count} />
                 <LimitCard title="Media storage" limit={report.plan.limits.media_storage_bytes} format={bytes} />
                 <LimitCard title="Connected accounts" limit={report.plan.limits.connected_accounts} format={count} />

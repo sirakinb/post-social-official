@@ -105,4 +105,17 @@ describe("Sidebar", () => {
     rerender(<Sidebar {...props} started={null} />);
     expect(screen.queryByRole("link", { name: /Get started/ })).toBeNull();
   });
+
+  it("keeps the monthly post count out of the sidebar until the limit is close", () => {
+    const plan = { name: "Paid", used: 10, limit: 3000, resets: "Nov 1" };
+    const { rerender } = render(<Sidebar {...props} plan={plan} />);
+    expect(screen.queryByText("Posts this month")).toBeNull();
+    rerender(<Sidebar {...props} plan={{ ...plan, used: 2399 }} />);
+    expect(screen.queryByText("Posts this month")).toBeNull();
+    rerender(<Sidebar {...props} plan={{ ...plan, used: 2400 }} />);
+    const card = screen.getByRole("link", { name: /Posts this month/ });
+    expect(card).toHaveAttribute("href", "/beta/usage");
+    expect(card).toHaveTextContent("2,400 / 3,000");
+    expect(card).toHaveTextContent("Posts reset Nov 1");
+  });
 });
