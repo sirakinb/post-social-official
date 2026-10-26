@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Sql } from "./access";
-import { provisionWorkspace, slugBase, workspaceNameFor } from "./signup";
+import { SAMPLE_DRAFT, addSampleDraft, provisionWorkspace, slugBase, workspaceNameFor } from "./signup";
 
 describe("slugBase", () => {
   it("makes a short address from a name", () => {
@@ -50,5 +50,31 @@ describe("provisionWorkspace", () => {
     const sql = (async () => []) as Sql;
     const key = { kind: "key" as const, credentialId: "k", workspaceId: "w", actorId: "a", mode: "live" as const, displayName: "k", entryPoint: "api" as const };
     await expect(provisionWorkspace(sql, key)).rejects.toMatchObject({ status: 403 });
+  });
+});
+
+describe("addSampleDraft", () => {
+  it("adds one example draft, only to a new workspace the person made, with no posts yet", async () => {
+    const calls: Array<{ query: string; params: unknown[] }> = [];
+    const sql = (async (query: string, params: unknown[]) => { calls.push({ query, params }); return []; }) as Sql;
+    await addSampleDraft(sql, "w1", "u1");
+    expect(calls).toHaveLength(1);
+    expect(calls[0].params).toEqual(["w1", "u1", SAMPLE_DRAFT]);
+    expect(calls[0].query).toContain("'draft'");
+    expect(calls[0].query).toContain("w.created_by = $2");
+    expect(calls[0].query).toContain("interval '10 minutes'");
+    expect(calls[0].query).toContain("NOT EXISTS (SELECT 1 FROM public.posts");
+  });
+
+  it("never fails sign-up", async () => {
+    const sql = (async () => { throw new Error("database down"); }) as Sql;
+    await expect(addSampleDraft(sql, "w1", "u1")).resolves.toBeUndefined();
+  });
+
+  it("is added when a workspace is provisioned", async () => {
+    const queries: string[] = [];
+    const sql = (async (query: string) => { queries.push(query); return [{ workspace_id: "w1" }]; }) as Sql;
+    await provisionWorkspace(sql, { userId: "11111111-1111-4111-8111-111111111111", displayName: "Ada", entryPoint: "ui" }, {}, () => "abc123");
+    expect(queries[1]).toContain("INSERT INTO public.posts");
   });
 });

@@ -97,4 +97,12 @@ describe("Sidebar", () => {
     expect(menu).toHaveAttribute("aria-expanded", "true");
     expect(document.getElementById("main-menu")).not.toHaveClass("hidden");
   });
+  it("shows get-started progress, linking back to the steps, until they are done", () => {
+    const { rerender } = render(<Sidebar {...props} started={1} />);
+    const card = screen.getByRole("link", { name: /Get started/ });
+    expect(card).toHaveAttribute("href", "/beta/accounts#get-started");
+    expect(card).toHaveTextContent("1 of 3");
+    rerender(<Sidebar {...props} started={null} />);
+    expect(screen.queryByRole("link", { name: /Get started/ })).toBeNull();
+  });
 });

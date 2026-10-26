@@ -1,4 +1,8 @@
+import { cookies } from "next/headers";
+import { GetStartedPanel } from "@/components/beta/get-started";
+import { GET_STARTED_HIDDEN_COOKIE, loadGetStarted, stepsDone } from "@/lib/beta/get-started";
 import { loadViewer } from "@/lib/beta/workspace";
+import { hideGetStarted } from "./actions";
 import { ConnectionsView, type Profile, type SocialAccount } from "./connections-view";
 
 export const metadata = { title: "Accounts · Post Social" };
@@ -10,12 +14,15 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
 
   const COLUMNS = "id, platform, handle, display_name, avatar_url, health, health_reason, capabilities, created_at";
   const accountsQuery = (columns: string) => client.database.from("connected_accounts").select(columns).eq("workspace_id", workspace.id).order("platform").order("display_name");
-  const [accountsResult, { data: lastPosts }, profilesResult, deliveryResult] = await Promise.all([
+  // The get-started steps: for people who can post, until all three are done or hidden.
+  const showSteps = workspace.role !== "reviewer" && !(await cookies()).get(GET_STARTED_HIDDEN_COOKIE);
+  const [accountsResult, { data: lastPosts }, profilesResult, deliveryResult, steps] = await Promise.all([
     accountsQuery(`${COLUMNS}, profile_id`),
     client.database.from("destinations").select("connected_account_id, updated_at").eq("workspace_id", workspace.id).eq("status", "published").order("updated_at", { ascending: false }).limit(200),
     client.database.from("profiles").select("id, name, description, color, timezone").eq("workspace_id", workspace.id).order("name"),
     // Before the TikTok delivery migration reaches an environment, this fails and the setting stays hidden.
     client.database.from("connected_accounts").select("id, tiktok_delivery").eq("workspace_id", workspace.id).eq("platform", "tiktok"),
+    showSteps ? loadGetStarted(client, workspace.id) : null,
   ]);
   // Before the profiles migration reaches an environment, read accounts without them.
   const profilesReady = !profilesResult.error;
@@ -57,6 +64,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
       notice={params.message ?? null}
       error={params.error ?? null}
       requested={params.connect ?? null}
+      getStarted={steps && stepsDone(steps) < 3 ? <GetStartedPanel steps={steps} hide={hideGetStarted} /> : null}
     />
   );
 }

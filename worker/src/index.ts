@@ -16,6 +16,7 @@ import { runFollowerSweep } from "./analytics/followers";
 import { runMetricsSweep } from "./analytics/runner";
 import { runStatsHealthCheck } from "./analytics/health";
 import { createAdminAlert } from "./alerts";
+import { resendSender, runNudgeSweep } from "../../backend/lib/nudges";
 import { PLATFORMS, type Platform } from "../../backend/lib/connections/platforms";
 import { createTelemetry } from "../../backend/lib/telemetry";
 
@@ -139,5 +140,17 @@ if (analyticsPlatforms.length || publicPlatforms.length) {
     return 0;
   };
   setTimeout(() => void every(24 * 60 * 60 * 1000, "stats health check", check), 10 * 60 * 1000).unref();
+}
+// Nudge emails to new customers (backend/lib/nudges.ts), hourly. Off unless NUDGE_EMAILS is
+// "on" and the Resend key, the unsubscribe link secret and the website address are set.
+const nudgeSecret = process.env.EMAIL_LINK_SECRET || "";
+// Links in the emails: EMAIL_APP_URL if set (dev points it at staging, since dev's WEB_APP_HOME
+// is a local address), otherwise the website from WEB_APP_HOME.
+const webAppUrl = (process.env.EMAIL_APP_URL || process.env.WEB_APP_HOME || "").replace(/\/beta\/accounts\/?$/, "").replace(/\/+$/, "");
+const nudgesOn = process.env.NUDGE_EMAILS === "on" && Boolean(process.env.RESEND_API_KEY && nudgeSecret && webAppUrl);
+log("nudge emails", { on: nudgesOn });
+if (nudgesOn) {
+  const send = resendSender(process.env.RESEND_API_KEY!);
+  setTimeout(() => void every(60 * 60 * 1000, "nudge emails", () => runNudgeSweep({ sql, send, appUrl: webAppUrl, secret: nudgeSecret, log })), 5 * 60 * 1000).unref();
 }
 void every(5 * 60 * 1000, "token refresh", () => refreshDueTokens({ sql, setting: (name) => setting(name) }));

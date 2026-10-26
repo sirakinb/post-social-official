@@ -82,7 +82,7 @@ Do these in order. Each step says who does it.
 | Backend (dev + prod) | InsForge. Prod `syydd6ck.us-east.insforge.app`, functions at `syydd6ck.function2.insforge.app` | Dev and prod are separate projects; see `docs/environments.md`. |
 | Publish worker | InsForge Compute, service "post-social-worker" | NOT Fly; the deploy script only borrows Fly's CLI. If it dies, posts stop. |
 | Media | Cloudflare R2 buckets `postsocial-media-prod`, `postsocial-media-dev` | Account `5e9cbd18080d4f973442560e2140a3e0` also holds other projects' buckets: ignore them. Free to 10 GB. |
-| Email | Resend, domain postsocial.xyz | Sender "Akinyemi <akinyemi@postsocial.xyz>", alerts from alerts@postsocial.xyz. |
+| Email | Resend, domain postsocial.xyz | Sender "Aki <aki@postsocial.xyz>" (beta invites and nudge emails), alerts from alerts@postsocial.xyz. |
 | Payments | Stripe live account "Pentridgemedia - Main" | Product "Post Social". |
 | Analytics | PostHog project "Post Social" (id 642504) | Masking on. |
 | Public stats | ScrapeCreators (prepaid credits) | Used until each platform approves official stats. |
