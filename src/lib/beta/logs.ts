@@ -2,6 +2,7 @@
 // failures the reason the platform or our worker gave. Read with the person's own session
 // (row-level security).
 import type { ActorKind } from "@/components/beta/marks";
+import { clientLabel } from "../../../backend/lib/api/clients";
 
 type Client = Awaited<ReturnType<typeof import("@/lib/insforge/server").insforgeServerClient>>;
 
@@ -120,7 +121,8 @@ type Actor = { kind: ActorKind; display_name: string; client_name?: string | nul
 export function whoDid(actor: Actor | null, postedBy: Actor | null): Pick<LogRow, "actorKind" | "actorName" | "actorVia"> {
   const who = actor ?? postedBy;
   if (!who) return { actorKind: "system", actorName: "Post Social", actorVia: null };
-  const app = who.kind === "user" ? null : who.client_name?.trim() || null;
+  // Names saved before an app was known (e.g. "muse-custom-connector") read as the app.
+  const app = who.kind === "user" ? null : clientLabel({ name: who.client_name ?? undefined });
   return { actorKind: who.kind, actorName: app ?? who.display_name, actorVia: app && app !== who.display_name ? who.display_name : null };
 }
 
