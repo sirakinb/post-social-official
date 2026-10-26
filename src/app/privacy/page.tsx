@@ -25,7 +25,7 @@ export default function PrivacyPage() {
           <h1 className="font-display text-3xl font-semibold text-ink">
             Privacy Policy
           </h1>
-          <p className="mt-2 text-sm text-ink-subtle">Effective July 21, 2026 · Updated October 24, 2026</p>
+          <p className="mt-2 text-sm text-ink-subtle">Effective July 21, 2026 · Updated October 26, 2026</p>
 
           <div className="mt-8 space-y-6 text-ink-muted">
             <section>
@@ -38,6 +38,8 @@ export default function PrivacyPage() {
                 including OAuth tokens, account handles, profile avatars, post
                 content, media files, and publishing logs. If you join the
                 waitlist, we keep the email address you give us to invite you.
+                After you sign up we may send up to three short emails to help
+                you get started; each one has a link to stop them.
               </p>
             </section>
 
