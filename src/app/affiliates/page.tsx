@@ -18,7 +18,7 @@ const WHO_FOR = [
 ];
 
 const STEPS = [
-  { title: "Apply", text: "Email hello@postsocial.xyz with a little about you and where you'd share Post Social. If it's a fit, you get an invite to join." },
+  { title: "Apply", text: "Email hello@postsocial.xyz with a little about you and where you'd share Post Social." },
   { title: "Share your link", text: "You get a personal link. Anyone who signs up through it is tracked to you." },
   { title: "Get paid", text: "Commissions and payouts are handled through Rewardful, where you can see what you've earned." },
 ];
