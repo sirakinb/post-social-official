@@ -18,6 +18,8 @@ export type BillingStatus = {
   available: boolean;
   upcoming: { total: number; period_start: string | null; period_end: string | null; lines: Line[] } | null;
   card: { brand: string; last4: string; exp_month: number; exp_year: number } | null;
+  // Paid with Stripe Link instead of a plain card.
+  link?: { email: string | null } | null;
   details: { email: string | null; name: string | null; address: string | null } | null;
   invoices: Array<{ id: string; number: string | null; date: string | null; total: number; status: string; pdf: string | null; url: string | null }>;
 };
@@ -93,7 +95,11 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       </div>
 
       {error && <p role="alert" className="rounded-lg border border-ps-failed-text/30 px-4 py-3 text-sm text-ps-failed-text">{error}</p>}
-      {checkout && paying && <p role="status" className="rounded-lg border border-ps-line px-4 py-3 text-sm text-ps-text">Card added. Connect as many accounts as you need.</p>}
+      {checkout && paying && (
+        <p role="status" className="rounded-lg border border-ps-line px-4 py-3 text-sm text-ps-text">
+          You&apos;re on the paid plan. <Link href="/beta/accounts#connect" className="text-ps-plum-soft hover:text-ps-text">Connect your next account</Link>
+        </p>
+      )}
       {saved === "x_cap" && <p role="status" className="rounded-lg border border-ps-line px-4 py-3 text-sm text-ps-text">Cap saved.</p>}
 
       {!workspace ? (
@@ -122,14 +128,14 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
                 <p className="mt-1 text-4xl font-semibold tracking-[-0.03em] text-ps-text tabular-nums">{money(status.upcoming?.total ?? 0)}</p>
                 <p className="mt-2 text-xs text-ps-subtle">
                   {paying
-                    ? `On ${day(status.upcoming?.period_end ?? null, { month: "long", day: "numeric" })}, for this month so far.`
-                    : `You're on the free plan. Add a card when you want account ${status.free_accounts + 1}.`}
+                    ? `On ${day(status.upcoming?.period_end ?? null, { month: "long", day: "numeric" })}.`
+                    : `Your first ${status.free_accounts} accounts are free. Account ${status.free_accounts + 1} is $5 a month, charged when you add it.`}
                 </p>
               </div>
               {manage && !paying && (
                 <form action={addCard} data-rewardful="true">
                   <Hidden id={workspace.id} />
-                  <button type="submit" className={primary}>Add a card</button>
+                  <button type="submit" className={primary}>Add account {status.free_accounts + 1} · $5/mo</button>
                 </form>
               )}
             </div>
@@ -208,6 +214,11 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
                   <p className="text-ps-text">
                     {BRANDS[status.card.brand] ?? status.card.brand} ending {status.card.last4}
                     <span className="ml-2 text-xs text-ps-subtle">exp {String(status.card.exp_month).padStart(2, "0")}/{String(status.card.exp_year).slice(-2)}</span>
+                  </p>
+                ) : status.link ? (
+                  <p className="text-ps-text">
+                    Link
+                    {status.link.email && <span className="ml-2 text-xs text-ps-subtle">{status.link.email}</span>}
                   </p>
                 ) : (
                   <p className="text-ps-muted">No card yet.</p>
