@@ -11,7 +11,9 @@ export type NudgeKind = "no_account" | "no_ai" | "first_post_live";
 export type Due = { user_id: string; email: string; name: string | null; workspace_id: string; kind: NudgeKind; platform?: string | null; live_url?: string | null };
 export type Email = { to: string; subject: string; text: string; html: string; unsubscribeUrl: string };
 
-export const NUDGE_FROM = "Akinyemi <akinyemi@postsocial.xyz>";
+export const NUDGE_FROM = "Aki <aki@postsocial.xyz>";
+// Replies reach Aki's inbox, as with the beta welcome email (scripts/lib/beta-invite.ts).
+export const NUDGE_REPLY_TO = "aki.b@pentridgemedia.com";
 // AGENTS.md: real outbound emails to users always copy Aki. Blind, so customers don't see it.
 export const NUDGE_COPY_TO = "aki.b@pentridgemedia.com";
 
@@ -50,55 +52,88 @@ export async function optOut(sql: Sql, userId: string) {
 }
 
 // ---- the emails ------------------------------------------------------------------------------
+// Same look as the beta welcome email (emails/closed-beta-welcome.html): the wordmark, one dark
+// card, a peach label, a headline, short paragraphs, one button, signed by Aki.
 
 const firstName = (name: string | null) => (name ?? "").trim().split(/\s+/)[0] || "there";
 const escape = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+const isWebLink = (s: string | null | undefined): s is string => typeof s === "string" && /^https:\/\/[^\s"<>]+$/.test(s);
 
-function body(kind: NudgeKind, due: Due, appUrl: string): { subject: string; paragraphs: string[] } {
+type Content = { subject: string; preheader: string; label: string; headline: string; intro: string[]; button: { text: string; url: string }; after: string[] };
+
+function content(due: Due, appUrl: string): Content {
   const hi = `Hi ${firstName(due.name)},`;
-  if (kind === "no_account") {
+  if (due.kind === "no_account") {
     return {
       subject: "Connect your first account to Post Social",
-      paragraphs: [
-        hi,
-        "You signed up for Post Social, but no social account is connected yet. That's the first step: open Accounts, pick Instagram, TikTok, YouTube or any of the others, and sign in on the platform's own page. Post Social never sees your password.",
-        `Connect an account: ${appUrl}/beta/accounts`,
-        `There's a one-minute walkthrough here: ${appUrl}/docs/quickstart`,
-        "If something gets in the way, just reply to this email.",
-      ],
+      preheader: "One step to your first post.",
+      label: "Getting started",
+      headline: "Connect your first account",
+      intro: [hi, "You signed up for Post Social, but no social account is connected yet. That's the first step: pick Instagram, TikTok, YouTube or any of the others, and sign in on the platform's own page. Post Social never sees your password."],
+      button: { text: "Connect an account", url: `${appUrl}/beta/accounts` },
+      after: [`There's a one-minute walkthrough at ${appUrl}/docs/quickstart. If something gets in the way, just reply to this email.`],
     };
   }
-  if (kind === "no_ai") {
+  if (due.kind === "no_ai") {
     return {
       subject: "Post from Claude or ChatGPT in one step",
-      paragraphs: [
-        hi,
-        "Your account is connected. The next step is connecting your AI, so you can post just by asking: Claude, ChatGPT or any AI agent. It takes about a minute. Open API/MCP in Post Social, pick your AI, and follow the steps.",
-        `Connect your AI: ${appUrl}/beta/api`,
-        "Reply to this email if you'd like a hand.",
-      ],
+      preheader: "Post just by asking.",
+      label: "Getting started",
+      headline: "Connect your AI",
+      intro: [hi, "Your account is connected. The next step is connecting your AI, so you can post just by asking: Claude, ChatGPT or any AI agent. It takes about a minute. Open API/MCP in Post Social, pick your AI and follow the steps."],
+      button: { text: "Connect your AI", url: `${appUrl}/beta/api` },
+      after: ["Reply to this email if you'd like a hand."],
     };
   }
   const where = PLATFORM_NAMES[due.platform ?? ""] ?? "your account";
   return {
     subject: "Your first post is live",
-    paragraphs: [
-      hi,
-      due.live_url ? `Your first post through Post Social just went live on ${where}: ${due.live_url}` : `Your first post through Post Social just went live on ${where}.`,
-      `From here, you can ask your AI to schedule a week of posts in one message, and see them all on your calendar: ${appUrl}/beta/calendar`,
-      "Thanks for trying Post Social. Reply anytime with ideas or problems.",
-    ],
+    preheader: `It went out on ${where}.`,
+    label: "First post",
+    headline: "Your first post is live",
+    intro: [hi, `Your first post through Post Social just went live on ${where}.`],
+    button: isWebLink(due.live_url) ? { text: "See your post", url: due.live_url } : { text: "Open your calendar", url: `${appUrl}/beta/calendar` },
+    after: [`From here, you can ask your AI to schedule a week of posts in one message, and see them all on your calendar: ${appUrl}/beta/calendar`, "Thanks for trying Post Social. Reply anytime with ideas or problems."],
   };
 }
 
+const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif";
+const MONO = "'SFMono-Regular',Menlo,Consolas,monospace";
+const linkify = (s: string) => escape(s).replace(/(https:\/\/[^\s<]+?)(?=[.,]?(\s|$))/g, '<a href="$1" style="color:#C9A8FF;text-decoration:none;">$1</a>');
+
+function html(c: Content, appUrl: string, unsubscribe: string) {
+  const p = (text: string) => `<p style="margin:0 0 16px;font-size:16px;line-height:1.6;color:#CFC8DC;">${linkify(text)}</p>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="dark"><title>${escape(c.subject)}</title></head>
+<body style="margin:0;padding:0;background:#0B0816;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#0B0816;">${escape(c.preheader)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#0B0816;"><tr><td align="center" style="padding:28px 12px 40px;">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;">
+  <tr><td style="padding:0 8px 20px;"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+    <td style="vertical-align:middle;"><img src="${appUrl}/email/post-social-icon.png" width="28" height="28" alt="" style="display:block;border:0;border-radius:7px;"></td>
+    <td style="vertical-align:middle;padding-left:10px;font-family:Fraunces,Georgia,'Times New Roman',serif;font-size:12px;letter-spacing:4px;text-transform:uppercase;color:#FAF6F0;">Post Social</td>
+  </tr></table></td></tr>
+  <tr><td style="background:#130E24;border:1px solid #2A2142;border-radius:18px;padding:32px 36px 30px;font-family:${FONT};">
+    <p style="margin:0 0 14px;font-family:${MONO};font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#FFC48A;">${escape(c.label)}</p>
+    <h1 style="margin:0 0 18px;font-size:28px;line-height:1.15;font-weight:600;letter-spacing:-0.5px;color:#FAF6F0;">${escape(c.headline)}</h1>
+    ${c.intro.map(p).join("")}
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:6px 0 22px;"><tr><td style="border-radius:999px;background:#FFD7B0;background-image:linear-gradient(180deg,#FFE3C4,#FFC48A);">
+      <a href="${escape(c.button.url)}" style="display:inline-block;padding:12px 24px;font-family:${FONT};font-size:15px;font-weight:600;color:#1B1230;text-decoration:none;">${escape(c.button.text)}</a>
+    </td></tr></table>
+    ${c.after.map(p).join("")}
+    <p style="margin:8px 0 0;font-size:14px;line-height:1.6;color:#CFC8DC;"><span style="color:#FAF6F0;font-weight:600;">Aki</span><br><span style="color:#9C93B3;">Post Social</span></p>
+  </td></tr>
+  <tr><td style="padding:22px 12px 0;font-family:${FONT};font-size:12px;line-height:1.6;color:#7D7494;text-align:center;">
+    You're getting this because you signed up for Post Social. <a href="${escape(unsubscribe)}" style="color:#9C93B3;">Unsubscribe</a><br>
+    &copy; 2026 Pentridge Media &middot; <a href="${appUrl}" style="color:#9C93B3;text-decoration:none;">postsocial.xyz</a> &middot; <a href="${appUrl}/privacy" style="color:#9C93B3;text-decoration:none;">Privacy</a>
+  </td></tr>
+</table></td></tr></table>
+</body></html>`;
+}
+
 export function composeEmail(due: Due, appUrl: string, unsubscribe: string): Email {
-  const { subject, paragraphs } = body(due.kind, due, appUrl);
-  const sign = ["Aki", "Founder, Post Social"];
-  const footer = `You're getting this because you signed up for Post Social. Don't want these emails? Unsubscribe: ${unsubscribe}`;
-  const text = [...paragraphs, sign.join("\n"), "--", footer].join("\n\n");
-  const link = (s: string) => escape(s).replace(/(https:\/\/[^\s<]+)/g, '<a href="$1">$1</a>');
-  const html = `<div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.55;color:#1b1726;max-width:560px">${paragraphs.map((p) => `<p>${link(p)}</p>`).join("")}<p>${sign.map(escape).join("<br>")}</p><p style="font-size:12px;color:#6e6784;border-top:1px solid #e6e1ec;padding-top:12px">You're getting this because you signed up for Post Social. Don't want these emails? <a href="${escape(unsubscribe)}">Unsubscribe</a>.</p></div>`;
-  return { to: due.email, subject, text, html, unsubscribeUrl: unsubscribe };
+  const c = content(due, appUrl);
+  const text = [...c.intro, `${c.button.text}: ${c.button.url}`, ...c.after, "Aki\nPost Social", "--", `You're getting this because you signed up for Post Social. Unsubscribe: ${unsubscribe}`].join("\n\n");
+  return { to: due.email, subject: c.subject, text, html: html(c, appUrl, unsubscribe), unsubscribeUrl: unsubscribe };
 }
 
 // ---- who is due --------------------------------------------------------------------------
@@ -179,7 +214,8 @@ export async function runNudgeSweep(deps: NudgeDeps): Promise<number> {
   return sent;
 }
 
-// Sends one email through Resend, blind-copying Aki, with a one-click unsubscribe header.
+// Sends one email through Resend from Aki, replies to his inbox, blind-copying him, with the
+// unsubscribe link in the List-Unsubscribe header.
 export function resendSender(apiKey: string, fetchImpl: typeof fetch = fetch) {
   return async (email: Email) => {
     const response = await fetchImpl("https://api.resend.com/emails", {
@@ -189,7 +225,7 @@ export function resendSender(apiKey: string, fetchImpl: typeof fetch = fetch) {
         from: NUDGE_FROM,
         to: [email.to],
         bcc: [NUDGE_COPY_TO],
-        reply_to: NUDGE_FROM,
+        reply_to: NUDGE_REPLY_TO,
         subject: email.subject,
         text: email.text,
         html: email.html,
