@@ -3,7 +3,11 @@
 // keeps its own title or name, cleaned up.
 const KNOWN: Array<[RegExp, string]> = [
   [/^claude[-_ ]?code/i, "Claude Code"],
-  [/^claude/i, "Claude"],
+  [/claude|anthropic/i, "Claude"],
+  [/muse|meta[-_ ]?ai/i, "Muse"],
+  [/^grok|\bxai\b/i, "Grok"],
+  [/hermes/i, "Hermes"],
+  [/openclaw/i, "OpenClaw"],
   [/codex/i, "Codex"],
   [/chatgpt|^openai/i, "ChatGPT"],
   [/cursor/i, "Cursor"],

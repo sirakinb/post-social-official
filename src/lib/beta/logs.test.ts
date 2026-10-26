@@ -35,6 +35,11 @@ describe("whoDid", () => {
     expect(whoDid({ kind: "api_key", display_name: "Key A", client_name: null }, null).actorName).toBe("Key A");
     expect(whoDid(null, null)).toEqual({ actorKind: "system", actorName: "Post Social", actorVia: null });
   });
+
+  it("shows names saved before an app was known the way people know it", () => {
+    expect(whoDid({ kind: "api_key", display_name: "Muse", client_name: "muse-custom-connector" }, null)).toEqual({ actorKind: "api_key", actorName: "Muse", actorVia: null });
+    expect(whoDid({ kind: "oauth_grant", display_name: "Claude", client_name: "AnthropicClaudeAI" }, null)).toEqual({ actorKind: "oauth_grant", actorName: "Claude", actorVia: null });
+  });
 });
 
 describe("loadLogs", () => {

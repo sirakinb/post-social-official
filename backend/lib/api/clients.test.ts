@@ -12,6 +12,20 @@ describe("clientLabel", () => {
     expect(clientLabel({ name: "Visual Studio Code" })).toBe("GitHub Copilot");
   });
 
+  it("names agent apps by the names they actually send", () => {
+    // Seen in production: Claude's sign-in and Muse's own connector.
+    expect(clientLabel({ name: "AnthropicClaudeAI" })).toBe("Claude");
+    expect(clientLabel({ name: "muse-custom-connector" })).toBe("Muse");
+    expect(clientLabel({ name: "Muse" })).toBe("Muse");
+    expect(clientLabel({ name: "meta-ai" })).toBe("Muse");
+    expect(clientLabel({ name: "grok-cli" })).toBe("Grok");
+    expect(clientLabel({ name: "xai mcp" })).toBe("Grok");
+    expect(clientLabel({ name: "hermes-agent" })).toBe("Hermes");
+    expect(clientLabel({ name: "openclaw" })).toBe("OpenClaw");
+    // Claude Code still wins over plain Claude.
+    expect(clientLabel({ name: "claude-code" })).toBe("Claude Code");
+  });
+
   it("keeps any other app's own name, cleaned up and short", () => {
     expect(clientLabel({ name: "my-agent", title: "My Agent" })).toBe("My Agent");
     expect(clientLabel({ name: "<b>Bot</b>" })).toBe("bBotb");

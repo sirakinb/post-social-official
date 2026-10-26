@@ -1,7 +1,8 @@
 // OAuth 2.1 authorization server for AI apps that connect to the MCP server (ChatGPT, the
 // Claude app, Cursor...). Follows the MCP authorization spec: protected resource metadata
 // (RFC 9728), authorization server metadata (RFC 8414), dynamic client registration
-// (RFC 7591), PKCE S256, resource indicators (RFC 8707), rotating refresh tokens and
+// (RFC 7591) or client ID metadata documents (an app's id is the address of its own
+// description), PKCE S256, resource indicators (RFC 8707), rotating refresh tokens and
 // revocation (RFC 7009). Apps are public clients; PKCE is what binds a code to its app.
 // Only SHA-256 hashes of codes and tokens are stored.
 import { API_LIMIT_SQL, ApiError, apiLimitMessage, isAgentCaller, membership, PLAN_JOIN_SQL, requireUuid, type AgentCaller, type Caller, type Sql } from "../access";
@@ -44,6 +45,7 @@ export function authorizationServerMetadata(issuer: string) {
     code_challenge_methods_supported: ["S256"],
     token_endpoint_auth_methods_supported: ["none"],
     revocation_endpoint_auth_methods_supported: ["none"],
+    client_id_metadata_document_supported: true,
     scopes_supported: [SCOPE],
     service_documentation: `${issuer}/beta/keys`,
   };
@@ -153,11 +155,113 @@ export type AuthorizeParams = {
   resource?: string;
 };
 
+// ----- apps whose id is a web address (client ID metadata documents) -----
+
+// Some apps (Grok, Muse) don't register; their client_id is the https address of a small
+// JSON file describing them. We read that file once and keep the app like a registered one.
+const METADATA_MAX_BYTES = 16_384;
+const METADATA_TIMEOUT_MS = 5_000;
+
+// Only public https addresses with a path: never this computer, a private network, or a
+// raw IP address, so the server can't be pointed at something internal.
+export function isMetadataClientId(id: string) {
+  if (id.length > 500 || !id.startsWith("https://")) return false;
+  let url: URL;
+  try {
+    url = new URL(id);
+  } catch {
+    return false;
+  }
+  if (url.username || url.password || url.hash || url.port || url.pathname === "/") return false;
+  const host = url.hostname.toLowerCase();
+  if (!host.includes(".") || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return false;
+  if (/^[\d.]+$/.test(host) || host.startsWith("[")) return false;
+  return true;
+}
+
+type Fetcher = (url: string, init: RequestInit) => Promise<Response>;
+
+// The body as text, or null if it's longer than `max` bytes (stops reading at the limit).
+async function readCapped(response: Response, max: number) {
+  if (Number(response.headers.get("content-length") ?? 0) > max) return null;
+  if (!response.body) return null;
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > max) {
+        await reader.cancel();
+        return null;
+      }
+      chunks.push(value);
+    }
+  } catch {
+    return null;
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+// Reads and checks the app's file. Returns null if it can't be used.
+export async function readClientMetadata(clientId: string, fetcher: Fetcher = fetch) {
+  let response: Response;
+  try {
+    response = await fetcher(clientId, { redirect: "error", headers: { Accept: "application/json" }, signal: AbortSignal.timeout(METADATA_TIMEOUT_MS) });
+  } catch {
+    return null;
+  }
+  if (!response.ok) return null;
+  const text = await readCapped(response, METADATA_MAX_BYTES);
+  if (!text) return null;
+  let doc: Record<string, unknown>;
+  try {
+    doc = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!doc || typeof doc !== "object" || doc.client_id !== clientId) return null;
+  if (doc.token_endpoint_auth_method !== undefined && doc.token_endpoint_auth_method !== "none") return null;
+  const uris = doc.redirect_uris;
+  if (!Array.isArray(uris) || uris.length === 0 || uris.length > 10 || uris.some((u) => redirectUriProblem(u) !== null)) return null;
+  const host = new URL(clientId).hostname;
+  const name = (typeof doc.client_name === "string" ? doc.client_name.trim() : "").slice(0, 80) || host;
+  const clientUri = typeof doc.client_uri === "string" && /^https:\/\//.test(doc.client_uri) ? doc.client_uri.slice(0, 500) : `https://${host}`;
+  return { name, redirectUris: uris as string[], clientUri };
+}
+
+const CLIENT_COLUMNS = "id, client_id, client_name, redirect_uris, client_uri";
+
+// A registered app, or an app known by its web address (read on first use, and read again
+// when it asks to come back to an address we haven't seen, in case its file changed).
+async function findClient(sql: Sql, clientId: string, redirectUri: string | undefined, fetcher?: Fetcher) {
+  const [known] = await sql<ClientRow>(`SELECT ${CLIENT_COLUMNS} FROM public.oauth_clients WHERE client_id = $1`, [clientId]);
+  if (!isMetadataClientId(clientId)) return known ?? null;
+  if (known && (!redirectUri || redirectMatches(known.redirect_uris, redirectUri))) return known;
+  const doc = await readClientMetadata(clientId, fetcher);
+  if (!doc) return known ?? null;
+  const [saved] = await sql<ClientRow>(
+    `INSERT INTO public.oauth_clients (client_id, client_name, redirect_uris, client_uri) VALUES ($1, $2, $3, $4)
+     ON CONFLICT (client_id) DO UPDATE SET client_name = EXCLUDED.client_name, redirect_uris = EXCLUDED.redirect_uris, client_uri = EXCLUDED.client_uri
+     RETURNING ${CLIENT_COLUMNS}`,
+    [clientId, doc.name, doc.redirectUris, doc.clientUri],
+  );
+  return saved;
+}
+
 // Problems that make it unsafe to send the person back to the app are shown on the page
 // (bad client or redirect). Everything else goes back to the app as an OAuth error.
-export async function checkAuthorization(sql: Sql, issuer: string, params: AuthorizeParams) {
+export async function checkAuthorization(sql: Sql, issuer: string, params: AuthorizeParams, fetcher?: Fetcher) {
   if (!params.client_id) throw new OAuthError("invalid_request", "This sign-in link is missing the app's id.");
-  const [client] = await sql<ClientRow>(`SELECT id, client_id, client_name, redirect_uris, client_uri FROM public.oauth_clients WHERE client_id = $1`, [params.client_id]);
+  const client = await findClient(sql, params.client_id, params.redirect_uri, fetcher);
   if (!client) throw new OAuthError("invalid_client", "This app is not registered with Post Social. Try connecting again from the app.");
   if (!params.redirect_uri || !redirectMatches(client.redirect_uris, params.redirect_uri)) {
     throw new OAuthError("invalid_request", "This sign-in link sends you to an address the app did not register, so it was stopped.");

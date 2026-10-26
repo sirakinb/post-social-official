@@ -49,6 +49,18 @@ export function ApiView(props: { workspaceId: string; role: string; apps: AiApp[
     router.refresh();
   }
 
+  // Muse connects with a key; one button makes it, named so Logs can tell it apart.
+  async function onCreateMuseKey() {
+    setBusy("key");
+    setMessage(null);
+    const r = await createKey(props.workspaceId, "Muse", "live");
+    setBusy(null);
+    if (!r.ok) return setMessage({ kind: "error", text: r.error });
+    setNewKey({ name: r.data.name, key: r.data.key });
+    setCopied(false);
+    router.refresh();
+  }
+
   // One tab per AI app. Most sign in with OAuth (no key); Muse takes an API key from below.
   const snippets = {
     claude: { label: "Claude", help: "In Claude (web or desktop), open Settings → Connectors → Add custom connector and paste this address. Claude sends you here to approve it. A connector added in Claude also works in Claude Code when Claude Code is signed in with the same Claude plan.", code: props.mcpUrl },
@@ -57,7 +69,11 @@ export function ApiView(props: { workspaceId: string; role: string; apps: AiApp[
     codex: { label: "Codex", help: "For the Codex CLI, IDE extension and ChatGPT desktop app. Run both lines; the second opens your browser to approve.", code: `codex mcp add ${props.serverName} --url ${props.mcpUrl}\ncodex mcp login ${props.serverName}` },
     cursor: { label: "Cursor", help: "Add this to ~/.cursor/mcp.json (or .cursor/mcp.json in a project), then press Connect next to Post Social in Cursor's MCP settings.", code: JSON.stringify({ mcpServers: { [props.serverName]: { url: props.mcpUrl } } }, null, 2) },
     grok: { label: "Grok", help: "On grok.com, open grok.com/connectors → New Connector → Custom and paste the address, then sign in. For the Grok CLI, run this and press i in /mcps to sign in.", code: `grok mcp add --transport http ${props.serverName} ${props.mcpUrl}` },
-    muse: { label: "Muse", help: "Meta Muse has no connector form: create an API key below, then send Muse this message and paste the key when it asks.", code: `Connect a custom MCP server called Post Social at ${props.mcpUrl}. It uses HTTP with a bearer token. Save it as a skill.` },
+    muse: {
+      label: "Muse",
+      help: "Muse connects with an API key. Create a key for Muse, send Muse this message, and paste the key into Muse's secure form when it asks (never into the chat).",
+      code: `Connect a custom MCP server called Post Social at ${props.mcpUrl}. It's a remote MCP server (streamable HTTP, JSON-RPC over POST) that takes a bearer token in the Authorization header. Don't open the address in a browser: it only answers MCP requests. Use "Muse" as the clientInfo name when you initialize. Ask me for the token in your secure credential form, then list the tools to check it works and save it as a skill.`,
+    },
     hermes: { label: "Hermes", help: "Add this to ~/.hermes/config.yaml, then run /reload-mcp. Hermes prints a link to approve Post Social the first time.", code: `mcp_servers:\n  ${props.serverName}:\n    url: "${props.mcpUrl}"\n    auth: oauth` },
     openclaw: { label: "OpenClaw", help: "Run both lines; the second opens your browser to approve.", code: `openclaw mcp add ${props.serverName} --url ${props.mcpUrl} --transport streamable-http --auth oauth\nopenclaw mcp login ${props.serverName}` },
     cli: { label: "CLI", help: "For scripts and terminals. JSON in, JSON out.", code: "npx postsocial login\nnpx postsocial list-social-accounts --pretty" },
@@ -174,6 +190,11 @@ export function ApiView(props: { workspaceId: string; role: string; apps: AiApp[
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
                 </button>
               </div>
+              {client === "muse" && canManageKeys && (
+                newKey?.name === "Muse"
+                  ? <p className="m-0 text-xs text-ps-attention-text">Your Muse key is under API keys on this page. Copy it now; you won&apos;t see it again.</p>
+                  : <button type="button" data-attr="create-muse-key" disabled={busy === "key"} onClick={onCreateMuseKey} className={cn(btn, "self-start")}>Create a key for Muse</button>
+              )}
               <span className="text-xs text-ps-subtle">Everything your AI does shows in Logs with its name. <a href="/docs" className="text-ps-plum-soft hover:text-ps-text">Full setup guide</a></span>
             </div>
           </div>
