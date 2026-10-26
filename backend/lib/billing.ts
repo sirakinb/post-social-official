@@ -126,21 +126,28 @@ export async function recordSubscription(sql: Sql, workspaceId: string, subscrip
   return paid;
 }
 
-// Brings the subscription's quantity in line with the connected accounts. A new account is
-// charged right away for the days left in the billing month (always_invoice), so the next
-// charge stays the plain monthly price; a removed one just lowers the next bill (no refund).
+// Brings the subscription's quantity in line with the connected accounts. Only connecting an
+// account charges anything: right away, for the days left in the billing month (always_invoice),
+// so the next charge stays the plain monthly price. A removed one just lowers the next bill (no
+// refund). A subscription that is cancelling is left alone, and one billed for fewer than 3
+// accounts (from before checkout started at 3) is never raised just to reach 3.
 // Safe to call often: it does nothing when they already match.
 export async function syncAccountQuantity(deps: BillingDeps, workspaceId: string) {
   if (!deps.stripe) return null;
   const state = await workspaceState(deps.sql, workspaceId);
   if (!state?.stripe_subscription_id || !PAID_STATUSES.has(state.subscription_status ?? "")) return null;
-  const quantity = billedQuantity(state.connected);
-  if (state.billed_quantity === quantity) return quantity;
-  const subscription = await deps.stripe.request<{ items: { data: { id: string; quantity?: number }[] } }>("GET", `/v1/subscriptions/${state.stripe_subscription_id}`);
+  if (state.billed_quantity === billedQuantity(state.connected)) return state.billed_quantity;
+  const subscription = await deps.stripe.request<{ cancel_at_period_end?: boolean; cancel_at?: number | null; items: { data: { id: string; quantity?: number }[] } }>("GET", `/v1/subscriptions/${state.stripe_subscription_id}`);
   const item = subscription.items.data[0];
   if (!item) throw new Error(`Subscription ${state.stripe_subscription_id} has no items`);
-  const adding = quantity > (item.quantity ?? state.billed_quantity ?? 0);
-  await deps.stripe.request("POST", `/v1/subscription_items/${item.id}`, { quantity, proration_behavior: adding ? "always_invoice" : "none" });
+  const current = item.quantity ?? state.billed_quantity ?? 0;
+  const cancelling = Boolean(subscription.cancel_at_period_end || subscription.cancel_at);
+  const quantity = state.connected > current ? billedQuantity(state.connected) : Math.min(current, billedQuantity(state.connected));
+  if (cancelling || quantity === current) {
+    await deps.sql(`UPDATE public.workspace_billing SET billed_quantity = $2, updated_at = now() WHERE workspace_id = $1`, [workspaceId, current]);
+    return current;
+  }
+  await deps.stripe.request("POST", `/v1/subscription_items/${item.id}`, { quantity, proration_behavior: quantity > current ? "always_invoice" : "none" });
   await deps.sql(`UPDATE public.workspace_billing SET billed_quantity = $2, updated_at = now() WHERE workspace_id = $1`, [workspaceId, quantity]);
   return quantity;
 }
