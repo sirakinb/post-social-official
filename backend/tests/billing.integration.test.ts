@@ -48,6 +48,26 @@ describe.skipIf(!enabled)("billing on the dev backend", () => {
     expect(cents).toBe(100);
   });
 
+  it("stops a Free workspace at 2 connected accounts, but lets them reconnect", async () => {
+    const connect = (externalId: string) =>
+      sql(
+        `INSERT INTO public.connected_accounts (workspace_id, platform, external_account_id, handle, display_name, capabilities, health)
+         VALUES ($1, 'bluesky', $2, $2, 'Limit Test', '{}', 'connected')
+         ON CONFLICT (workspace_id, platform, external_account_id) DO UPDATE SET health = 'connected', disconnected_at = NULL`,
+        [workspaceId, externalId],
+      );
+    await connect("limit-1");
+    await connect("limit-2");
+    await expect(connect("limit-3")).rejects.toThrow(/Your Free plan allows 2 connected accounts/);
+    await connect("limit-2"); // reconnecting a connected account is not a new one
+
+    await sql(`UPDATE public.connected_accounts SET health = 'disconnected', disconnected_at = now() WHERE workspace_id = $1 AND external_account_id = 'limit-2'`, [workspaceId]);
+    await connect("limit-3"); // the freed slot
+    await expect(connect("limit-2")).rejects.toThrow(/Your Free plan allows 2 connected accounts/); // coming back would make 3
+
+    await sql(`DELETE FROM public.connected_accounts WHERE workspace_id = $1`, [workspaceId]);
+  });
+
   it("lets a paying workspace go up to its own cap", async () => {
     await sql(
       `INSERT INTO public.workspace_billing (workspace_id, stripe_customer_id, stripe_subscription_id, subscription_status, x_monthly_cap_cents)
