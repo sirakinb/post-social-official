@@ -4,6 +4,7 @@
 import { ApiError, membership, requireUuid, type Caller, type Sql } from "../access";
 import type { Settings } from "./platforms";
 import { accountToken } from "../../../worker/src/credentials";
+import { PublishError } from "../../../worker/src/publish/types";
 
 export type CreatorInfo = {
   nickname: string;
@@ -34,7 +35,11 @@ export async function tiktokCreatorInfo(
   });
   if (account.health === "disconnected") throw new ApiError(409, `${account.display_name} is disconnected. Reconnect it first.`);
 
-  const token = await accountToken(deps, { id: account.id, platform: "tiktok", displayName: account.display_name });
+  const token = await accountToken(deps, { id: account.id, platform: "tiktok", displayName: account.display_name }).catch((error) => {
+    // Lost access shows the person a clear "reconnect" message, not an unhandled error.
+    if (error instanceof PublishError && error.reconnect) throw new ApiError(409, error.message);
+    throw error;
+  });
   const response = await (deps.http ?? fetch)("https://open.tiktokapis.com/v2/post/publish/creator_info/query/", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json; charset=UTF-8" },
