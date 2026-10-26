@@ -13,8 +13,8 @@ const APPLY_URL = "mailto:hello@postsocial.xyz?subject=Affiliate%20application";
 
 const WHO_FOR = [
   { title: "Friends of Post Social", text: "You like Post Social and know people who would too. Share it with them." },
-  { title: "Creators who use AI tools", text: "You already work with Claude, ChatGPT or your own agent. Show people how you post with it." },
-  { title: "Agencies and operators", text: "You run social media for other people or brands. Recommend Post Social to the ones that fit." },
+  { title: "Creators who use AI tools", text: "You already work with Claude, ChatGPT or your own agents. Show people how you post with them." },
+  { title: "Agencies and operators", text: "You run social media for your own brands or for other people's. Recommend Post Social to the ones that fit." },
 ];
 
 const STEPS = [
