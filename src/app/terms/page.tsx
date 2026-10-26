@@ -25,7 +25,7 @@ export default function TermsPage() {
           <h1 className="font-display text-3xl font-semibold text-ink">
             Terms of Service
           </h1>
-          <p className="mt-2 text-sm text-ink-subtle">Effective July 21, 2026 · Updated October 20, 2026</p>
+          <p className="mt-2 text-sm text-ink-subtle">Effective July 21, 2026 · Updated October 26, 2026</p>
 
           <div className="mt-8 space-y-6 text-ink-muted">
             <section>
@@ -181,7 +181,24 @@ export default function TermsPage() {
 
             <section>
               <h2 className="font-display text-xl font-semibold text-ink">
-                10. Contact
+                10. Affiliate program
+              </h2>
+              <p className="mt-2 text-sm leading-relaxed">
+                Joining the affiliate program is by approval. Affiliates earn a
+                commission of 20% of the paid invoices of customers they refer,
+                for 24 months from the customer&apos;s first payment. Commission is earned only on payments that
+                have been made and not refunded. You may not refer yourself or an
+                account you control. Commissions are tracked and paid out through
+                Rewardful, and you agree to Rewardful&apos;s terms for that. We
+                may change the commission rate or these terms; changes apply to
+                new commissions, and we will give you notice before they take
+                effect.
+              </p>
+            </section>
+
+            <section>
+              <h2 className="font-display text-xl font-semibold text-ink">
+                11. Contact
               </h2>
               <p className="mt-2 text-sm leading-relaxed">
                 Questions about these terms may be sent to{" "}

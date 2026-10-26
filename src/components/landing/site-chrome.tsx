@@ -72,6 +72,7 @@ export function SiteFooter() {
         </div>
         <nav aria-label="Legal" className="flex flex-wrap gap-6 text-sm text-[#FAF6F0]/55">
           <Link href="/docs" className="hover:text-[#FAF6F0]">Docs</Link>
+          <Link href="/affiliates" className="hover:text-[#FAF6F0]">Affiliates</Link>
           <Link href="/privacy" className="hover:text-[#FAF6F0]">Privacy</Link>
           <Link href="/terms" className="hover:text-[#FAF6F0]">Terms</Link>
           <Link href="/data-deletion" className="hover:text-[#FAF6F0]">Data deletion</Link>

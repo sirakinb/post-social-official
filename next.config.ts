@@ -9,6 +9,11 @@ const mediaStorage = "https://5e9cbd18080d4f973442560e2140a3e0.r2.cloudflarestor
 // DataFast (visitor analytics) loads its script from, and sends page views to, this address.
 const analytics = "https://datafa.st";
 
+// Rewardful (affiliate tracking) loads its script from r.wdfl.co and reports referral clicks to
+// api.getrewardful.com (read from rw.js itself; Rewardful's docs don't list domains).
+const affiliateScript = "https://r.wdfl.co";
+const affiliateApi = "https://api.getrewardful.com";
+
 // Crisp (support chat) loads its script, styles, fonts and a chat connection from its own
 // domains, and runs short-lived workers from blob: addresses (docs.crisp.chat, "Crisp Domain Names").
 const supportChat = "https://*.crisp.chat";
@@ -22,12 +27,12 @@ const securityHeaders = [
     "frame-ancestors 'none'",
     `frame-src ${supportChat}`,
     "object-src 'none'",
-    `script-src 'self' 'unsafe-inline' ${analytics} ${supportChat}${developmentSources}`,
+    `script-src 'self' 'unsafe-inline' ${analytics} ${affiliateScript} ${supportChat}${developmentSources}`,
     `style-src 'self' 'unsafe-inline' ${supportChat}`,
     `font-src 'self' data: ${supportChat}`,
     "img-src 'self' data: blob: https:",
     "media-src 'self' blob: https:",
-    `connect-src 'self' ${mediaStorage} ${analytics} ${supportChat} ${supportChatSockets}${developmentConnections}`,
+    `connect-src 'self' ${mediaStorage} ${analytics} ${affiliateApi} ${supportChat} ${supportChatSockets}${developmentConnections}`,
     // The app's own service worker (/sw.js) and Crisp's blob: workers.
     `worker-src 'self' blob: ${supportChat}`,
     "upgrade-insecure-requests",
