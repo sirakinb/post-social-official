@@ -2,6 +2,7 @@
 // time they open the app, the web app asks for one and gets their own, on the Free plan.
 // Anyone already in a workspace (invited, or provisioned before) gets that one back.
 import { ApiError, type Caller, type Sql, isAgentCaller } from "./access";
+import { trackEvent } from "./telemetry";
 
 // Same shape as workspace addresses made by the account script.
 export function slugBase(text: string) {
@@ -36,6 +37,8 @@ export async function provisionWorkspace(sql: Sql, caller: Caller, _input: Recor
       );
       if (!row?.workspace_id) throw new ApiError(500, "Setting up your workspace failed. Try again.");
       await addSampleDraft(sql, row.workspace_id, caller.userId);
+      // The first step of the new-user funnel; the workspace lets test accounts be filtered out.
+      trackEvent("signed_up", { workspace_id: row.workspace_id }, caller.userId);
       return { workspace_id: row.workspace_id };
     } catch (error) {
       if (attempt < 2 && /workspaces_slug|duplicate key/i.test(String((error as Error)?.message))) continue;
