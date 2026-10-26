@@ -18,7 +18,7 @@ describe("Sidebar", () => {
     expect(screen.getByRole("link", { name: "API/MCP" })).toHaveAttribute("href", "/beta/api");
   });
 
-  it("keeps General, Billing and On your phone in a Settings dropdown", async () => {
+  it("keeps General and Billing in a Settings dropdown, with no phone setup page", async () => {
     const { fireEvent } = await import("@testing-library/react");
     render(<Sidebar {...props} />);
     const settings = screen.getByRole("button", { name: "Settings" });
@@ -30,7 +30,6 @@ describe("Sidebar", () => {
     expect(menu.getAllByRole("link").map((l) => [l.textContent, l.getAttribute("href")])).toEqual([
       ["General", "/beta/settings"],
       ["Billing", "/beta/billing"],
-      ["On your phone", "/beta/phone"],
     ]);
   });
 

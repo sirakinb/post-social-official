@@ -47,7 +47,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     at: "2026-10-20T00:00:00-04:00",
     kind: "Improved",
     title: "Post from your phone",
-    body: "Post Social now works better on a phone. iPhone videos (MOV) are turned into MP4 automatically, so they can go to Facebook Reels, LinkedIn and Bluesky too, and portrait phone videos count as portrait. Photos of any shape and format can go to Instagram: they're fitted to Instagram's 4:5 shape with a soft blurred backdrop. Uploads keep your screen awake and pause instead of starting over if your phone locks or the connection drops. The menu folds away on small screens, and you can add Post Social to your home screen. On Android you can share videos and photos straight into it; on iPhone, a Shortcut does the same. See On your phone in the menu.",
+    body: "Post Social now works better on a phone. iPhone videos (MOV) are turned into MP4 automatically, so they can go to Facebook Reels, LinkedIn and Bluesky too, and portrait phone videos count as portrait. Photos of any shape and format can go to Instagram: they're fitted to Instagram's 4:5 shape with a soft blurred backdrop. Uploads keep your screen awake and pause instead of starting over if your phone locks or the connection drops. The menu folds away on small screens, and you can add Post Social to your home screen. On Android you can share videos and photos straight into it; on iPhone, a Shortcut does the same.",
   },
   {
     at: "2026-10-17T03:30:00-04:00",
