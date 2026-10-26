@@ -26,7 +26,7 @@ test('a free workspace adds a card so it can connect a 3rd and 4th account', { s
   await app.open('/beta/billing');
   // Subscribing moves the workspace to Paid for good, so on a rerun this login is already
   // paid: check that state instead (a fresh free login is needed to exercise checkout again).
-  if (await browser.evaluate(() => /Paid plan/.test(document.body.innerText))) {
+  if (await browser.evaluate(() => /Next charge/.test(document.body.innerText))) {
     await expect(screen.getByText('Next charge')).toBeVisible();
     return;
   }
