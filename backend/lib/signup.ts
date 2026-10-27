@@ -2,6 +2,7 @@
 // time they open the app, the web app asks for one and gets their own, on the Free plan.
 // Anyone already in a workspace (invited, or provisioned before) gets that one back.
 import { ApiError, type Caller, type Sql, isAgentCaller } from "./access";
+import { SAMPLE_DRAFT } from "./sample-draft";
 import { trackEvent } from "./telemetry";
 
 // Same shape as workspace addresses made by the account script.
@@ -49,7 +50,7 @@ export async function provisionWorkspace(sql: Sql, caller: Caller, _input: Recor
 }
 
 // One example draft in a brand-new workspace, so Drafts and Create aren't empty on day one.
-export const SAMPLE_DRAFT = "Hello from Post Social. (This is an example draft: change the words, pick your accounts, then post it now or schedule it. You can delete it any time.)";
+export { SAMPLE_DRAFT };
 
 // Only in a workspace this person created in the last few minutes and that has no posts yet,
 // so a returning or invited person never gets one. Best effort: sign-up never fails over it.

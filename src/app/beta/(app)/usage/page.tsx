@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { FREE_ACCOUNTS } from "@/lib/pricing";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getAccessTokenCookieName } from "@insforge/sdk/ssr";
@@ -87,6 +88,8 @@ export default async function BetaUsagePage({ searchParams }: { searchParams: Pr
   const memberships = (data ?? []) as unknown as Array<{ workspace_id: string; workspaces: { name: string; slug: string } | null }>;
   const current = memberships.find((m) => m.workspaces?.slug === slug) ?? memberships[0];
   const report = current ? await loadReport(current.workspace_id, period) : null;
+  // Free and Paid are billed per account (Tester isn't), so their account card shows no cap.
+  const billed = report ? ["Free", "Paid"].includes(report.plan.name) : false;
   const peak = report ? Math.max(1, ...report.daily.map((d) => d.posts_published)) : 1;
   const peakCalls = report ? Math.max(1, ...report.daily.map((d) => d.api_calls)) : 1;
 
@@ -102,7 +105,7 @@ export default async function BetaUsagePage({ searchParams }: { searchParams: Pr
             <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
               <div>
                 <h1 className="m-0 text-lg font-medium text-ps-text">Usage</h1>
-                <p className="mt-1 text-sm text-ps-muted">{report.plan.name} plan · times in UTC · your AIs can read this too with the get_usage tool.</p>
+                <p className="mt-1 text-sm text-ps-muted">{report.plan.name} plan</p>
               </div>
               <nav aria-label="Period" className="flex flex-wrap gap-1 rounded-lg border border-ps-line bg-ps-surface p-1 text-sm">
                 {PERIODS.map((p) => (
@@ -124,7 +127,18 @@ export default async function BetaUsagePage({ searchParams }: { searchParams: Pr
                 <LimitCard title="Posts published this month" limit={report.plan.limits.posts_per_month} format={count} note="Resets on the 1st of each month" />
                 <LimitCard title="API calls today" limit={report.plan.limits.api_calls_per_day} format={count} />
                 <LimitCard title="Media storage" limit={report.plan.limits.media_storage_bytes} format={bytes} />
-                <LimitCard title="Connected accounts" limit={report.plan.limits.connected_accounts} format={count} />
+                {billed ? (
+                  // Billed plans have no account cap to show: the first 2 are free, the rest are paid for.
+                  <div className="grooved-surface rounded-xl border border-ps-line bg-ps-surface p-4">
+                    <p className="text-xs font-medium text-ps-muted">Connected accounts</p>
+                    <p className="mt-1 text-lg font-semibold text-ps-text">
+                      {count(report.plan.limits.connected_accounts.used)} <span className="text-sm font-normal text-ps-subtle">connected · first {FREE_ACCOUNTS} free</span>
+                    </p>
+                    <p className="mt-2 text-xs text-ps-subtle"><Link href="/beta/billing" className="hover:text-ps-text">See billing</Link></p>
+                  </div>
+                ) : (
+                  <LimitCard title="Connected accounts" limit={report.plan.limits.connected_accounts} format={count} />
+                )}
               </div>
             </section>
 
@@ -205,6 +219,7 @@ export default async function BetaUsagePage({ searchParams }: { searchParams: Pr
                 )}
               </section>
             </div>
+            <p className="mt-10 text-xs text-ps-subtle">Times are in UTC. Your AI apps can read these numbers too, with the get_usage tool.</p>
           </>
         )}
       </main>

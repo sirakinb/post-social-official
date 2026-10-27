@@ -61,7 +61,7 @@ export default async function AuthorizePage({ searchParams }: { searchParams: Pr
                 <ul className="mt-1 list-disc space-y-1 pl-5 text-ink-muted">{CANNOT_DO.map((t) => <li key={t}>{t}</li>)}</ul>
               </div>
             </div>
-            <p className="mt-4 text-xs text-ink-subtle">Everything it does is labelled “{check.client_name}” in your activity. Disconnect it any time on the API/MCP page.</p>
+            <p className="mt-4 text-xs text-ink-subtle">Everything it does is labelled “{check.client_name}” in your activity. Disconnect it any time on the Connect your AI page.</p>
             <ConsentForm params={params} clientName={check.client_name} workspaces={workspaces} />
           </>
         )}

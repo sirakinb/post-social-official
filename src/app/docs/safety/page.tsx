@@ -23,7 +23,7 @@ export default function SafetyPage() {
 
       <Section id="disconnect" title="Disconnecting">
         <ul className="list-disc space-y-1 pl-5">
-          <li><span className="text-ink">An AI app.</span> Open API/MCP in Post Social, find the app under AI apps you signed in to, and choose Disconnect. It can no longer use Post Social.</li>
+          <li><span className="text-ink">An AI app.</span> Open Connect your AI in Post Social, find the app under AI apps you signed in to, and choose Disconnect. It can no longer use Post Social.</li>
           <li><span className="text-ink">An API key.</span> Revoke it under API keys on the same page.</li>
           <li><span className="text-ink">A social account.</span> On the Accounts page choose Disconnect, then Confirm disconnect. Posts scheduled for that account are cancelled.</li>
         </ul>

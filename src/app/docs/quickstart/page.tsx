@@ -50,7 +50,7 @@ export default function QuickstartPage() {
             <source src="/docs/quickstart/walkthrough.mp4" type="video/mp4" />
             <track kind="captions" src="/docs/quickstart/walkthrough.vtt" srcLang="en" label="English" />
           </video>
-          <figcaption className="mt-2 text-xs text-ink-subtle">The four steps below, in one minute.</figcaption>
+          <figcaption className="mt-2 text-xs text-ink-subtle">The five steps below, in one minute.</figcaption>
         </figure>
         <ol className="mt-5 list-decimal space-y-1 pl-5 text-sm text-ink-muted">
           <li><a href="#account" className="text-accent hover:underline">Connect your first account</a></li>
@@ -155,7 +155,7 @@ export default function QuickstartPage() {
           <ul className="list-disc space-y-2 pl-5">
             <li><span className="text-ink">The account shows Needs attention.</span> Access has expired or was removed. On the Accounts page choose Reconnect and sign in again.</li>
             <li><span className="text-ink">The post was saved as a draft.</span> Either no time was given, or the post has a problem such as a caption that is too long or media that doesn&apos;t fit the platform. Your AI gets the exact problems back; ask it to fix them and send the post again.</li>
-            <li><span className="text-ink">&ldquo;Test keys cannot publish.&rdquo;</span> A test API key can do everything except publish. Create a live key under API/MCP instead.</li>
+            <li><span className="text-ink">&ldquo;Test keys cannot publish.&rdquo;</span> A test API key can do everything except publish. Create a live key on the Connect your AI page instead.</li>
             <li><span className="text-ink">A TikTok account refuses a direct post.</span> The account is set to Inbox first. Ask for an inbox post, or change the setting on the Accounts page.</li>
             <li><span className="text-ink">X posts stopped.</span> You have reached your monthly X cap. See <Link href="/docs/billing#x" className="text-accent hover:underline">X posts in billing</Link>.</li>
             <li><span className="text-ink">Too many requests.</span> You have hit a rate limit. Wait a little while and try again.</li>

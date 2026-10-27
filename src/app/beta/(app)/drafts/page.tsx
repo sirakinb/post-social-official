@@ -21,7 +21,7 @@ export default async function DraftsPage() {
       caption: r.caption,
       plannedAt: r.scheduled_at,
       updatedAt: r.updated_at,
-      by: savedBy(r.actors, r.entry_point),
+      by: savedBy(r.actors, r.entry_point, r.caption),
       thumb: m ? { url: (m.media_type === "video" ? posters : links)[m.id] ?? null, isVideo: m.media_type === "video" } : null,
       destinations: r.destinations.map((d) => ({ platform: d.platform, account: d.connected_accounts?.display_name ?? "" })),
     };

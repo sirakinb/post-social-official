@@ -292,51 +292,57 @@ export async function analyticsDashboard(sql: Sql, caller: Caller, platforms: Pl
   const enabled = platforms.length ? platforms : ["none"];
   const days = DASHBOARD_PERIODS[period];
 
-  const posts = await sql<PostRow>(
-    `SELECT m.destination_id, m.post_id, m.platform, m.connected_account_id, m.published_at, m.views, m.likes, m.comments, m.shares,
-       m.saves, m.reposts, m.quotes, m.source, m.fetched_at, m.next_fetch_at, left(p.caption, 200) AS caption, d.live_url,
-       a.display_name AS account,
-       CASE WHEN EXISTS (SELECT 1 FROM public.post_media pm JOIN public.media_assets ma ON ma.id = pm.media_asset_id WHERE pm.post_id = m.post_id AND ma.media_type = 'video') THEN 'video'
-            WHEN (SELECT count(*) FROM public.post_media pm WHERE pm.post_id = m.post_id) > 1 THEN 'carousel'
-            WHEN EXISTS (SELECT 1 FROM public.post_media pm WHERE pm.post_id = m.post_id) THEN 'photo'
-            ELSE 'text' END AS format
-     FROM public.post_metrics m
-     JOIN public.posts p ON p.id = m.post_id
-     JOIN public.destinations d ON d.id = m.destination_id
-     JOIN public.connected_accounts a ON a.id = m.connected_account_id
-     WHERE m.workspace_id = $1 AND m.platform = ANY($2::text[]) AND ($3::text IS NULL OR m.platform = $3)
-       AND m.published_at >= now() - make_interval(days => $4)
-     ORDER BY m.published_at DESC LIMIT 3000`,
-    [input.workspace_id, enabled, platform, days],
-  );
-  const accounts = await sql<AccountRow>(
-    `SELECT id, platform, display_name, nullif(handle, '') AS handle, avatar_url FROM public.connected_accounts
-     WHERE workspace_id = $1 AND platform = ANY($2::text[]) AND ($3::text IS NULL OR platform = $3) AND health <> 'disconnected'
-     ORDER BY created_at`,
-    [input.workspace_id, enabled, platform],
-  );
-  const followers = await sql<FollowerRow>(
-    `SELECT connected_account_id, to_char(day, 'YYYY-MM-DD') AS day, followers, source FROM public.account_follower_days
-     WHERE workspace_id = $1 AND connected_account_id = ANY($2::uuid[]) AND day >= (now() - make_interval(days => $3))::date
-     ORDER BY day`,
-    [input.workspace_id, accounts.map((a) => a.id), Math.max(days, 30) + 1],
-  );
-  // Day-by-day numbers for the build-up curve, from the newest 300 posts old enough to have 30 days.
-  const history = await sql<DayRow>(
-    `SELECT h.destination_id, to_char(h.day, 'YYYY-MM-DD') AS day, h.views, h.likes, h.comments, h.shares, h.saves, h.reposts, h.quotes
-     FROM public.post_metric_days h
-     WHERE h.destination_id IN (
-       SELECT m.destination_id FROM public.post_metrics m
+  // The reads don't depend on each other (followers only on the accounts), so they run at once.
+  const [posts, { accounts, followers }, history, [{ used }]] = await Promise.all([
+    sql<PostRow>(
+      `SELECT m.destination_id, m.post_id, m.platform, m.connected_account_id, m.published_at, m.views, m.likes, m.comments, m.shares,
+         m.saves, m.reposts, m.quotes, m.source, m.fetched_at, m.next_fetch_at, left(p.caption, 200) AS caption, d.live_url,
+         a.display_name AS account,
+         CASE WHEN EXISTS (SELECT 1 FROM public.post_media pm JOIN public.media_assets ma ON ma.id = pm.media_asset_id WHERE pm.post_id = m.post_id AND ma.media_type = 'video') THEN 'video'
+              WHEN (SELECT count(*) FROM public.post_media pm WHERE pm.post_id = m.post_id) > 1 THEN 'carousel'
+              WHEN EXISTS (SELECT 1 FROM public.post_media pm WHERE pm.post_id = m.post_id) THEN 'photo'
+              ELSE 'text' END AS format
+       FROM public.post_metrics m
+       JOIN public.posts p ON p.id = m.post_id
+       JOIN public.destinations d ON d.id = m.destination_id
+       JOIN public.connected_accounts a ON a.id = m.connected_account_id
        WHERE m.workspace_id = $1 AND m.platform = ANY($2::text[]) AND ($3::text IS NULL OR m.platform = $3)
-         AND m.published_at < now() - interval '30 days' AND m.published_at >= now() - interval '120 days'
-       ORDER BY m.published_at DESC LIMIT 300)
-     ORDER BY h.destination_id, h.day`,
-    [input.workspace_id, enabled, platform],
-  );
-  const [{ used }] = await sql<{ used: string }>(
-    `SELECT count(*) AS used FROM public.analytics_refreshes WHERE workspace_id = $1 AND requested_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'`,
-    [input.workspace_id],
-  );
+         AND m.published_at >= now() - make_interval(days => $4)
+       ORDER BY m.published_at DESC LIMIT 3000`,
+      [input.workspace_id, enabled, platform, days],
+    ),
+    (async () => {
+      const accounts = await sql<AccountRow>(
+        `SELECT id, platform, display_name, nullif(handle, '') AS handle, avatar_url FROM public.connected_accounts
+         WHERE workspace_id = $1 AND platform = ANY($2::text[]) AND ($3::text IS NULL OR platform = $3) AND health <> 'disconnected'
+         ORDER BY created_at`,
+        [input.workspace_id, enabled, platform],
+      );
+      const followers = await sql<FollowerRow>(
+        `SELECT connected_account_id, to_char(day, 'YYYY-MM-DD') AS day, followers, source FROM public.account_follower_days
+         WHERE workspace_id = $1 AND connected_account_id = ANY($2::uuid[]) AND day >= (now() - make_interval(days => $3))::date
+         ORDER BY day`,
+        [input.workspace_id, accounts.map((a) => a.id), Math.max(days, 30) + 1],
+      );
+      return { accounts, followers };
+    })(),
+    // Day-by-day numbers for the build-up curve, from the newest 300 posts old enough to have 30 days.
+    sql<DayRow>(
+      `SELECT h.destination_id, to_char(h.day, 'YYYY-MM-DD') AS day, h.views, h.likes, h.comments, h.shares, h.saves, h.reposts, h.quotes
+       FROM public.post_metric_days h
+       WHERE h.destination_id IN (
+         SELECT m.destination_id FROM public.post_metrics m
+         WHERE m.workspace_id = $1 AND m.platform = ANY($2::text[]) AND ($3::text IS NULL OR m.platform = $3)
+           AND m.published_at < now() - interval '30 days' AND m.published_at >= now() - interval '120 days'
+         ORDER BY m.published_at DESC LIMIT 300)
+       ORDER BY h.destination_id, h.day`,
+      [input.workspace_id, enabled, platform],
+    ),
+    sql<{ used: string }>(
+      `SELECT count(*) AS used FROM public.analytics_refreshes WHERE workspace_id = $1 AND requested_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'`,
+      [input.workspace_id],
+    ),
+  ]);
   // The build-up curve needs those older posts' published times.
   const older = history.length
     ? await sql<{ destination_id: string; published_at: string }>(
