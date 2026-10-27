@@ -3,9 +3,10 @@ import { cn } from "@/lib/utils";
 import { type GetStarted as Steps, stepsDone } from "@/lib/beta/get-started";
 
 // The three steps from sign-up to a first post, at the top of Accounts. Each ticks itself off
-// from what the workspace has; the next one to do gets the main button.
-const STEPS: Array<{ key: keyof Steps; title: string; text: string; action: string; href: string }> = [
-  { key: "account", title: "Connect a social account", text: "Instagram, TikTok, YouTube and more. You sign in on each platform's own page.", action: "Connect", href: "#connect" },
+// from what the workspace has; the next one to do gets the main button. Connecting has no button
+// here: the platform buttons right below on the same page are the way in.
+const STEPS: Array<{ key: keyof Steps; title: string; text: string; action?: string; href?: string }> = [
+  { key: "account", title: "Connect a social account", text: "Pick Instagram, TikTok, YouTube or another platform under Connect an account below. You sign in on its own page." },
   { key: "ai", title: "Connect your AI", text: "Claude, ChatGPT or any AI agent, so you can post just by asking.", action: "Set up", href: "/beta/api" },
   { key: "post", title: "Send your first post", text: "Ask your AI, or write one here. Post it now or schedule it.", action: "Create a post", href: "/beta/create" },
 ];
@@ -44,7 +45,7 @@ export function GetStartedPanel({ steps, hide }: { steps: Steps; hide: () => Pro
               </span>
               {ok ? (
                 <span className="text-xs text-ps-live-text">Done</span>
-              ) : (
+              ) : s.action && s.href ? (
                 <Link
                   href={s.href}
                   data-attr={`get-started-${s.key}`}
@@ -52,7 +53,7 @@ export function GetStartedPanel({ steps, hide }: { steps: Steps; hide: () => Pro
                 >
                   {s.action}
                 </Link>
-              )}
+              ) : null}
             </li>
           );
         })}

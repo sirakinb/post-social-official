@@ -5,13 +5,13 @@ import { GetStartedPanel } from "./get-started";
 const hide = async () => {};
 
 describe("GetStartedPanel", () => {
-  it("lists the three steps, with the first one as the main button for a new workspace", () => {
+  it("lists the three steps, and sends a new workspace to the platform buttons instead of a button of its own", () => {
     render(<GetStartedPanel steps={{ account: false, ai: false, post: false }} hide={hide} />);
     const panel = screen.getByRole("region", { name: "Get started" });
     expect(within(panel).getByText("0 of 3 done")).toBeInTheDocument();
     expect(within(panel).getAllByRole("listitem").map((li) => li.querySelector(".font-medium")?.textContent)).toEqual(["Connect a social account", "Connect your AI", "Send your first post"]);
-    expect(within(panel).getByRole("link", { name: "Connect" })).toHaveAttribute("href", "#connect");
-    expect(within(panel).getByRole("link", { name: "Connect" }).className).toContain("bg-ps-plum");
+    expect(within(panel).queryByRole("link", { name: "Connect" })).toBeNull();
+    expect(within(panel).getByText(/under Connect an account below/)).toBeInTheDocument();
     expect(within(panel).getByRole("link", { name: "Set up" })).toHaveAttribute("href", "/beta/api");
     expect(within(panel).getByRole("link", { name: "Create a post" })).toHaveAttribute("href", "/beta/create");
   });
