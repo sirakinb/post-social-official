@@ -83,6 +83,7 @@ export function Sidebar(props: {
   viewer: { name: string; email: string; avatarUrl: string | null };
   plan: { name: string; used: number; limit: number; resets: string } | null;
   started?: number | null; // get-started steps done (of 3), while the workspace is new
+  noAccounts?: boolean; // nothing connected yet: the phone bar leaves out New post
   signOut: () => Promise<void>;
   analytics?: boolean;
 }) {
@@ -102,7 +103,7 @@ export function Sidebar(props: {
           <span className="truncate text-[13px] font-medium text-ps-text">{props.viewer.name}</span>
           <span className="truncate text-[11px] text-ps-subtle">{props.viewer.email}</span>
         </span>
-        <Link href="/beta/create" data-attr="phone-new-post" className="flex h-9 items-center rounded-lg bg-ps-plum px-3 text-[13px] font-medium text-ps-ground md:hidden">New post</Link>
+        {!props.noAccounts && <Link href="/beta/create" data-attr="phone-new-post" className="flex h-9 items-center rounded-lg bg-ps-plum px-3 text-[13px] font-medium text-ps-ground md:hidden">New post</Link>}
         <button type="button" aria-expanded={open} aria-controls="main-menu" onClick={() => setOpenOn(open ? null : path)} className="flex h-9 items-center gap-1.5 rounded-lg border border-ps-line-strong px-3 text-[13px] text-ps-text md:hidden">
           {icon(open ? <path d="M6 6l12 12M18 6 6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />)}
           <span>Menu</span>

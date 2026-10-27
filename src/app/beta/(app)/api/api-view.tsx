@@ -121,7 +121,7 @@ export function ApiView(props: { workspaceId: string; role: string; apps: AiApp[
         </div>
       </section>
 
-      <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(360px,1fr))]">
+      <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(360px,100%),1fr))]">
         <section id="keys" aria-labelledby="keys-h">
           <div className="mb-2.5 flex items-baseline justify-between">
             <h2 id="keys-h" className="m-0 text-sm font-medium">API keys</h2>

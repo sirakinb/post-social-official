@@ -213,71 +213,9 @@ export function ConnectionsView(props: {
     </button>
   );
 
-  return (
-    <div className="flex w-full max-w-[1100px] flex-col gap-6 px-4 sm:px-8 pb-14 pt-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="m-0 text-lg font-medium">Accounts</h1>
-          <p className="mt-1 text-ps-muted">The social accounts Post Social posts to, grouped by profile.</p>
-        </div>
-      </div>
-
-      {message && <p role={message.kind === "error" ? "alert" : "status"} className={cn("m-0 rounded-[10px] border px-3.5 py-2.5", message.kind === "error" ? "border-ps-failed/30 bg-ps-failed/[0.08] text-ps-failed-text" : "border-ps-line bg-ps-surface text-ps-muted")}>{message.text}</p>}
-      {props.getStarted}
-      {attention.map((a) => (
-        <div key={a.id} role="status" className="flex flex-wrap items-center gap-2.5 rounded-[10px] border border-ps-attention/30 bg-ps-attention/[0.07] px-3.5 py-2.5 text-ps-attention-text">
-          <span className="h-1.5 w-1.5 rounded-full bg-ps-attention" />
-          <span className="flex-1">{a.name} on {KIND[a.platform]} needs to be reconnected{a.reason ? `: ${a.reason}` : "."}</span>
-          {canEdit && <button type="button" disabled={busy !== null} onClick={() => connect(a.platform, a.platform === "bluesky" ? a.handle : undefined)} className={btn} data-attr="reconnect-account">Reconnect</button>}
-        </div>
-      ))}
-
-      {/* The profile filter is always shown, so grouping is easy to find before any profile exists. */}
-      {props.profilesReady ? (
-        <div className="-mb-2 flex items-center gap-2 overflow-x-auto pb-1">
-          <div role="tablist" aria-label="Profiles" className="flex gap-2">
-            {pill("all", "All accounts", active.length)}
-            {props.profiles.map((p) => pill(p.id, p.name, countIn(p.id), p.color))}
-            {props.profiles.length > 0 && pill("none", "No profile", active.filter((a) => !a.profileId || !profileById.has(a.profileId)).length)}
-          </div>
-          {canEdit && (
-            <button type="button" data-attr="new-profile" onClick={() => setEditing("new")} className="inline-flex h-[30px] flex-none items-center rounded-lg border border-dashed border-ps-fg/[0.16] px-3 text-xs text-ps-muted hover:border-ps-plum/60 hover:text-ps-text">
-              + New profile
-            </button>
-          )}
-        </div>
-      ) : (
-        <p role="status" className="m-0 rounded-[10px] border border-ps-line bg-ps-surface px-3.5 py-2.5 text-ps-muted">Profiles aren&apos;t switched on in this environment yet, so accounts can&apos;t be grouped here.</p>
-      )}
-
-      {props.loadError && <p role="alert" className="m-0 rounded-xl border border-ps-line bg-ps-surface px-4 py-3 text-ps-failed-text">Your accounts could not be loaded. Refresh the page to try again.</p>}
-
-      {groups.map(({ profile, accounts }) => (
-        <section key={profile?.id ?? "none"} aria-label={profile?.name ?? "No profile"}>
-          {(props.profiles.length > 0 || profile) && (
-            <div className="mb-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
-              <span className="h-2.5 w-2.5 flex-none rounded-full" style={{ backgroundColor: profile?.color ?? "#6E6784" }} />
-              <h2 className="m-0 text-sm font-medium">{profile?.name ?? "No profile"}</h2>
-              {profile?.description && <span className="min-w-0 truncate text-xs text-ps-subtle">{profile.description}</span>}
-              <span className="flex-1" />
-              {profile?.timezone && <span className="font-mono text-[11px] text-ps-subtle">{profile.timezone.replace(/_/g, " ")}</span>}
-              <span className="text-xs text-ps-subtle">{accounts.length} connected</span>
-              {profile && canEdit && <button type="button" onClick={() => setEditing(profile)} className="h-[26px] rounded-md px-2 text-xs text-ps-subtle hover:bg-ps-fg/[0.04] hover:text-ps-text">Edit</button>}
-            </div>
-          )}
-          <div className="rounded-xl border border-ps-line bg-ps-surface">
-            {accounts.length === 0 && !props.loadError && (
-              <p className="m-0 px-4 py-6 text-center text-ps-muted">
-                {profile ? `No accounts in ${profile.name} yet. Connect one below, or move one here from another profile.` : props.profiles.length ? "Every account is in a profile." : "No accounts yet. Connect one below."}
-              </p>
-            )}
-            {accounts.map(row)}
-          </div>
-        </section>
-      ))}
-
-
-      {canEdit && (
+  // The platform buttons. With nothing connected yet they come right after the get-started
+  // steps, so on a phone they're on the first screen instead of below an empty list.
+  const connectSection = canEdit ? (
         <section id="connect" aria-labelledby="connect-h" className="scroll-mt-6 rounded-xl border border-ps-line bg-ps-surface">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-ps-fg/[0.05] px-4 py-3">
             <h2 id="connect-h" className="m-0 text-sm font-medium">Connect an account</h2>
@@ -324,7 +262,75 @@ export function ConnectionsView(props: {
             </form>
           )}
         </section>
+  ) : null;
+  const empty = active.length === 0 && !props.loadError;
+
+  return (
+    <div className="flex w-full max-w-[1100px] flex-col gap-6 px-4 sm:px-8 pb-14 pt-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="m-0 text-lg font-medium">Accounts</h1>
+          <p className="mt-1 text-ps-muted">The social accounts Post Social posts to, grouped by profile.</p>
+        </div>
+      </div>
+
+      {message && <p role={message.kind === "error" ? "alert" : "status"} className={cn("m-0 rounded-[10px] border px-3.5 py-2.5", message.kind === "error" ? "border-ps-failed/30 bg-ps-failed/[0.08] text-ps-failed-text" : "border-ps-line bg-ps-surface text-ps-muted")}>{message.text}</p>}
+      {props.getStarted}
+      {empty && connectSection}
+      {attention.map((a) => (
+        <div key={a.id} role="status" className="flex flex-wrap items-center gap-2.5 rounded-[10px] border border-ps-attention/30 bg-ps-attention/[0.07] px-3.5 py-2.5 text-ps-attention-text">
+          <span className="h-1.5 w-1.5 rounded-full bg-ps-attention" />
+          <span className="flex-1">{a.name} on {KIND[a.platform]} needs to be reconnected{a.reason ? `: ${a.reason}` : "."}</span>
+          {canEdit && <button type="button" disabled={busy !== null} onClick={() => connect(a.platform, a.platform === "bluesky" ? a.handle : undefined)} className={btn} data-attr="reconnect-account">Reconnect</button>}
+        </div>
+      ))}
+
+      {/* The profile filter is always shown, so grouping is easy to find before any profile exists. */}
+      {props.profilesReady ? (
+        <div className="-mb-2 flex items-center gap-2 overflow-x-auto pb-1">
+          <div role="tablist" aria-label="Profiles" className="flex gap-2">
+            {pill("all", "All accounts", active.length)}
+            {props.profiles.map((p) => pill(p.id, p.name, countIn(p.id), p.color))}
+            {props.profiles.length > 0 && pill("none", "No profile", active.filter((a) => !a.profileId || !profileById.has(a.profileId)).length)}
+          </div>
+          {canEdit && (
+            <button type="button" data-attr="new-profile" onClick={() => setEditing("new")} className="inline-flex h-[30px] flex-none items-center rounded-lg border border-dashed border-ps-fg/[0.16] px-3 text-xs text-ps-muted hover:border-ps-plum/60 hover:text-ps-text">
+              + New profile
+            </button>
+          )}
+        </div>
+      ) : (
+        <p role="status" className="m-0 rounded-[10px] border border-ps-line bg-ps-surface px-3.5 py-2.5 text-ps-muted">Profiles aren&apos;t switched on in this environment yet, so accounts can&apos;t be grouped here.</p>
       )}
+
+      {props.loadError && <p role="alert" className="m-0 rounded-xl border border-ps-line bg-ps-surface px-4 py-3 text-ps-failed-text">Your accounts could not be loaded. Refresh the page to try again.</p>}
+
+      {!empty && groups.map(({ profile, accounts }) => (
+        <section key={profile?.id ?? "none"} aria-label={profile?.name ?? "No profile"}>
+          {(props.profiles.length > 0 || profile) && (
+            <div className="mb-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+              <span className="h-2.5 w-2.5 flex-none rounded-full" style={{ backgroundColor: profile?.color ?? "#6E6784" }} />
+              <h2 className="m-0 text-sm font-medium">{profile?.name ?? "No profile"}</h2>
+              {profile?.description && <span className="min-w-0 truncate text-xs text-ps-subtle">{profile.description}</span>}
+              <span className="flex-1" />
+              {profile?.timezone && <span className="font-mono text-[11px] text-ps-subtle">{profile.timezone.replace(/_/g, " ")}</span>}
+              <span className="text-xs text-ps-subtle">{accounts.length} connected</span>
+              {profile && canEdit && <button type="button" onClick={() => setEditing(profile)} className="h-[26px] rounded-md px-2 text-xs text-ps-subtle hover:bg-ps-fg/[0.04] hover:text-ps-text">Edit</button>}
+            </div>
+          )}
+          <div className="rounded-xl border border-ps-line bg-ps-surface">
+            {accounts.length === 0 && !props.loadError && (
+              <p className="m-0 px-4 py-6 text-center text-ps-muted">
+                {profile ? `No accounts in ${profile.name} yet. Connect one below, or move one here from another profile.` : props.profiles.length ? "Every account is in a profile." : "No accounts yet. Connect one below."}
+              </p>
+            )}
+            {accounts.map(row)}
+          </div>
+        </section>
+      ))}
+
+
+      {!empty && connectSection}
       {past.length > 0 && <p className="-mt-3 text-xs text-ps-subtle">Disconnected: {past.map((a) => a.name).join(", ")}. Connect again any time.</p>}
 
       {editing && (

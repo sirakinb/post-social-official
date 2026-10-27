@@ -64,9 +64,23 @@ describe("BillingPage", () => {
     const rate = within(screen.getByRole("region", { name: "Your rate" }));
     expect(rate.getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Accounts 1–2Free2 of yours", "Accounts 3–10$5/mo\u00a0", "Accounts 11–100$2.50/mo\u00a0", "Accounts 101+$1/mo\u00a0"]);
     expect(rate.getAllByRole("listitem")[0]).toHaveAttribute("aria-current", "step");
-    expect(screen.getByLabelText("X monthly limit in dollars")).toHaveValue(10);
+    expect(screen.queryByLabelText("X monthly limit in dollars")).toBeNull();
+    expect(screen.getByText("Free plan: X posts up to $1.00 a month.")).toBeInTheDocument();
     expect(screen.getByText("Receipts show up here after your first charge.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Cancel paid plan" })).toBeNull();
+  });
+
+  it("doesn't offer account 3 before the 2 free accounts are connected", async () => {
+    server.status = { ...base, connected_accounts: 0 };
+    render(await BillingPage({ searchParams: Promise.resolve({}) }));
+    expect(screen.getByText("Your first 2 accounts are free. Account 3 is $5 a month, charged when you add it.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add account 3 · $5/mo" })).toBeNull();
+  });
+
+  it("lets a paying workspace set its own X limit", async () => {
+    server.status = paid;
+    render(await BillingPage({ searchParams: Promise.resolve({}) }));
+    expect(screen.getByLabelText("X monthly limit in dollars")).toBeInTheDocument();
   });
 
   it("warns near the X limit", async () => {
