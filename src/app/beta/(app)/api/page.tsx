@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { loadViewer } from "@/lib/beta/workspace";
 import { ApiView, type AiApp, type ApiKey } from "./api-view";
 
-export const metadata = { title: "API/MCP · Post Social" };
+export const metadata = { title: "Connect your AI · Post Social" };
 
 export default async function ApiPage() {
   const { viewer, workspace, client } = await loadViewer("/beta/api");

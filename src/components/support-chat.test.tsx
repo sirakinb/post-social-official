@@ -1,7 +1,7 @@
-import { render } from "@testing-library/react";
+import { act, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SupportChatVisibility } from "./support-chat";
-import { CRISP_SNIPPET, CRISP_WEBSITE_ID, chatHiddenOn } from "@/lib/support-chat";
+import { CRISP_SNIPPET, CRISP_WEBSITE_ID, chatHiddenOn, chatHiddenOnPhone } from "@/lib/support-chat";
 
 const path = vi.hoisted(() => ({ current: "/" }));
 vi.mock("next/navigation", () => ({ usePathname: () => path.current }));
@@ -41,6 +41,22 @@ describe("SupportChatVisibility", () => {
     path.current = "/beta/create";
     rerender(<SupportChatVisibility />);
     expect(push).toHaveBeenLastCalledWith(["do", "chat:show"]);
+  });
+
+  it("hides the chat on the composer on phones only, where it would cover the Post button", () => {
+    const push = vi.fn();
+    (window as unknown as { $crisp: unknown }).$crisp = { push };
+    const listeners: Array<() => void> = [];
+    const media = { matches: true, addEventListener: (_: string, f: () => void) => listeners.push(f), removeEventListener: () => {} };
+    window.matchMedia = vi.fn(() => media) as unknown as typeof window.matchMedia;
+    path.current = "/beta/create";
+    render(<SupportChatVisibility />);
+    expect(push).toHaveBeenLastCalledWith(["do", "chat:hide"]);
+    media.matches = false;
+    act(() => listeners.forEach((f) => f()));
+    expect(push).toHaveBeenLastCalledWith(["do", "chat:show"]);
+    expect(chatHiddenOnPhone("/beta/create")).toBe(true);
+    expect(chatHiddenOnPhone("/beta/accounts")).toBe(false);
   });
 
   it("knows which pages hide it", () => {

@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { firstMedia, savedBy, type DraftRow } from "./drafts";
+import { SAMPLE_DRAFT } from "../../../backend/lib/sample-draft";
 
 describe("savedBy", () => {
   it("names the person or app and where the draft came from", () => {
     expect(savedBy({ kind: "user", display_name: "Aki" }, "ui")?.text).toBe("Saved by Aki");
     expect(savedBy({ kind: "oauth_grant", display_name: "Claude" }, "mcp")?.text).toBe("Saved by Claude via MCP");
     expect(savedBy({ kind: "api_key", display_name: "Zapier key" }, "api")?.text).toBe("Saved by Zapier key via the API");
+  });
+
+  it("credits the example draft to Post Social", () => {
+    expect(savedBy({ kind: "user", display_name: "Rio" }, "ui", SAMPLE_DRAFT)?.text).toBe("Example from Post Social");
+    expect(savedBy({ kind: "user", display_name: "Rio" }, "ui", "My own words")?.text).toBe("Saved by Rio");
   });
 
   it("uses the name an AI app gave when it connected, as the logs do", () => {

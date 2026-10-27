@@ -2,6 +2,7 @@
 // lists them, including ones an AI app or API key saved, so nothing is lost. Read with the
 // person's own session (row-level security).
 import type { ActorKind } from "@/components/beta/marks";
+import { SAMPLE_DRAFT } from "../../../backend/lib/sample-draft";
 import { whoDid } from "./logs";
 
 type Client = Awaited<ReturnType<typeof import("@/lib/insforge/server").insforgeServerClient>>;
@@ -24,8 +25,10 @@ export type DraftRow = {
 
 // Who saved a draft and from where, e.g. "Saved by Claude Code via MCP". AI apps go by
 // the name they gave when they connected, as in the logs.
-export function savedBy(actor: Actor | null, via: string): { kind: ActorKind; name: string; text: string } | null {
+export function savedBy(actor: Actor | null, via: string, caption?: string): { kind: ActorKind; name: string; text: string } | null {
   if (!actor) return null;
+  // The example draft every new workspace gets is from Post Social, not from the person.
+  if (caption === SAMPLE_DRAFT) return { kind: "system", name: "Post Social", text: "Example from Post Social" };
   const who = whoDid(actor, null);
   const from = via === "mcp" ? " via MCP" : via === "api" ? " via the API" : "";
   return { kind: who.actorKind, name: who.actorName, text: `Saved by ${who.actorName}${from}` };

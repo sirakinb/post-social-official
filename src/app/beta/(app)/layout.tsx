@@ -49,6 +49,7 @@ export default async function BetaAppLayout({ children }: { children: React.Reac
         viewer={{ name: viewer.name, email: viewer.email, avatarUrl: viewer.avatarUrl }}
         plan={plan}
         started={started}
+        noAccounts={noAccounts}
         signOut={signOut}
         analytics={analyticsEnabled()}
       />

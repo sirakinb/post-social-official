@@ -132,7 +132,8 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
                     : `Your first ${status.free_accounts} accounts are free. Account ${status.free_accounts + 1} is $5 a month, charged when you add it.`}
                 </p>
               </div>
-              {manage && !paying && (
+              {/* Offered once the free accounts are used up, not to someone who hasn't connected any. */}
+              {manage && !paying && status.connected_accounts >= status.free_accounts && (
                 <form action={addCard} data-rewardful="true">
                   <Hidden id={workspace.id} />
                   <button type="submit" className={primary}>Add account {status.free_accounts + 1} · $5/mo</button>
@@ -182,9 +183,10 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
                 )}
                 {near && <p role="status" className="mt-2 text-xs text-ps-attention">{status.x.spent >= (status.x.monthly_cap ?? 0) ? "X posts are paused until next month." : "Close to your limit."}</p>}
                 <p className="mt-3 text-xs text-ps-subtle">
-                  {paying ? "X posts pause at your limit. Everything else keeps posting." : `On the free plan, X stops at ${money(status.x.free_monthly)} a month.`}
+                  {paying ? "X posts pause at your limit. Everything else keeps posting." : `Free plan: X posts up to ${money(status.x.free_monthly)} a month.`}
                 </p>
-                {status.can_manage && (
+                {/* The limit is only yours to set once you're paying; on Free it's the free amount. */}
+                {status.can_manage && paying && (
                   <form action={saveXCap} className="mt-3 flex items-center gap-2">
                     <Hidden id={workspace.id} />
                     <label className="flex items-center gap-1.5">

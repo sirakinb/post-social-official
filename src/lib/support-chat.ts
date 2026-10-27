@@ -8,6 +8,13 @@ export function chatHiddenOn(pathname: string) {
   return HIDDEN.test(pathname);
 }
 
+// On a phone the chat bubble would sit on the composer's Post button, so it stays off there.
+const HIDDEN_ON_PHONES = /^\/beta\/create(\/|$)/;
+
+export function chatHiddenOnPhone(pathname: string) {
+  return HIDDEN_ON_PHONES.test(pathname);
+}
+
 // Crisp only offers named colours; deep purple is the closest to Post Social's violet, on the
 // dark look the site uses.
 export const CRISP_THEME = { color: "deep_purple", mode: "dark" } as const;

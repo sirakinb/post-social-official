@@ -18,7 +18,7 @@ test('a new customer sees the get-started steps and can hide them', async ({ app
   await expect(screen.getByRole('region', 'Get started')).toContainText('0 of 3 done');
   // No button of its own for connecting: the step points at the platform buttons below.
   await expect(screen.getByRole('region', 'Get started')).toContainText('under Connect an account below');
-  await expect(screen.getByRole('button', 'Instagram')).toBeVisible();
+  await expect(screen.getByRole('region', 'Connect an account')).toContainText('Instagram');
   await expect(screen.getByRole('navigation', 'Main')).toContainText('Get started');
   copyFileSync(await app.screenshot('desktop'), `${SHOTS}/desktop.png`);
 

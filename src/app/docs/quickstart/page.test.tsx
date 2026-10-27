@@ -26,6 +26,10 @@ describe("QuickstartPage", () => {
     expect(video.querySelector("source")).toHaveAttribute("src", "/docs/quickstart/walkthrough.mp4");
     expect(video.querySelector("track")).toHaveAttribute("src", "/docs/quickstart/walkthrough.vtt");
     expect(video.getAttribute("aria-label")?.length).toBeGreaterThan(20);
+    // The caption under the video counts the steps listed under it.
+    const listed = document.querySelectorAll('figure + ol > li').length;
+    expect(listed).toBe(5);
+    expect(screen.getByText("The five steps below, in one minute.")).toBeInTheDocument();
   });
 
   it("shows a screenshot for each of the first four steps, each described", () => {
