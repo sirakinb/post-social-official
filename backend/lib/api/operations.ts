@@ -19,6 +19,7 @@ export type ApiDeps = {
   newId: () => string;
   webAppUrl: string;
   analyticsPlatforms: Platform[]; // platforms whose stats are switched on here (none: no stats tools)
+  pause?: (ms: number) => Promise<void>; // how status checks wait between reads (tests skip the wait)
 };
 
 type JsonSchema = Record<string, unknown>;
@@ -124,12 +125,33 @@ function nextStep(post: { status: string; scheduled_at: string | null }) {
       return `Scheduled for ${post.scheduled_at}.`;
     case "processing":
     case "approved":
-      return "Publishing now. Check list_post_results in a minute for live links.";
+      return "Publishing now; some accounts are still sending (a video can take a few minutes). Check get_post again shortly for their live links.";
     default:
       return undefined;
   }
 }
 const withNextStep = <T extends { status: string; scheduled_at: string | null }>(post: T) => ({ ...post, next_step: nextStep(post) });
+
+// When an AI app checks on a post that is sending right now, wait a little for the accounts
+// still in flight (TikTok often lands 20 seconds after Instagram), so the answer carries
+// every live link instead of a "still sending" the app won't come back to on its own.
+const SETTLE_MS = 25_000;
+const SETTLE_EVERY_MS = 2_500;
+const sending = (status: string) => status === "queued" || status === "processing";
+async function settled<T>(deps: ApiDeps, caller: AgentCaller, read: () => Promise<T>, inFlight: (value: T) => boolean): Promise<T> {
+  let value = await read();
+  if (caller.entryPoint !== "mcp") return value;
+  const pause = deps.pause ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  for (let waited = 0; inFlight(value) && waited < SETTLE_MS; waited += SETTLE_EVERY_MS) {
+    await pause(SETTLE_EVERY_MS);
+    value = await read();
+  }
+  return value;
+}
+const postInFlight = (post: { status: string; destinations: Array<Record<string, unknown>> }) => post.status === "processing" || post.destinations.some((d) => sending(String(d.status)));
+// A post just sent for publishing, as it stands once its accounts finish (or the wait ends).
+const afterSubmit = async (deps: ApiDeps, caller: AgentCaller, submitted: Awaited<ReturnType<typeof postActions.submit>>) =>
+  withNextStep(postInFlight(submitted) ? await settled(deps, caller, () => postActions.get({ sql: deps.sql }, caller, { post_id: submitted.id }), postInFlight) : submitted);
 
 export const operations: Operation[] = [
   {
@@ -374,7 +396,7 @@ export const operations: Operation[] = [
       if (!created.check.ok) {
         return { ...created, next_step: `Saved as a draft because of these problems: ${created.check.problems.join(" ")} Fix them with update_post, then call publish_post.` };
       }
-      return withNextStep(await postActions.submit({ sql: deps.sql }, caller, { post_id: created.id }));
+      return afterSubmit(deps, caller, await postActions.submit({ sql: deps.sql }, caller, { post_id: created.id }));
     },
   },
   {
@@ -396,13 +418,13 @@ export const operations: Operation[] = [
   {
     name: "get_post",
     title: "Get a post",
-    description: `Gets one post with its caption, published_at (when it first went out on any account; null until then), each account's status, live_url, published_at and errors, its approval state, media_ids and ${MEDIA_FIELDS} Each account is named by its profile name (account), its platform and its handle (account_handle, without the @; null for LinkedIn, Facebook Pages and YouTube, which share no handle with Post Social), so two accounts with the same name can be told apart.`,
+    description: `Gets one post with its caption, published_at (when it first went out on any account; null until then), each account's status, live_url, published_at and errors, its approval state, media_ids and ${MEDIA_FIELDS} Each account is named by its profile name (account), its platform and its handle (account_handle, without the @; null for LinkedIn, Facebook Pages and YouTube, which share no handle with Post Social), so two accounts with the same name can be told apart. If the post is publishing right now, waits up to about 25 seconds for the accounts still sending, so the live links are usually all there.`,
     method: "GET",
     path: "/v1/posts/{post_id}",
     input: { properties: { post_id: id("post") }, required: ["post_id"] },
     readOnly: true,
     run: async (deps, caller, input) => {
-      const post = await postActions.get({ sql: deps.sql }, caller, input);
+      const post = await settled(deps, caller, () => postActions.get({ sql: deps.sql }, caller, input), postInFlight);
       // postActions.get has checked the caller belongs to the post's workspace.
       const media = await mediaForPosts(deps.sql, deps.r2, post.workspace_id, [post.id]);
       return withNextStep({ ...post, media: media.get(post.id) ?? [] });
@@ -412,7 +434,7 @@ export const operations: Operation[] = [
     name: "update_post",
     title: "Edit a post",
     description:
-      "Edits a draft, a post waiting for approval, or a scheduled post. Only the fields you pass change; destinations replaces the whole list. Editing an approved or scheduled post may send it back for approval.",
+      "Edits a draft, a post waiting for approval, or a scheduled post: its caption, time, media or accounts. Only the fields you pass change; media_ids and destinations each replace the whole list (to swap an image, upload the new one and pass its id in media_ids). To change a scheduled post, edit it here instead of creating a new post, which would publish twice. Editing an approved or scheduled post may send it back for approval.",
     method: "PATCH",
     path: "/v1/posts/{post_id}",
     input: { properties: { post_id: id("post"), ...postBody }, required: ["post_id"] },
@@ -425,7 +447,7 @@ export const operations: Operation[] = [
     method: "POST",
     path: "/v1/posts/{post_id}/publish",
     input: { properties: { post_id: id("post"), scheduled_at: { ...schedule, description: `${schedule.description} Leave out to publish now.` } }, required: ["post_id"] },
-    run: async (deps, caller, input) => withNextStep(await postActions.submit({ sql: deps.sql }, caller, input)),
+    run: async (deps, caller, input) => afterSubmit(deps, caller, await postActions.submit({ sql: deps.sql }, caller, input)),
   },
   {
     name: "reschedule_post",
@@ -510,13 +532,17 @@ export const operations: Operation[] = [
   {
     name: "list_post_results",
     title: "Publishing results",
-    description: "Shows each account's outcome: published (with the live link), failed (with the platform's reason in plain language), or still in progress. One post's results, or the most recent overall. Each account is named by its profile name (account), its platform and its handle (account_handle, without the @; null for LinkedIn, Facebook Pages and YouTube, which share no handle with Post Social), so two accounts with the same name can be told apart.",
+    description: "Shows each account's outcome: published (with the live link), failed (with the platform's reason in plain language), or still in progress. One post's results (waiting up to about 25 seconds for accounts still sending), or the most recent overall. Each account is named by its profile name (account), its platform and its handle (account_handle, without the @; null for LinkedIn, Facebook Pages and YouTube, which share no handle with Post Social), so two accounts with the same name can be told apart.",
     method: "GET",
     path: "/v1/results",
     input: { properties: { post_id: id("post"), ...paging } },
     readOnly: true,
-    run: (deps, caller, input) =>
-      listResults(deps.sql, caller, { ...input, workspace_id: caller.workspaceId, post_id: input.post_id === undefined || input.post_id === "" ? undefined : requireUuid(input.post_id, "Post") }),
+    run: (deps, caller, input) => {
+      const postId = input.post_id === undefined || input.post_id === "" ? undefined : requireUuid(input.post_id, "Post");
+      const read = () => listResults(deps.sql, caller, { ...input, workspace_id: caller.workspaceId, post_id: postId });
+      // Waits only for one post's results; the recent-overall list answers right away.
+      return postId ? settled(deps, caller, read, (r) => r.results.some((d) => sending(String(d.status)))) : read();
+    },
   },
 ];
 

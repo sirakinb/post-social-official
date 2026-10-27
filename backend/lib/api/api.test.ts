@@ -169,16 +169,19 @@ describe("create_post: when it goes out", () => {
 
   it("sends right away only with publish: \"now\"", async () => {
     const { submit, restore } = spies();
-    const result = await createPost.run(deps(), caller(), { destinations, publish: "now" });
+    const get = vi.spyOn(postActions, "get").mockResolvedValue({ ...saved, status: "processing", destinations: [{ status: "processing" }] } as never);
+    const result = await createPost.run({ ...deps(), pause: async () => {} }, caller(), { destinations, publish: "now" });
     expect(submit).toHaveBeenCalledWith(expect.anything(), expect.anything(), { post_id: saved.id });
     expect(result).toMatchObject({ status: "processing", next_step: expect.stringMatching(/^Publishing now/) });
+    get.mockRestore();
     restore();
   });
 
   it("still schedules with scheduled_at, and still only saves with draft: true", async () => {
     const at = new Date(Date.now() + 3600_000).toISOString();
     let s = spies();
-    await createPost.run(deps(), caller(), { destinations, scheduled_at: at });
+    s.submit.mockResolvedValue({ ...saved, status: "scheduled", scheduled_at: at, destinations: [{ status: "scheduled" }] } as never);
+    expect(await createPost.run(deps(), caller(), { destinations, scheduled_at: at })).toMatchObject({ status: "scheduled", next_step: `Scheduled for ${at}.` });
     expect(s.submit).toHaveBeenCalledTimes(1);
     s.restore();
     s = spies();
@@ -357,5 +360,66 @@ describe("post reads", () => {
     const result = (await op.run(withR2(sql as unknown as Sql), caller(), { post_id: postId })) as Record<string, unknown>;
     expect(result.published_at).toBeNull();
     expect(result.media).toEqual([]);
+  });
+});
+
+describe("waiting for live links", () => {
+  const postId = "00000000-0000-4000-8000-0000000000aa";
+  const post = (tiktok: string) => ({
+    id: postId,
+    workspace_id: caller().workspaceId,
+    status: tiktok === "published" ? "published" : "processing",
+    scheduled_at: null,
+    destinations: [
+      { platform: "instagram", status: "published", live_url: "https://www.instagram.com/reel/1/" },
+      { platform: "tiktok", status: tiktok, live_url: tiktok === "published" ? "https://www.tiktok.com/@a/video/1" : null },
+    ],
+  });
+  const op = (name: string) => operations.find((o) => o.name === name)!;
+  // No media on these posts, so the media lookup finds nothing.
+  const noMedia: Sql = (async () => []) as unknown as Sql;
+
+  it("get_post waits for the account still sending and returns every live link", async () => {
+    const reads = [post("processing"), post("processing"), post("published")];
+    const get = vi.spyOn(postActions, "get").mockImplementation(async () => reads.shift() as never);
+    const pause = vi.fn(async () => {});
+    const result = (await op("get_post").run({ ...deps(noMedia), pause }, caller(), { post_id: postId })) as ReturnType<typeof post> & { next_step?: string };
+    expect(pause).toHaveBeenCalledTimes(2);
+    expect(result.status).toBe("published");
+    expect(result.destinations[1].live_url).toBe("https://www.tiktok.com/@a/video/1");
+    get.mockRestore();
+  });
+
+  it("gives up after about 25 seconds and says which step comes next", async () => {
+    const get = vi.spyOn(postActions, "get").mockImplementation(async () => post("processing") as never);
+    const pause = vi.fn(async (_ms: number) => {});
+    const result = (await op("get_post").run({ ...deps(noMedia), pause }, caller(), { post_id: postId })) as { status: string; next_step: string };
+    expect(pause.mock.calls.reduce((total, [ms]) => total + ms, 0)).toBe(25_000);
+    expect(result).toMatchObject({ status: "processing", next_step: expect.stringMatching(/Check get_post again/) });
+    get.mockRestore();
+  });
+
+  it("answers right away for a post that isn't sending, and on the REST API", async () => {
+    const pause = vi.fn(async () => {});
+    const get = vi.spyOn(postActions, "get").mockImplementation(async () => post("published") as never);
+    await op("get_post").run({ ...deps(noMedia), pause }, caller(), { post_id: postId });
+    get.mockImplementation(async () => post("processing") as never);
+    await op("get_post").run({ ...deps(noMedia), pause }, { ...caller(), entryPoint: "api" }, { post_id: postId });
+    expect(pause).not.toHaveBeenCalled();
+    get.mockRestore();
+  });
+
+  it("list_post_results waits for one post's results, not for the recent-overall list", async () => {
+    const rows = (tiktok: string) => [{ post_id: postId, platform: "tiktok", status: tiktok, live_url: null, account_handle: null }];
+    const answers = [rows("processing"), rows("published")];
+    const sql = vi.fn(async (text: string) => (text.includes("FROM public.destinations") ? answers.shift() : [{ role: "owner" }]));
+    const pause = vi.fn(async () => {});
+    const one = (await op("list_post_results").run({ ...deps(sql as unknown as Sql), pause }, caller(), { post_id: postId })) as { results: Array<{ status: string }> };
+    expect(one.results[0].status).toBe("published");
+    expect(pause).toHaveBeenCalledTimes(1);
+
+    answers.push(rows("processing"));
+    await op("list_post_results").run({ ...deps(sql as unknown as Sql), pause }, caller(), {});
+    expect(pause).toHaveBeenCalledTimes(1);
   });
 });
