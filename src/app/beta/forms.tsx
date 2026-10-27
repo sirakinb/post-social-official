@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { completePasswordReset, requestPasswordReset, signIn, signUp, startGoogleSignIn, verifyEmailCode, type FormState } from "./actions";
-import { PASSWORD_MIN_LENGTH } from "@/lib/insforge/auth-rules";
+import { completePasswordReset, requestPasswordReset, resendEmailCode, signIn, signUp, startGoogleSignIn, verifyEmailCode, type FormState } from "./actions";
+import { PASSWORD_MIN_LENGTH, passwordProblem } from "@/lib/insforge/auth-rules";
 
 function Alert({ state }: { state: FormState }) {
   if (state.error) {
@@ -17,18 +17,38 @@ function Alert({ state }: { state: FormState }) {
   return null;
 }
 
+// How long a code is treated as fresh: after this, a rejected code is most likely expired.
+export const CODE_FRESH_MS = 10 * 60_000;
+
+// What to say when the backend turns a code down (it says the same for a typo and an expired code).
+export function rejectedCodeMessage(sentAt: number | undefined, now = Date.now()) {
+  return sentAt !== undefined && now - sentAt > CODE_FRESH_MS
+    ? "That code has expired. Send a new code and use the newest email."
+    : "That code doesn't match. Check the email and try again.";
+}
+
 // Asks for the code from the confirmation email (after sign-up, or a sign-in with an
-// unconfirmed email).
+// unconfirmed email), with a way to get a new one.
 function VerifyEmailForm({ start, next }: { start: FormState; next?: string }) {
   const [state, action, pending] = useActionState(verifyEmailCode, {});
-  const shown = state.error ? state : start;
+  const [resent, resend, resending] = useActionState(resendEmailCode, {});
+  const email = start.email ?? "";
+  const sentAt = resent.sentAt ?? start.sentAt;
+  // Whichever answered last (checking the code, or sending a new one) is the message shown.
+  const latest = (resent.at ?? 0) > (state.at ?? 0) ? resent : state;
+  const shown: FormState = latest.codeRejected ? { error: rejectedCodeMessage(sentAt) } : latest.error ? { error: latest.error } : latest === resent && resent.notice ? { notice: resent.notice } : {};
   return (
     <>
-      <form className="mt-6 space-y-4" action={action}>
-        <input type="hidden" name="email" value={start.email ?? ""} />
+      <p className="mt-6 text-sm text-ink-muted">We sent a 6-digit code to <span className="font-medium text-ink">{email}</span>.</p>
+      <form className="mt-4 space-y-4" action={action}>
+        <input type="hidden" name="email" value={email} />
         <input type="hidden" name="next" value={next ?? ""} />
         <div className="space-y-2"><label htmlFor="verify-code" className="text-sm font-medium text-ink">Code from the email</label><Input id="verify-code" name="code" inputMode="numeric" autoComplete="one-time-code" required /></div>
         <Button type="submit" variant="primary" className="w-full" disabled={pending}>{pending ? "Checking…" : "Confirm email"}</Button>
+      </form>
+      <form action={resend} className="mt-3 text-center">
+        <input type="hidden" name="email" value={email} />
+        <button type="submit" disabled={resending} className="text-sm text-ink-muted underline underline-offset-2 hover:text-ink disabled:opacity-60">{resending ? "Sending…" : "Send a new code"}</button>
       </form>
       <Alert state={shown} />
     </>
@@ -85,21 +105,32 @@ export function OrDivider() {
 
 export function SignUpForm({ next }: { next?: string }) {
   const [state, action, pending] = useActionState(signUp, {});
+  // A password that's too short is caught here, in the app's own words, before anything is sent
+  // (and before the form clears).
+  const [tooWeak, setTooWeak] = useState<string | null>(null);
   if (state.step === "verify") return <VerifyEmailForm start={state} next={next} />;
   return (
     <>
-      <form className="mt-6 space-y-4" action={action}>
+      <form
+        className="mt-6 space-y-4"
+        action={action}
+        onSubmit={(event) => {
+          const problem = passwordProblem(String(new FormData(event.currentTarget).get("password") ?? ""));
+          setTooWeak(problem);
+          if (problem) event.preventDefault();
+        }}
+      >
         <input type="hidden" name="next" value={next ?? ""} />
         <div className="space-y-2"><label htmlFor="signup-name" className="text-sm font-medium text-ink">Name</label><Input id="signup-name" name="name" placeholder="Your name" autoComplete="name" maxLength={80} required /></div>
         <div className="space-y-2"><label htmlFor="signup-email" className="text-sm font-medium text-ink">Email</label><Input id="signup-email" name="email" type="email" placeholder="you@example.com" autoComplete="email" required /></div>
         <div className="space-y-2">
           <label htmlFor="signup-password" className="text-sm font-medium text-ink">Password</label>
-          <Input id="signup-password" name="password" type="password" autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} required />
-          <p className="text-xs text-ink-subtle">At least {PASSWORD_MIN_LENGTH} characters, including a number.</p>
+          <Input id="signup-password" name="password" type="password" autoComplete="new-password" required aria-invalid={tooWeak ? true : undefined} aria-describedby="signup-password-rule" />
+          <p id="signup-password-rule" className="text-xs text-ink-subtle">At least {PASSWORD_MIN_LENGTH} characters, including a number.</p>
         </div>
         <Button type="submit" variant="primary" className="w-full" disabled={pending}>{pending ? "Creating your account…" : "Create free account"}</Button>
       </form>
-      <Alert state={state} />
+      <Alert state={tooWeak ? { error: tooWeak } : state} />
       <p className="mt-5 text-center text-sm text-ink-muted">Already have an account? <Link href={next ? `/beta/login?next=${encodeURIComponent(next)}` : "/beta/login"} className="text-ink underline-offset-4 hover:underline">Sign in</Link></p>
     </>
   );

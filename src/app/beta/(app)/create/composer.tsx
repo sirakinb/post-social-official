@@ -58,6 +58,8 @@ export function Composer({ workspaceId, accounts, profiles = [], library: initia
   const [at, setAt] = useState(editing?.scheduledAt ? toLocalInput(editing.scheduledAt) : "");
   const [picker, setPicker] = useState(false);
   const [check, setCheck] = useState<Check | null>(null);
+  // Problems stay quiet until the person tries to post, so a new post doesn't open with errors.
+  const [tried, setTried] = useState(false);
   const [creator, setCreator] = useState<Record<string, CreatorInfo | null>>({});
   const [creatorError, setCreatorError] = useState<Record<string, string | null>>({});
   const [busy, setBusy] = useState<"draft" | "send" | null>(null);
@@ -186,10 +188,9 @@ export function Composer({ workspaceId, accounts, profiles = [], library: initia
 
   if (done) return <Finished done={done} />;
 
-  const primaryLabel = problems.length
-    ? `Fix ${problems.length} ${problems.length === 1 ? "issue" : "issues"}`
-    : when === "later"
-      ? `Schedule · ${new Date(at).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" })}`
+  const primaryLabel =
+    when === "later"
+      ? at ? `Schedule · ${new Date(at).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" })}` : "Schedule"
       : editing && editing.status !== "draft"
         ? "Save changes"
         : "Publish now";
@@ -377,8 +378,8 @@ export function Composer({ workspaceId, accounts, profiles = [], library: initia
           {error && <p role="alert" className="m-0 text-[13px] text-ps-failed-text">{error}</p>}
           <div className="flex flex-wrap items-center justify-between gap-2.5">
             <div className="min-w-0 flex-1 text-[13px]">
-              {problems.length > 0 ? (
-                <ul className="m-0 list-none space-y-1 p-0">
+              {tried && problems.length > 0 ? (
+                <ul id="composer-problems" role="alert" className="m-0 list-none space-y-1 p-0">
                   {problems.slice(0, 2).map((p) => (
                     <li key={p} className="flex gap-2 text-ps-failed-text"><span className="mt-1.5 h-1.5 w-1.5 flex-none rounded-full bg-ps-failed" />{p}</li>
                   ))}
@@ -394,9 +395,22 @@ export function Composer({ workspaceId, accounts, profiles = [], library: initia
                   {busy === "draft" ? "Saving…" : "Save draft"}
                 </button>
               )}
-              <button type="button" disabled={busy !== null || problems.length > 0} onClick={() => save(true)} data-attr={when === "later" ? "schedule-post" : "publish-now"} className="h-[34px] rounded-lg bg-ps-plum px-4 font-medium text-ps-ground hover:bg-ps-plum-hover disabled:cursor-not-allowed disabled:bg-ps-plum/40 disabled:text-ps-ground/80">
-                {busy === "send" ? "Sending…" : primaryLabel}
-              </button>
+              {accounts.length === 0 ? (
+                <Link href="/beta/accounts" data-attr="composer-connect-first" className="inline-flex h-[34px] items-center rounded-lg bg-ps-plum px-4 font-medium text-ps-ground hover:bg-ps-plum-hover">
+                  Connect an account first
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  disabled={busy !== null}
+                  aria-describedby={tried && problems.length > 0 ? "composer-problems" : undefined}
+                  onClick={() => (problems.length ? setTried(true) : save(true))}
+                  data-attr={when === "later" ? "schedule-post" : "publish-now"}
+                  className="h-[34px] rounded-lg bg-ps-plum px-4 font-medium text-ps-ground hover:bg-ps-plum-hover disabled:cursor-not-allowed disabled:bg-ps-plum/40 disabled:text-ps-ground/80"
+                >
+                  {busy === "send" ? "Sending…" : primaryLabel}
+                </button>
+              )}
             </div>
           </div>
         </div>

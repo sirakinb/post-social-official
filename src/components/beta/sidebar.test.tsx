@@ -9,13 +9,13 @@ vi.mock("@/components/analytics/identify", () => ({ forgetViewer: () => {} }));
 const props = { viewer: { name: "Aki", email: "aki@example.com", avatarUrl: null }, plan: null, signOut: async () => {} };
 
 describe("Sidebar", () => {
-  it("lists every page in one flat list, with Accounts and API/MCP as separate tabs", () => {
+  it("lists every page in one flat list, with Accounts and Connect your AI as separate tabs", () => {
     render(<Sidebar {...props} />);
     const nav = screen.getByRole("navigation", { name: "Main" });
     expect(within(nav).queryByText("Connect")).toBeNull();
     expect(within(nav).queryByText("Accounts & AI")).toBeNull();
     expect(screen.getByRole("link", { name: "Accounts" })).toHaveAttribute("href", "/beta/accounts");
-    expect(screen.getByRole("link", { name: "API/MCP" })).toHaveAttribute("href", "/beta/api");
+    expect(screen.getByRole("link", { name: "Connect your AI" })).toHaveAttribute("href", "/beta/api");
   });
 
   it("keeps General and Billing in a Settings dropdown, with no phone setup page", async () => {
@@ -69,10 +69,10 @@ describe("Sidebar", () => {
     expect(docs).toHaveAttribute("target", "_blank");
   });
 
-  it("marks API/MCP current on the old keys address too", () => {
+  it("marks Connect your AI current on the old keys address too", () => {
     path.current = "/beta/keys";
     render(<Sidebar {...props} />);
-    expect(screen.getByRole("link", { name: "API/MCP" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Connect your AI" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "Accounts" })).not.toHaveAttribute("aria-current");
   });
 

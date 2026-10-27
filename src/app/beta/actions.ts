@@ -19,7 +19,10 @@ import {
 } from "@/lib/insforge/auth-rules";
 import { checkAuthLimit } from "@/lib/security/limits";
 
-export type FormState = { error?: string; notice?: string; step?: "request" | "complete" | "verify"; email?: string };
+// codeRejected: the email code didn't work. The backend says the same for a typo and an expired
+// code, so the form words it by how long ago the code was sent.
+// at: when the answer was given, so a form with two buttons shows the newest one.
+export type FormState = { error?: string; notice?: string; step?: "request" | "complete" | "verify"; email?: string; codeRejected?: boolean; sentAt?: number; at?: number };
 
 function field(formData: FormData, name: string) {
   const value = formData.get(name);
@@ -54,21 +57,35 @@ async function sendVerificationCode(email: string): Promise<FormState> {
       return { error: verifyErrorMessage(error) ?? undefined };
     }
   }
-  return { step: "verify", email, notice };
+  return { step: "verify", email, notice, sentAt: Date.now() };
+}
+
+// "Send a new code" on the code screen. Same cap as above, so it can't fill someone's inbox.
+export async function resendEmailCode(_previous: FormState, formData: FormData): Promise<FormState> {
+  const email = field(formData, "email");
+  if (!email) return { step: "verify", error: "Start again from the sign-in page." };
+  const sent = await sendVerificationCode(email);
+  return sent.error ? { step: "verify", email, error: sent.error, at: Date.now() } : { step: "verify", email, notice: `We sent a new code to ${email}.`, sentAt: Date.now(), at: Date.now() };
 }
 
 // The code from the confirmation email. A correct code confirms the email and signs the
 // person in.
-export async function verifyEmailCode(_previous: FormState, formData: FormData): Promise<FormState> {
+export async function verifyEmailCode(previous: FormState, formData: FormData): Promise<FormState> {
+  return { ...(await checkEmailCode(previous, formData)), at: Date.now() };
+}
+
+async function checkEmailCode(_previous: FormState, formData: FormData): Promise<FormState> {
   const email = field(formData, "email");
   const code = field(formData, "code");
   if (!email || !code) return { step: "verify", email, error: "Enter the code from the email." };
+  if (!/^\d{6}$/.test(code)) return { step: "verify", email, error: "Enter the 6-digit code from the email." };
   const limit = await checkAuthLimit("reset_complete", email);
   if (limit.blocked) return { step: "verify", email, error: limit.blocked };
 
   const auth = await insforgeAuthActions();
   const { data, error } = await auth.verifyEmail({ email, otp: code });
-  if (error || !data?.user) return { step: "verify", email, error: verifyErrorMessage(error ?? { statusCode: 400 }) ?? undefined };
+  if (error?.statusCode === 400 || (!error && !data?.user)) return { step: "verify", email, codeRejected: true };
+  if (error || !data?.user) return { step: "verify", email, error: verifyErrorMessage(error) ?? undefined };
 
   redirect(safeNextPath(field(formData, "next")));
 }
@@ -90,7 +107,7 @@ export async function signUp(_previous: FormState, formData: FormData): Promise<
   const { data, error } = await auth.signUp({ email, password, name });
   if (error) return { error: signUpErrorMessage(error) ?? undefined };
   if (!data?.user || (data as { requireEmailVerification?: boolean }).requireEmailVerification) {
-    return { step: "verify", email, notice: `We sent a code to ${email}. Enter it to finish creating your account.` };
+    return { step: "verify", email, notice: `We sent a code to ${email}. Enter it to finish creating your account.`, sentAt: Date.now() };
   }
   redirect(safeNextPath(field(formData, "next")));
 }

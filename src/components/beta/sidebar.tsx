@@ -22,7 +22,7 @@ const ITEMS: Item[] = [
   { href: "/beta/calendar", label: "Calendar", match: (p) => p.startsWith("/beta/calendar"), icon: icon(<><rect x="3" y="4.5" width="18" height="16" rx="2" /><path d="M3 9.5h18M8 2.5v4M16 2.5v4" /></>) },
   { href: "/beta/analytics", label: "Analytics", match: (p) => p.startsWith("/beta/analytics") || p.startsWith("/beta/stats"), icon: icon(<><path d="M4 20V10" /><path d="M10 20V4" /><path d="M16 20v-7" /><path d="M21 20H3" /></>) },
   { href: "/beta/activity", label: "Logs", match: (p) => p.startsWith("/beta/activity"), icon: icon(<path d="M3 12h4l3-8 4 16 3-8h4" />) },
-  { href: "/beta/api", label: "API/MCP", match: (p) => p.startsWith("/beta/api") || p.startsWith("/beta/keys"), icon: icon(<><path d="m8 8-5 4 5 4" /><path d="m16 8 5 4-5 4" /><path d="m13.5 5-3 14" /></>) },
+  { href: "/beta/api", label: "Connect your AI", match: (p) => p.startsWith("/beta/api") || p.startsWith("/beta/keys"), icon: icon(<><path d="m8 8-5 4 5 4" /><path d="m16 8 5 4-5 4" /><path d="m13.5 5-3 14" /></>) },
   { href: "/beta/usage", label: "Usage", match: (p) => p.startsWith("/beta/usage"), icon: icon(<><path d="M21 12a9 9 0 1 1-9-9" /><path d="M21 12h-9V3" /></>) },
 ];
 // Pinned under the main list: the public setup guide (opens in a new tab) and Settings, a

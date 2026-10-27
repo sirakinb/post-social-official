@@ -12,7 +12,7 @@ export type ApiKey = { id: string; name: string; prefix: string; mode: "live" | 
 
 const btn = "inline-flex h-[30px] items-center rounded-lg border border-ps-fg/[0.12] px-3 text-xs hover:border-ps-fg/25 disabled:opacity-50";
 
-// The API/MCP page: how to connect an AI, the AIs already signed in, and API keys.
+// The Connect your AI page (/beta/api): how to connect an AI, the AIs already signed in, and API keys.
 export function ApiView(props: { workspaceId: string; role: string; apps: AiApp[]; keys: ApiKey[]; mcpUrl: string; serverName: string }) {
   const router = useRouter();
   const now = useSyncExternalStore(subscribe, () => Math.floor(Date.now() / 60_000) * 60_000, () => 0);
@@ -82,7 +82,7 @@ export function ApiView(props: { workspaceId: string; role: string; apps: AiApp[
   return (
     <div className="flex w-full max-w-[1100px] flex-col gap-7 px-4 sm:px-8 pb-14 pt-5">
       <div>
-        <h1 className="m-0 text-lg font-medium">API/MCP</h1>
+        <h1 className="m-0 text-lg font-medium">Connect your AI</h1>
         <p className="mt-1 text-ps-muted">Connect Claude, ChatGPT, Codex, Grok and other AI apps, or your own code, and see who has access.</p>
       </div>
 
