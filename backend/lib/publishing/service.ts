@@ -297,6 +297,9 @@ export async function updatePost(deps: PostsDeps, caller: Caller, input: Record<
   const mediaBefore = queued
     ? (await deps.sql<{ media_asset_id: string }>(`SELECT media_asset_id FROM public.post_media WHERE post_id = $1 ORDER BY position`, [postId])).map((m) => m.media_asset_id)
     : [];
+  const destinationsBefore = queued && newDestinations
+    ? (await deps.sql<{ row: Record<string, unknown> }>(`SELECT to_jsonb(d) AS row FROM public.destinations d WHERE d.post_id = $1`, [postId])).map((d) => d.row)
+    : null;
   if (queued) {
     const [{ unqueue_post: pulled }] = await deps.sql<{ unqueue_post: boolean }>(`SELECT public.unqueue_post($1)`, [postId]);
     if (!pulled) throw new ApiError(409, "This post started sending, so it can't be changed.");
@@ -372,7 +375,7 @@ export async function updatePost(deps: PostsDeps, caller: Caller, input: Record<
   } catch (error) {
     // The post was taken out of the queue for this edit. Put it back unchanged so it never
     // sits "scheduled" with nothing queued to send it.
-    if (queued && !requeued) await requeueAsBefore(deps, post, mediaBefore).catch((restoreError) => reportError(restoreError, { area: "api" }));
+    if (queued && !requeued) await requeueAsBefore(deps, post, mediaBefore, destinationsBefore).catch((restoreError) => reportError(restoreError, { area: "api" }));
     throw error;
   }
   await audit(deps, post.workspace_id, member.actor_id, caller, postId, "post.updated", backToApproval || invalidEdit ? "Edited the post; it needs approval again" : "Edited the post", { caption: post.caption, scheduled_at: post.scheduled_at }, { caption, scheduled_at: scheduledAt });
@@ -392,9 +395,20 @@ async function replaceMedia(deps: PostsDeps, postId: string, workspaceId: string
   );
 }
 
-// Puts a queued post that failed to change back the way it was and back in the queue.
-async function requeueAsBefore(deps: PostsDeps, post: PostRow, mediaIds: string[]) {
+// Puts a queued post that failed to change back the way it was and back in the queue. When the
+// edit touched its accounts, the accounts it added are removed and the ones it removed or
+// changed come back with their old options, so it never sends to accounts nobody approved.
+async function requeueAsBefore(deps: PostsDeps, post: PostRow, mediaIds: string[], destinationsBefore: Record<string, unknown>[] | null) {
   await replaceMedia(deps, post.id, post.workspace_id, mediaIds);
+  if (destinationsBefore) {
+    await deps.sql(`DELETE FROM public.destinations WHERE post_id = $1 AND id <> ALL($2::uuid[])`, [post.id, destinationsBefore.map((d) => String(d.id))]);
+    await deps.sql(
+      `INSERT INTO public.destinations SELECT * FROM jsonb_populate_recordset(NULL::public.destinations, $1::jsonb)
+       ON CONFLICT (id) DO UPDATE SET options = EXCLUDED.options, actor_id = EXCLUDED.actor_id,
+         effective_approval_policy = EXCLUDED.effective_approval_policy, error_code = EXCLUDED.error_code, error_message = EXCLUDED.error_message`,
+      [JSON.stringify(destinationsBefore)],
+    );
+  }
   await deps.sql(
     `WITH req AS (UPDATE public.approval_requests SET status = 'cancelled', closed_at = now() WHERE post_id = $1 AND status = 'pending'),
      p AS (UPDATE public.posts SET caption = $2, scheduled_at = $3, status = 'approved' WHERE id = $1)
