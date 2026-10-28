@@ -2,7 +2,7 @@
 // actions back the web app, the REST API and the MCP tools (Phase 5). Every change checks
 // membership and writes an audit entry naming the actor.
 import { ApiError, isAgentCaller, membership, requireUuid, type Caller, type Sql } from "../access";
-import { trackEvent, tracking } from "../telemetry";
+import { reportError, trackEvent, tracking } from "../telemetry";
 import { publicHandle, withHandle } from "../connections/handles";
 import { DISPLAY_NAMES, type Platform } from "../connections/platforms";
 import { firstPublishedAt, publishedAtSql } from "./published";
@@ -127,7 +127,9 @@ function parseMediaIds(value: unknown) {
   if (value === undefined || value === null) return [];
   if (!Array.isArray(value)) throw new ApiError(400, "media_ids must be a list.");
   if (value.length > MAX_MEDIA) throw new ApiError(400, `A post can include at most ${MAX_MEDIA} media files.`);
-  return value.map((id) => requireUuid(id, "Media"));
+  const ids = value.map((id) => requireUuid(id, "Media"));
+  if (new Set(ids.map((id) => id.toLowerCase())).size !== ids.length) throw new ApiError(400, "Each media item can be used only once in a post.");
+  return ids;
 }
 
 export type CheckResult = { ok: boolean; problems: string[]; destinations: Array<{ account_id: string; account: string; account_handle: string | null; platform: Platform; problems: string[] }> };
@@ -291,77 +293,129 @@ export async function updatePost(deps: PostsDeps, caller: Caller, input: Record<
     newDestinations = parsed.destinations;
   }
 
+  // What the post had before, so a failed edit can put a queued post back as it was.
+  const mediaBefore = queued
+    ? (await deps.sql<{ media_asset_id: string }>(`SELECT media_asset_id FROM public.post_media WHERE post_id = $1 ORDER BY position`, [postId])).map((m) => m.media_asset_id)
+    : [];
+  const destinationsBefore = queued && newDestinations
+    ? (await deps.sql<{ row: Record<string, unknown> }>(`SELECT to_jsonb(d) AS row FROM public.destinations d WHERE d.post_id = $1`, [postId])).map((d) => d.row)
+    : null;
   if (queued) {
     const [{ unqueue_post: pulled }] = await deps.sql<{ unqueue_post: boolean }>(`SELECT public.unqueue_post($1)`, [postId]);
     if (!pulled) throw new ApiError(409, "This post started sending, so it can't be changed.");
   }
 
-  // An edit to something already approved goes back for approval unless every account
-  // the post will FINALLY go to is autonomous and would not need approval from this
-  // caller under the submit rule (e.g. AI posts to TikTok always do). Judged on the final
-  // account list, so adding an account cannot slip past approval.
-  const finalAccountIds = newDestinations ? newDestinations.map((d) => d.account_id) : destinations.map((d) => d.connected_account_id);
-  const finalAccounts = await loadAccounts(deps, post.workspace_id, finalAccountIds);
-  const backToApproval = queued && finalAccountIds.some((id) => {
-    const account = finalAccounts.get(id)!;
-    return account.policy !== "autonomous" || needsApproval(caller.entryPoint, account.policy, account.platform);
-  });
-  let nextStatus = queued ? (backToApproval ? "awaiting_approval" : "approved") : post.status;
-
-  await deps.sql(
-    `WITH p AS (
-       UPDATE public.posts SET caption = $2, scheduled_at = $3, status = $4 WHERE id = $1 RETURNING id
-     ), media_clear AS (
-       DELETE FROM public.post_media WHERE post_id = $1 AND $5::uuid[] IS NOT NULL
-     ), media_add AS (
-       INSERT INTO public.post_media (post_id, media_asset_id, workspace_id, position)
-       SELECT $1, m.id, $6, m.ord - 1 FROM unnest($5::uuid[]) WITH ORDINALITY AS m(id, ord) WHERE $5::uuid[] IS NOT NULL
-     )
-     UPDATE public.destinations SET status = CASE WHEN $4 = 'awaiting_approval' THEN 'awaiting_approval' WHEN $4 = 'approved' THEN 'approved' ELSE status END
-     WHERE post_id = $1 AND status NOT IN ('published', 'cancelled')`,
-    [postId, caption, scheduledAt, nextStatus, mediaIds, post.workspace_id],
-  );
-  if (newDestinations) {
-    // Accounts kept on the post are updated in place; removed ones are deleted. (A single
-    // delete-then-insert statement would collide with the rows it is replacing.)
-    const destinationStatus = nextStatus === "awaiting_approval" ? "awaiting_approval" : nextStatus === "approved" ? "approved" : "draft";
-    await deps.sql(
-      `DELETE FROM public.destinations WHERE post_id = $1 AND connected_account_id <> ALL($2::uuid[])`,
-      [postId, newDestinations.map((d) => d.account_id)],
-    );
-    await deps.sql(
-      `INSERT INTO public.destinations (workspace_id, post_id, connected_account_id, platform, actor_id, effective_approval_policy, options, status)
-       SELECT $2, $1, (d->>'account_id')::uuid, a.platform, $3, coalesce(a.approval_policy_override, w.default_approval_policy), d->'options', $4
-       FROM jsonb_array_elements($5::jsonb) AS d
-       JOIN public.connected_accounts a ON a.id = (d->>'account_id')::uuid JOIN public.workspaces w ON w.id = a.workspace_id
-       ON CONFLICT (post_id, connected_account_id) DO UPDATE SET
-         options = EXCLUDED.options, status = EXCLUDED.status, effective_approval_policy = EXCLUDED.effective_approval_policy,
-         error_code = NULL, error_message = NULL`,
-      [postId, post.workspace_id, member.actor_id, destinationStatus, JSON.stringify(newDestinations)],
-    );
-  }
-  // An autonomous edit goes straight back into the queue only if it still passes the
-  // checks; otherwise it waits for review instead of failing later at send time.
+  let requeued = false;
+  let backToApproval = false;
   let invalidEdit = false;
-  if (nextStatus === "approved" && !(await validatePost(deps, caller, { post_id: postId })).ok) {
-    invalidEdit = true;
-    nextStatus = "awaiting_approval";
+  let nextStatus = post.status;
+  try {
+    // An edit to something already approved goes back for approval unless every account
+    // the post will FINALLY go to is autonomous and would not need approval from this
+    // caller under the submit rule (e.g. AI posts to TikTok always do). Judged on the final
+    // account list, so adding an account cannot slip past approval.
+    const finalAccountIds = newDestinations ? newDestinations.map((d) => d.account_id) : destinations.map((d) => d.connected_account_id);
+    const finalAccounts = await loadAccounts(deps, post.workspace_id, finalAccountIds);
+    backToApproval = queued && finalAccountIds.some((id) => {
+      const account = finalAccounts.get(id)!;
+      return account.policy !== "autonomous" || needsApproval(caller.entryPoint, account.policy, account.platform);
+    });
+    nextStatus = queued ? (backToApproval ? "awaiting_approval" : "approved") : post.status;
+
     await deps.sql(
-      `WITH p AS (UPDATE public.posts SET status = 'awaiting_approval' WHERE id = $1)
-       UPDATE public.destinations SET status = 'awaiting_approval' WHERE post_id = $1 AND status = 'approved'`,
-      [postId],
+      `WITH p AS (
+         UPDATE public.posts SET caption = $2, scheduled_at = $3, status = $4 WHERE id = $1 RETURNING id
+       )
+       UPDATE public.destinations SET status = CASE WHEN $4 = 'awaiting_approval' THEN 'awaiting_approval' WHEN $4 = 'approved' THEN 'approved' ELSE status END
+       WHERE post_id = $1 AND status NOT IN ('published', 'cancelled')`,
+      [postId, caption, scheduledAt, nextStatus],
     );
+    if (mediaIds) await replaceMedia(deps, postId, post.workspace_id, mediaIds);
+    if (newDestinations) {
+      // Accounts kept on the post are updated in place; removed ones are deleted. (A single
+      // delete-then-insert statement would collide with the rows it is replacing.)
+      const destinationStatus = nextStatus === "awaiting_approval" ? "awaiting_approval" : nextStatus === "approved" ? "approved" : "draft";
+      await deps.sql(
+        `DELETE FROM public.destinations WHERE post_id = $1 AND connected_account_id <> ALL($2::uuid[])`,
+        [postId, newDestinations.map((d) => d.account_id)],
+      );
+      await deps.sql(
+        `INSERT INTO public.destinations (workspace_id, post_id, connected_account_id, platform, actor_id, effective_approval_policy, options, status)
+         SELECT $2, $1, (d->>'account_id')::uuid, a.platform, $3, coalesce(a.approval_policy_override, w.default_approval_policy), d->'options', $4
+         FROM jsonb_array_elements($5::jsonb) AS d
+         JOIN public.connected_accounts a ON a.id = (d->>'account_id')::uuid JOIN public.workspaces w ON w.id = a.workspace_id
+         ON CONFLICT (post_id, connected_account_id) DO UPDATE SET
+           options = EXCLUDED.options, status = EXCLUDED.status, effective_approval_policy = EXCLUDED.effective_approval_policy,
+           error_code = NULL, error_message = NULL`,
+        [postId, post.workspace_id, member.actor_id, destinationStatus, JSON.stringify(newDestinations)],
+      );
+    }
+    // An autonomous edit goes straight back into the queue only if it still passes the
+    // checks; otherwise it waits for review instead of failing later at send time.
+    if (nextStatus === "approved" && !(await validatePost(deps, caller, { post_id: postId })).ok) {
+      invalidEdit = true;
+      nextStatus = "awaiting_approval";
+      await deps.sql(
+        `WITH p AS (UPDATE public.posts SET status = 'awaiting_approval' WHERE id = $1)
+         UPDATE public.destinations SET status = 'awaiting_approval' WHERE post_id = $1 AND status = 'approved'`,
+        [postId],
+      );
+    }
+    if (backToApproval || invalidEdit) {
+      await deps.sql(
+        `WITH closed AS (UPDATE public.approval_requests SET status = 'cancelled', closed_at = now() WHERE post_id = $1 AND status = 'pending')
+         INSERT INTO public.approval_requests (workspace_id, post_id, policy, requested_by_actor_id) VALUES ($2, $1, 'confirm_each', $3)`,
+        [postId, post.workspace_id, member.actor_id],
+      );
+    }
+    if (nextStatus === "approved") {
+      await deps.sql(`SELECT public.start_publishing($1)`, [postId]);
+      requeued = true;
+    }
+  } catch (error) {
+    // The post was taken out of the queue for this edit. Put it back unchanged so it never
+    // sits "scheduled" with nothing queued to send it.
+    if (queued && !requeued) await requeueAsBefore(deps, post, mediaBefore, destinationsBefore).catch((restoreError) => reportError(restoreError, { area: "api" }));
+    throw error;
   }
-  if (backToApproval || invalidEdit) {
-    await deps.sql(
-      `WITH closed AS (UPDATE public.approval_requests SET status = 'cancelled', closed_at = now() WHERE post_id = $1 AND status = 'pending')
-       INSERT INTO public.approval_requests (workspace_id, post_id, policy, requested_by_actor_id) VALUES ($2, $1, 'confirm_each', $3)`,
-      [postId, post.workspace_id, member.actor_id],
-    );
-  }
-  if (nextStatus === "approved") await deps.sql(`SELECT public.start_publishing($1)`, [postId]);
   await audit(deps, post.workspace_id, member.actor_id, caller, postId, "post.updated", backToApproval || invalidEdit ? "Edited the post; it needs approval again" : "Edited the post", { caption: post.caption, scheduled_at: post.scheduled_at }, { caption, scheduled_at: scheduledAt });
   return { ...(await view(deps, postId)), check: await validatePost(deps, caller, { post_id: postId }) };
+}
+
+// Swaps a post's media. The old rows are cleared in their own statement first: a single
+// delete-then-insert statement doesn't see its own delete and collides with the rows it
+// is replacing.
+async function replaceMedia(deps: PostsDeps, postId: string, workspaceId: string, mediaIds: string[]) {
+  await deps.sql(`DELETE FROM public.post_media WHERE post_id = $1`, [postId]);
+  if (!mediaIds.length) return;
+  await deps.sql(
+    `INSERT INTO public.post_media (post_id, media_asset_id, workspace_id, position)
+     SELECT $1, m.id, $2, m.ord - 1 FROM unnest($3::uuid[]) WITH ORDINALITY AS m(id, ord)`,
+    [postId, workspaceId, mediaIds],
+  );
+}
+
+// Puts a queued post that failed to change back the way it was and back in the queue. When the
+// edit touched its accounts, the accounts it added are removed and the ones it removed or
+// changed come back with their old options, so it never sends to accounts nobody approved.
+async function requeueAsBefore(deps: PostsDeps, post: PostRow, mediaIds: string[], destinationsBefore: Record<string, unknown>[] | null) {
+  await replaceMedia(deps, post.id, post.workspace_id, mediaIds);
+  if (destinationsBefore) {
+    await deps.sql(`DELETE FROM public.destinations WHERE post_id = $1 AND id <> ALL($2::uuid[])`, [post.id, destinationsBefore.map((d) => String(d.id))]);
+    await deps.sql(
+      `INSERT INTO public.destinations SELECT * FROM jsonb_populate_recordset(NULL::public.destinations, $1::jsonb)
+       ON CONFLICT (id) DO UPDATE SET options = EXCLUDED.options, actor_id = EXCLUDED.actor_id,
+         effective_approval_policy = EXCLUDED.effective_approval_policy, error_code = EXCLUDED.error_code, error_message = EXCLUDED.error_message`,
+      [JSON.stringify(destinationsBefore)],
+    );
+  }
+  await deps.sql(
+    `WITH req AS (UPDATE public.approval_requests SET status = 'cancelled', closed_at = now() WHERE post_id = $1 AND status = 'pending'),
+     p AS (UPDATE public.posts SET caption = $2, scheduled_at = $3, status = 'approved' WHERE id = $1)
+     UPDATE public.destinations SET status = 'approved' WHERE post_id = $1 AND status NOT IN ('published', 'cancelled')`,
+    [post.id, post.caption, post.scheduled_at],
+  );
+  await deps.sql(`SELECT public.start_publishing($1)`, [post.id]);
 }
 
 // The person a post is credited to in product analytics: the signed-in person, or whoever

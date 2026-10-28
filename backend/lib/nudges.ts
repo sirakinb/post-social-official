@@ -11,7 +11,7 @@ import type { Sql } from "./access";
 
 export type NudgeKind = "welcome" | "no_account" | "no_ai" | "first_post_live" | "week_one";
 export type Due = { user_id: string; email: string; name: string | null; workspace_id: string; kind: NudgeKind; platform?: string | null; live_url?: string | null; connected?: boolean | null };
-export type Email = { to: string; subject: string; text: string; html: string; unsubscribeUrl: string };
+export type Email = { to: string; subject: string; text: string; html: string; unsubscribeUrl: string; user_id: string; kind: NudgeKind };
 
 export const NUDGE_FROM = "Aki <aki@postsocial.xyz>";
 // Aki's Cal.com page for a 30-minute call (Sundays, 12pm to midnight Eastern).
@@ -190,11 +190,11 @@ export function composeEmail(due: Due, appUrl: string, unsubscribe: string): Ema
   const n = note(due, appUrl);
   if (n) {
     const text = [...n.paragraphs, "Aki", "--", `You're getting this because you signed up for Post Social. Unsubscribe: ${unsubscribe}`].join("\n\n");
-    return { to: due.email, subject: n.subject, text, html: noteHtml(n, unsubscribe), unsubscribeUrl: unsubscribe };
+    return { to: due.email, subject: n.subject, text, html: noteHtml(n, unsubscribe), unsubscribeUrl: unsubscribe, user_id: due.user_id, kind: due.kind };
   }
   const c = content(due, appUrl);
   const text = [...c.intro, `${c.button.text}: ${c.button.url}`, ...c.after, "Aki\nPost Social", "--", `You're getting this because you signed up for Post Social. Unsubscribe: ${unsubscribe}`].join("\n\n");
-  return { to: due.email, subject: c.subject, text, html: html(c, appUrl, unsubscribe), unsubscribeUrl: unsubscribe };
+  return { to: due.email, subject: c.subject, text, html: html(c, appUrl, unsubscribe), unsubscribeUrl: unsubscribe, user_id: due.user_id, kind: due.kind };
 }
 
 // ---- who is due --------------------------------------------------------------------------
@@ -266,7 +266,8 @@ export async function findDue(sql: Sql, limit = 50): Promise<Due[]> {
 
 export type NudgeDeps = {
   sql: Sql;
-  send: (email: Email) => Promise<boolean>;
+  // The id Resend gave the email ("" if it gave none), or null when the send failed.
+  send: (email: Email) => Promise<string | null>;
   appUrl: string;
   secret: string;
   log?: (message: string, details?: Record<string, unknown>) => void;
@@ -291,10 +292,12 @@ export async function runNudgeSweep(deps: NudgeDeps): Promise<number> {
     });
     if (!claimed.length) continue;
     const email = composeEmail(due, deps.appUrl, await unsubscribeUrl(deps.appUrl, deps.secret, due.user_id));
-    const ok = await deps.send(email).catch(() => false);
-    if (ok) {
+    const id = await deps.send(email).catch(() => null);
+    if (id !== null) {
       sent++;
       emailed.add(due.user_id);
+      // Kept so a delivery can be looked up in Resend exactly, not by subject and time.
+      if (id) await deps.sql(`UPDATE public.email_nudges SET resend_id = $3 WHERE user_id = $1 AND kind = $2`, [due.user_id, due.kind, id]).catch(() => undefined);
     } else {
       await deps.sql(`DELETE FROM public.email_nudges WHERE user_id = $1 AND kind = $2`, [due.user_id, due.kind]);
       deps.log?.("nudge email failed", { kind: due.kind });
@@ -304,7 +307,8 @@ export async function runNudgeSweep(deps: NudgeDeps): Promise<number> {
 }
 
 // Sends one email through Resend from Aki, replies to his inbox, blind-copying him, with the
-// unsubscribe link in the List-Unsubscribe header.
+// unsubscribe link in the List-Unsubscribe header, tagged with who it's for and which email it
+// is. Gives back Resend's id for the email, or null if Resend didn't take it.
 export function resendSender(apiKey: string, fetchImpl: typeof fetch = fetch) {
   return async (email: Email) => {
     const response = await fetchImpl("https://api.resend.com/emails", {
@@ -319,9 +323,15 @@ export function resendSender(apiKey: string, fetchImpl: typeof fetch = fetch) {
         text: email.text,
         html: email.html,
         headers: { "List-Unsubscribe": `<${email.unsubscribeUrl}>` },
-        tags: [{ name: "type", value: "nudge" }],
+        tags: [
+          { name: "type", value: "nudge" },
+          { name: "kind", value: email.kind },
+          { name: "user_id", value: email.user_id },
+        ],
       }),
     });
-    return response.ok;
+    if (!response.ok) return null;
+    const body = (await response.json().catch(() => ({}))) as { id?: unknown };
+    return typeof body.id === "string" ? body.id : "";
   };
 }
