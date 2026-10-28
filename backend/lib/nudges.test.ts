@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Sql } from "./access";
-import { NUDGE_COPY_TO, NUDGE_FROM, NUDGE_REPLY_TO, composeEmail, findDue, linkToken, resendSender, runNudgeSweep, unsubscribeUrl, validLinkToken, type Due } from "./nudges";
+import { CALL_URL, NUDGE_COPY_TO, NUDGE_FROM, NUDGE_REPLY_TO, composeEmail, findDue, linkToken, resendSender, runNudgeSweep, unsubscribeUrl, validLinkToken, type Due } from "./nudges";
 
 const USER = "11111111-1111-4111-8111-111111111111";
 const due = (kind: Due["kind"], extra: Partial<Due> = {}): Due => ({ user_id: USER, email: "nia@example.com", name: "Nia Test", workspace_id: "w1", kind, ...extra });
@@ -49,6 +49,37 @@ describe("composeEmail", () => {
     expect(composeEmail(due("first_post_live", { live_url: "javascript:alert(1)" }), app, "u").html).not.toContain("javascript:");
   });
 
+  it("writes the welcome and the week-one email as a plain note from Aki, with the unsubscribe link", () => {
+    for (const kind of ["welcome", "week_one"] as const) {
+      const email = composeEmail(due(kind), app, "https://www.postsocial.xyz/email/unsubscribe?u=1&t=2");
+      expect(email.text.startsWith("Hi Nia,")).toBe(true);
+      expect(email.text).toContain("\n\nAki\n\n--");
+      expect(email.text).toContain("Unsubscribe: https://www.postsocial.xyz/email/unsubscribe?u=1&t=2");
+      expect(email.html).toContain('href="https://www.postsocial.xyz/email/unsubscribe?u=1&amp;t=2"');
+      // No designed card: no logo, no button.
+      expect(email.html).not.toContain("post-social-icon.png");
+      expect(email.html).not.toContain("border-radius:999px");
+      expect(email.text).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);
+    }
+  });
+
+  it("welcomes with the step they haven't done yet", () => {
+    const fresh = composeEmail(due("welcome"), app, "u");
+    expect(fresh.subject).toBe("Welcome to Post Social");
+    expect(fresh.text).toContain(`${app}/beta/accounts`);
+    expect(fresh.text).toContain("Just reply and tell me.");
+    const connected = composeEmail(due("welcome", { connected: true }), app, "u");
+    expect(connected.text).toContain(`${app}/beta/api`);
+    expect(connected.text).not.toContain(`${app}/beta/accounts`);
+  });
+
+  it("asks for a call a week in, with Aki's booking link", () => {
+    const email = composeEmail(due("week_one"), app, "u");
+    expect(email.subject).toBe("One week with Post Social");
+    expect(email.text).toContain(`Book a time that works for you here: ${CALL_URL}`);
+    expect(email.html).toContain(`href="${CALL_URL}"`);
+  });
+
   it("says hello without a name, and escapes names in the HTML", () => {
     expect(composeEmail(due("no_account", { name: null }), app, "u").text.startsWith("Hi there,")).toBe(true);
     expect(composeEmail(due("no_account", { name: "<b>Eve</b>" }), app, "u").html).not.toContain("<b>Eve");
@@ -66,16 +97,23 @@ describe("findDue", () => {
     const queries: string[] = [];
     const sql = (async (query: string) => { queries.push(query); return []; }) as Sql;
     await findDue(sql);
-    expect(queries).toHaveLength(3);
+    expect(queries).toHaveLength(5);
     for (const q of queries) {
       expect(q).toContain("m.role = 'owner' AND m.user_id = w.created_by");
       expect(q).toContain("u.email_verified");
       expect(q).toContain("public.email_nudges");
       expect(q).toContain("nudges_off_at IS NOT NULL");
     }
-    expect(queries[0]).toContain("interval '24 hours'");
-    expect(queries[1]).toContain("interval '72 hours'");
-    expect(queries[2]).toContain("d.status = 'published'");
+    expect(queries[0]).toContain("'welcome' AS kind");
+    expect(queries[0]).toContain("w.created_at > now() - interval '48 hours'");
+    expect(queries[1]).toContain("w.created_at < now() - interval '48 hours'");
+    expect(queries[2]).toContain("interval '72 hours'");
+    expect(queries[3]).toContain("d.status = 'published'");
+    expect(queries[4]).toContain("'week_one' AS kind");
+    expect(queries[4]).toContain("w.created_at < now() - interval '7 days'");
+    // Sent to everyone a week in, whatever they've done: no account, AI or post conditions.
+    expect(queries[4]).not.toContain("connected_accounts");
+    expect(queries[4]).not.toContain("destinations");
   });
 });
 
@@ -105,6 +143,35 @@ describe("runNudgeSweep", () => {
     let sends = 0;
     expect(await runNudgeSweep({ sql, appUrl: "https://x", secret: "s", send: async () => { sends++; return "re_1"; } })).toBe(0);
     expect(sends).toBe(0);
+  });
+
+  it("holds the week-one email when the same sweep already emailed them", async () => {
+    const log: string[] = [];
+    const sql = (async (query: string) => {
+      if (query.includes("'no_account' AS kind")) return [due("no_account")];
+      if (query.includes("'week_one' AS kind")) return [due("week_one")];
+      if (query.startsWith("INSERT INTO public.email_nudges")) { log.push("claim"); return [{ user_id: USER }]; }
+      return [];
+    }) as Sql;
+    const sent: string[] = [];
+    expect(await runNudgeSweep({ sql, appUrl: "https://x", secret: "s", send: async (e) => { sent.push(e.subject); return "re_1"; } })).toBe(1);
+    expect(sent).toEqual(["Connect your first account to Post Social"]);
+    expect(log).toEqual(["claim"]);
+  });
+
+  it("skips an email the database won't record and still sends the rest", async () => {
+    const sql = (async (query: string, params?: unknown[]) => {
+      if (query.includes("'welcome' AS kind")) return [due("welcome")];
+      if (query.includes("'no_account' AS kind")) return [due("no_account", { user_id: "22222222-2222-4222-8222-222222222222" })];
+      if (query.startsWith("INSERT INTO public.email_nudges")) {
+        if (params?.[1] === "welcome") throw new Error("violates check constraint");
+        return [{ user_id: params?.[0] }];
+      }
+      return [];
+    }) as Sql;
+    const sent: string[] = [];
+    expect(await runNudgeSweep({ sql, appUrl: "https://x", secret: "s", send: async (e) => { sent.push(e.subject); return "re_1"; } })).toBe(1);
+    expect(sent).toEqual(["Connect your first account to Post Social"]);
   });
 
   it("gives the claim back when sending fails, so the next sweep tries again", async () => {

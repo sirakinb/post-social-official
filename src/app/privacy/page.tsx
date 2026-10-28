@@ -38,7 +38,7 @@ export default function PrivacyPage() {
                 including OAuth tokens, account handles, profile avatars, post
                 content, media files, and publishing logs. If you join the
                 waitlist, we keep the email address you give us to invite you.
-                After you sign up we may send up to three short emails to help
+                After you sign up we may send up to five short emails to help
                 you get started; each one has a link to stop them.
               </p>
             </section>
