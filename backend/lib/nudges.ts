@@ -1,17 +1,21 @@
-// Nudge emails for new customers: three short, plain emails from Aki, each sent at most once
-// per person, ever, only to the workspace's owner, and never to anyone who unsubscribed.
-//   no_account       a day after sign-up, nothing connected yet
+// Emails for new customers: five short emails from Aki, each sent at most once per person, ever,
+// only to the workspace's owner, and never to anyone who unsubscribed.
+//   welcome          once the email is confirmed, a plain note from Aki with the next step
+//   no_account       two days after sign-up, nothing connected yet
 //   no_ai            three days after sign-up, an account connected but no AI app or key
 //   first_post_live  the first post that went live, with its link
+//   week_one         a week after sign-up, to everyone: a plain note asking for a call
 // The worker runs the sweep (worker/src/index.ts, off unless NUDGE_EMAILS is "on"); the api
 // function records unsubscribes from the signed link at the bottom of each email.
 import type { Sql } from "./access";
 
-export type NudgeKind = "no_account" | "no_ai" | "first_post_live";
-export type Due = { user_id: string; email: string; name: string | null; workspace_id: string; kind: NudgeKind; platform?: string | null; live_url?: string | null };
+export type NudgeKind = "welcome" | "no_account" | "no_ai" | "first_post_live" | "week_one";
+export type Due = { user_id: string; email: string; name: string | null; workspace_id: string; kind: NudgeKind; platform?: string | null; live_url?: string | null; connected?: boolean | null };
 export type Email = { to: string; subject: string; text: string; html: string; unsubscribeUrl: string };
 
 export const NUDGE_FROM = "Aki <aki@postsocial.xyz>";
+// Aki's Cal.com page for a 30-minute call (Sundays, 12pm to midnight Eastern).
+export const CALL_URL = "https://cal.com/akinyemi-bajulaiye-2jua88/post-social-call";
 // Replies reach Aki's inbox, as with the beta welcome email (scripts/lib/beta-invite.ts).
 export const NUDGE_REPLY_TO = "aki.b@pentridgemedia.com";
 // AGENTS.md: real outbound emails to users always copy Aki. Blind, so customers don't see it.
@@ -61,6 +65,44 @@ const isWebLink = (s: string | null | undefined): s is string => typeof s === "s
 
 type Content = { subject: string; preheader: string; label: string; headline: string; intro: string[]; button: { text: string; url: string }; after: string[] };
 
+// The welcome and the week-one email read like a note from a person: plain paragraphs, no card,
+// no button, signed "Aki". The other three use the designed card below.
+type Note = { subject: string; paragraphs: string[] };
+
+function note(due: Due, appUrl: string): Note | null {
+  const hi = `Hi ${firstName(due.name)},`;
+  if (due.kind === "welcome") {
+    // Someone who connected an account before this went out is pointed at the AI step instead.
+    const next = due.connected
+      ? ["Your first account is already connected. The next step is connecting your AI, so you can post just by asking. It takes about a minute:", `${appUrl}/beta/api`]
+      : ["The one thing to do first: connect a social account. It takes about a minute, and Post Social never sees your password.", `${appUrl}/beta/accounts`];
+    return {
+      subject: "Welcome to Post Social",
+      paragraphs: [
+        hi,
+        "I'm Aki, and I built Post Social. Thanks for signing up.",
+        "Post Social lets you post to TikTok, Instagram, YouTube, Facebook, Threads, LinkedIn, Bluesky and X by asking Claude, ChatGPT or any AI agent, or from the web composer.",
+        next.join("\n"),
+        "Your first two accounts are free.",
+        "What are you hoping to post, and where? Just reply and tell me. I read every reply.",
+      ],
+    };
+  }
+  if (due.kind === "week_one") {
+    return {
+      subject: "One week with Post Social",
+      paragraphs: [
+        hi,
+        "It's been a week since you signed up for Post Social, and I'd love to learn more about how you're planning to use it.",
+        `Would you be open to a quick call? Book a time that works for you here: ${CALL_URL}`,
+        "Or just reply to this email if that's easier.",
+        "Looking forward to chatting,",
+      ],
+    };
+  }
+  return null;
+}
+
 function content(due: Due, appUrl: string): Content {
   const hi = `Hi ${firstName(due.name)},`;
   if (due.kind === "no_account") {
@@ -101,7 +143,19 @@ function content(due: Due, appUrl: string): Content {
 const ASSETS = "https://www.postsocial.xyz";
 const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif";
 const MONO = "'SFMono-Regular',Menlo,Consolas,monospace";
-const linkify = (s: string) => escape(s).replace(/(https:\/\/[^\s<]+?)(?=[.,]?(\s|$))/g, '<a href="$1" style="color:#C9A8FF;text-decoration:none;">$1</a>');
+const linkify = (s: string, color = "#C9A8FF") => escape(s).replace(/(https:\/\/[^\s<]+?)(?=[.,]?(\s|$))/g, `<a href="$1" style="color:${color};text-decoration:none;">$1</a>`);
+
+function noteHtml(n: Note, unsubscribe: string) {
+  const p = (text: string) => `<p style="margin:0 0 16px;">${linkify(text, "#5B3FD6").replace(/\n/g, "<br>")}</p>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(n.subject)}</title></head>
+<body style="margin:0;padding:24px 16px;background:#FFFFFF;">
+<div style="max-width:560px;font-family:${FONT};font-size:16px;line-height:1.6;color:#1B1230;">
+  ${n.paragraphs.map(p).join("")}
+  <p style="margin:0;">Aki</p>
+  <p style="margin:32px 0 0;font-size:12px;line-height:1.6;color:#7D7494;">You're getting this because you signed up for Post Social. <a href="${escape(unsubscribe)}" style="color:#7D7494;">Unsubscribe</a></p>
+</div>
+</body></html>`;
+}
 
 function html(c: Content, appUrl: string, unsubscribe: string) {
   const p = (text: string) => `<p style="margin:0 0 16px;font-size:16px;line-height:1.6;color:#CFC8DC;">${linkify(text)}</p>`;
@@ -133,6 +187,11 @@ function html(c: Content, appUrl: string, unsubscribe: string) {
 }
 
 export function composeEmail(due: Due, appUrl: string, unsubscribe: string): Email {
+  const n = note(due, appUrl);
+  if (n) {
+    const text = [...n.paragraphs, "Aki", "--", `You're getting this because you signed up for Post Social. Unsubscribe: ${unsubscribe}`].join("\n\n");
+    return { to: due.email, subject: n.subject, text, html: noteHtml(n, unsubscribe), unsubscribeUrl: unsubscribe };
+  }
   const c = content(due, appUrl);
   const text = [...c.intro, `${c.button.text}: ${c.button.url}`, ...c.after, "Aki\nPost Social", "--", `You're getting this because you signed up for Post Social. Unsubscribe: ${unsubscribe}`].join("\n\n");
   return { to: due.email, subject: c.subject, text, html: html(c, appUrl, unsubscribe), unsubscribeUrl: unsubscribe };
@@ -151,10 +210,19 @@ const NOT_SENT = (kind: NudgeKind) => `
   AND NOT EXISTS (SELECT 1 FROM public.email_preferences p WHERE p.user_id = m.user_id AND p.nudges_off_at IS NOT NULL)`;
 
 export async function findDue(sql: Sql, limit = 50): Promise<Due[]> {
-  const [noAccount, noAi, live] = await Promise.all([
+  const [welcome, noAccount, noAi, live, weekOne] = await Promise.all([
+    // Only recent sign-ups, so people who joined long before this email existed never get it.
+    sql<Due>(
+      `SELECT m.user_id, u.email, a.display_name AS name, w.id AS workspace_id, 'welcome' AS kind,
+         EXISTS (SELECT 1 FROM public.connected_accounts c WHERE c.workspace_id = w.id) AS connected ${OWNER}
+       WHERE w.created_at > now() - interval '48 hours'
+         ${NOT_SENT("welcome")}
+       LIMIT $1`,
+      [limit],
+    ),
     sql<Due>(
       `SELECT m.user_id, u.email, a.display_name AS name, w.id AS workspace_id, 'no_account' AS kind ${OWNER}
-       WHERE w.created_at < now() - interval '24 hours' AND w.created_at > now() - interval '7 days'
+       WHERE w.created_at < now() - interval '48 hours' AND w.created_at > now() - interval '7 days'
          AND NOT EXISTS (SELECT 1 FROM public.connected_accounts c WHERE c.workspace_id = w.id)
          ${NOT_SENT("no_account")}
        LIMIT $1`,
@@ -181,8 +249,17 @@ export async function findDue(sql: Sql, limit = 50): Promise<Due[]> {
        LIMIT $1`,
       [limit],
     ),
+    // Everyone, whatever they've done, but never within a day of another email from us.
+    sql<Due>(
+      `SELECT m.user_id, u.email, a.display_name AS name, w.id AS workspace_id, 'week_one' AS kind ${OWNER}
+       WHERE w.created_at < now() - interval '7 days' AND w.created_at > now() - interval '14 days'
+         AND NOT EXISTS (SELECT 1 FROM public.email_nudges r WHERE r.user_id = m.user_id AND r.sent_at > now() - interval '24 hours')
+         ${NOT_SENT("week_one")}
+       LIMIT $1`,
+      [limit],
+    ),
   ]);
-  return [...noAccount, ...noAi, ...live];
+  return [...welcome, ...noAccount, ...noAi, ...live, ...weekOne];
 }
 
 // ---- the sweep ---------------------------------------------------------------------------------
@@ -199,16 +276,26 @@ export type NudgeDeps = {
 // sends it twice; a failed send gives the claim back for the next sweep.
 export async function runNudgeSweep(deps: NudgeDeps): Promise<number> {
   let sent = 0;
+  const emailed = new Set<string>();
   for (const due of await findDue(deps.sql)) {
+    // The week-one note waits for the next day's sweeps if this sweep already emailed them.
+    if (due.kind === "week_one" && emailed.has(due.user_id)) continue;
+    // A claim the database refuses (say, a new kind before its migration ran) skips that one
+    // email, never the rest of the sweep.
     const claimed = await deps.sql<{ user_id: string }>(
       `INSERT INTO public.email_nudges (user_id, kind, workspace_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING RETURNING user_id`,
       [due.user_id, due.kind, due.workspace_id],
-    );
+    ).catch(() => {
+      deps.log?.("nudge email not claimed", { kind: due.kind });
+      return [];
+    });
     if (!claimed.length) continue;
     const email = composeEmail(due, deps.appUrl, await unsubscribeUrl(deps.appUrl, deps.secret, due.user_id));
     const ok = await deps.send(email).catch(() => false);
-    if (ok) sent++;
-    else {
+    if (ok) {
+      sent++;
+      emailed.add(due.user_id);
+    } else {
       await deps.sql(`DELETE FROM public.email_nudges WHERE user_id = $1 AND kind = $2`, [due.user_id, due.kind]);
       deps.log?.("nudge email failed", { kind: due.kind });
     }
