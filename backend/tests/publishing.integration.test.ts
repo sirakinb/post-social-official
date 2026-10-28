@@ -255,6 +255,80 @@ describe.skipIf(!enabled)("publishing engine on the dev backend (US-027 to US-03
     await act(person(), "cancel", { post_id: draft.id });
   });
 
+  describe("swapping a scheduled post's image", () => {
+    const image = async (name: string) => {
+      const [row] = await sql<{ id: string }>(
+        `INSERT INTO public.media_assets (workspace_id, storage_key, file_name, mime_type, media_type, size_bytes, width, height, status)
+         VALUES ($1, $2, $3, 'image/png', 'image', 1000, 1080, 1080, 'ready') RETURNING id`,
+        [owner.workspaceId, `${owner.workspaceId}/${suffix}/${name}`, name],
+      );
+      return row.id;
+    };
+    const scheduledImagePost = async (caption: string, mediaId: string) => {
+      const draft = await act(person(), "create", {
+        workspace_id: owner.workspaceId,
+        caption,
+        scheduled_at: new Date(Date.now() + 3600_000).toISOString(),
+        media_ids: [mediaId],
+        destinations: [{ account_id: facebook, options: { media_type: "image" } }],
+      });
+      expect((await act(person(), "submit", { post_id: draft.id })).status).toBe("scheduled");
+      return draft.id;
+    };
+    const jobStates = async (postId: string) =>
+      (await sql<{ state: string }>(`SELECT state FROM public.publish_jobs WHERE post_id = $1 ORDER BY created_at`, [postId])).map((j) => j.state);
+
+    beforeAll(async () => {
+      await sql(`UPDATE public.connected_accounts SET approval_policy_override = 'autonomous' WHERE id = $1`, [facebook]);
+    });
+    afterAll(async () => {
+      await sql(`UPDATE public.connected_accounts SET approval_policy_override = NULL WHERE id = $1`, [facebook]);
+    });
+
+    it("replaces the image and keeps the post scheduled", async () => {
+      const [logo, newLogo] = [await image("logo.png"), await image("new-logo.png")];
+      const postId = await scheduledImagePost(`Logo swap ${suffix}`, logo);
+
+      const edited = await act(person(), "update", { post_id: postId, media_ids: [newLogo] });
+      expect(edited.status).toBe("scheduled");
+      expect(edited.media_ids).toEqual([newLogo]);
+      expect(await jobStates(postId)).toEqual(["cancelled", "queued"]);
+
+      // Swapping back to the first image works the same way.
+      expect((await act(person(), "update", { post_id: postId, media_ids: [logo] })).media_ids).toEqual([logo]);
+      await act(person(), "cancel", { post_id: postId });
+    });
+
+    it("puts a scheduled post back in the queue unchanged when an edit fails", async () => {
+      const [before, after] = [await image("before.png"), await image("after.png")];
+      const postId = await scheduledImagePost(`Failed edit ${suffix}`, before);
+      // Fails the edit's media write once, the way the old one-statement swap always did.
+      let failed = false;
+      const flaky = (async (text: string, params: unknown[] = []) => {
+        if (!failed && text.includes("INSERT INTO public.post_media")) {
+          failed = true;
+          throw new Error('duplicate key value violates unique constraint "post_media_pkey"');
+        }
+        return sql(text, params);
+      }) as typeof sql;
+
+      await expect(postActions.update({ sql: flaky }, person(), { post_id: postId, caption: `Changed ${suffix}`, media_ids: [after] })).rejects.toThrow(/post_media_pkey/);
+      const restored = await act(person(), "get", { post_id: postId });
+      expect(restored).toMatchObject({ status: "scheduled", caption: `Failed edit ${suffix}`, media_ids: [before] });
+      expect(restored.destinations[0].status).toBe("scheduled");
+      expect(await jobStates(postId)).toEqual(["cancelled", "queued"]);
+      await act(person(), "cancel", { post_id: postId });
+    });
+
+    it("refuses the same image twice before touching the post", async () => {
+      const once = await image("once.png");
+      const postId = await scheduledImagePost(`Twice ${suffix}`, once);
+      await expect(act(person(), "update", { post_id: postId, media_ids: [once, once] })).rejects.toThrow(/only once/);
+      expect(await jobStates(postId)).toEqual(["queued"]);
+      await act(person(), "cancel", { post_id: postId });
+    });
+  });
+
   it("retries temporary errors with backoff, then fails with a plain reason", async () => {
     platformMode = "flaky";
     const draft = await act(person(), "create", textPost(facebook, `Flaky ${suffix}`));
