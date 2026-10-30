@@ -58,3 +58,22 @@ describe("pageMarkdown", () => {
     expect(md).toContain("url: https://www.postsocial.xyz\n");
   });
 });
+
+describe("HOME_LINKS and auth.md", () => {
+  it("points agents from the home page to the catalog, API description, docs and summaries", async () => {
+    const { HOME_LINKS } = await import("./public-pages");
+    expect(HOME_LINKS).toContain('</.well-known/api-catalog>; rel="api-catalog"');
+    expect(HOME_LINKS).toContain('rel="service-desc"');
+    expect(HOME_LINKS).toContain('rel="service-doc"');
+    expect(HOME_LINKS).toContain('rel="describedby"');
+  });
+
+  it("serves an auth.md with the right heading and the real OAuth and key routes", async () => {
+    const { authMd } = await import("./auth-md");
+    const md = authMd();
+    expect(md.split("\n")[0]).toMatch(/^# .*auth\.md/);
+    expect(md).toContain("https://www.postsocial.xyz/.well-known/oauth-protected-resource");
+    expect(md).toContain("https://www.postsocial.xyz/oauth/register");
+    expect(md).toContain("Authorization: Bearer");
+  });
+});

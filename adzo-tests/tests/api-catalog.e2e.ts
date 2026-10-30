@@ -16,3 +16,15 @@ test('the API catalog lists the REST API and MCP server', async ({ app, browser 
   expect(result.anchors).toEqual(['https://www.postsocial.xyz/api/v1', 'https://www.postsocial.xyz/mcp']);
   expect(result.specStatus).toBe(200);
 });
+
+test('the home page points agents to the catalog, and auth.md explains access', async ({ app, browser }) => {
+  await app.open('/');
+  const result = await browser.evaluate(async () => {
+    const home = await fetch('/', { headers: { Accept: 'text/html' } });
+    const auth = await fetch('/auth.md');
+    return { links: home.headers.get('link'), authType: auth.headers.get('content-type'), authFirst: (await auth.text()).split('\n')[0] };
+  });
+  expect(result.links).toContain('</.well-known/api-catalog>; rel="api-catalog"');
+  expect(result.authType).toContain('text/markdown');
+  expect(result.authFirst).toBe('# Post Social auth.md');
+});

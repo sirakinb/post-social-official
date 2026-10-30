@@ -8,6 +8,16 @@ import { DOCS_PAGES } from "@/lib/docs-nav";
 // are yes. Shown in robots.txt and on Markdown responses.
 export const CONTENT_SIGNAL = "search=yes, ai-input=yes, ai-train=yes";
 
+// Link headers on the home page (RFC 8288, RFC 9727 section 3): where agents find the API
+// catalog, the API description, the docs and the plain-text and auth summaries.
+export const HOME_LINKS = [
+  '</.well-known/api-catalog>; rel="api-catalog"',
+  '</api/v1/openapi.json>; rel="service-desc"; type="application/vnd.oai.openapi+json"',
+  '</docs>; rel="service-doc"; type="text/html"',
+  '</llms.txt>; rel="describedby"; type="text/plain"',
+  '</auth.md>; rel="describedby"; type="text/markdown"',
+].join(", ");
+
 const PAGES = ["/", "/pricing", "/affiliates", "/changelog", "/privacy", "/terms", "/data-deletion"];
 
 export const PUBLIC_PATHS: readonly string[] = [...new Set([...PAGES, ...DOCS_PAGES.map((page) => page.href)])];
