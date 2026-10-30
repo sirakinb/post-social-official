@@ -52,3 +52,24 @@ describe("proxy: crawler tracking", () => {
     expect(track.mock.calls[0][2]).toMatchObject({ enabled: false });
   });
 });
+
+describe("proxy: Markdown for agents", () => {
+  it("sends agents that ask for Markdown on a public page to its Markdown", async () => {
+    const response = await proxy(new NextRequest("https://www.postsocial.xyz/docs/quickstart", { headers: { accept: "text/markdown" } }));
+    expect(response.headers.get("x-middleware-rewrite")).toBe("https://www.postsocial.xyz/markdown/docs/quickstart");
+    expect(response.headers.get("vary")).toBe("Accept");
+  });
+
+  it("gives browsers the normal page, marked as varying by Accept", async () => {
+    const response = await proxy(new NextRequest("https://www.postsocial.xyz/pricing", { headers: { accept: "text/html,application/xhtml+xml,*/*;q=0.8" } }));
+    expect(response.headers.get("x-middleware-rewrite")).toBeNull();
+    expect(response.headers.get("vary")).toBe("Accept");
+  });
+
+  it("never applies to the app or the API", async () => {
+    const app = await proxy(new NextRequest("https://www.postsocial.xyz/beta/signup", { headers: { accept: "text/markdown" } }));
+    expect(app.headers.get("x-middleware-rewrite")).toBeNull();
+    const api = await proxy(new NextRequest("https://www.postsocial.xyz/api/v1/accounts", { headers: { accept: "text/markdown" } }));
+    expect(api.headers.get("x-middleware-rewrite")).toBeNull();
+  });
+});
