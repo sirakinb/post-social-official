@@ -51,9 +51,11 @@ export function authorizationServerMetadata(issuer: string) {
   };
 }
 
-export function protectedResourceMetadata(issuer: string) {
+// RFC 9728: the metadata at /.well-known/oauth-protected-resource/mcp describes the MCP server
+// (MCP apps are sent there); the copy at the bare address describes the site as a whole.
+export function protectedResourceMetadata(issuer: string, resourcePath = "/mcp") {
   return {
-    resource: endpoints(issuer).mcp,
+    resource: resourcePath === "/mcp" ? endpoints(issuer).mcp : issuer,
     authorization_servers: [issuer],
     scopes_supported: [SCOPE],
     bearer_methods_supported: ["header"],
