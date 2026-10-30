@@ -5,6 +5,7 @@ import { Analytics } from "@/components/analytics";
 import { EnvironmentBadge, resolveAppEnv } from "@/components/environment-badge";
 import { Rewardful } from "@/components/rewardful";
 import { SupportChatVisibility } from "@/components/support-chat";
+import { WebMcpTools } from "@/components/webmcp-tools";
 import { CRISP_SNIPPET } from "@/lib/support-chat";
 
 const title = "Post Social — Social media management for AI-native creators and operators";
@@ -44,6 +45,8 @@ export default function RootLayout({
         {/* Affiliate tracking loads everywhere (its key is public), so previews and staging can test referrals. */}
         <Rewardful />
         <SupportChatVisibility />
+        {/* The site's own actions for AI agents in browsers that support WebMCP. */}
+        <WebMcpTools />
         <EnvironmentBadge />
       </body>
     </html>
