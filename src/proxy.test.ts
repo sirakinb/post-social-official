@@ -73,3 +73,12 @@ describe("proxy: Markdown for agents", () => {
     expect(api.headers.get("x-middleware-rewrite")).toBeNull();
   });
 });
+
+describe("proxy: Link headers", () => {
+  it("adds discovery Link headers to the home page only", async () => {
+    const home = await proxy(new NextRequest("https://www.postsocial.xyz/", { headers: { accept: "text/html" } }));
+    expect(home.headers.get("link")).toContain('</.well-known/api-catalog>; rel="api-catalog"');
+    const pricing = await proxy(new NextRequest("https://www.postsocial.xyz/pricing", { headers: { accept: "text/html" } }));
+    expect(pricing.headers.get("link")).toBeNull();
+  });
+});

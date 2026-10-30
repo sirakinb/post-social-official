@@ -47,7 +47,7 @@ export function authorizationServerMetadata(issuer: string) {
     revocation_endpoint_auth_methods_supported: ["none"],
     client_id_metadata_document_supported: true,
     scopes_supported: [SCOPE],
-    service_documentation: `${issuer}/beta/keys`,
+    service_documentation: `${issuer}/docs/connect`,
   };
 }
 
