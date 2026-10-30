@@ -41,6 +41,7 @@ export function llmsText() {
     `- REST API: ${API_URL}; OpenAPI 3.1 at ${API_URL}/openapi.json. Errors are {"error":{"code","message"}}; writes accept an Idempotency-Key header.`,
     "- CLI: npx postsocial login, then npx postsocial <command> (JSON in, JSON out). npx postsocial upload --file ./clip.mp4 uploads local media.",
     `- Docs for people: ${SITE}/docs`,
+    `- Every public page is also available as Markdown: send Accept: text/markdown, or open ${SITE}/markdown plus the page's path (e.g. ${SITE}/markdown/docs/quickstart).`,
     "",
     "## How to post",
     "1. list_social_accounts for account ids and limits.",

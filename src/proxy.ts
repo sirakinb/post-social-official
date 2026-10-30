@@ -1,11 +1,13 @@
 // Session handling for the web app under /beta, the visitor's address for requests this site
-// forwards to the API (rate limits), and DataFast's tracking of crawler visits to public pages.
+// forwards to the API (rate limits), DataFast's tracking of crawler visits to public pages, and
+// Markdown for agents that ask for it on public pages (Accept: text/markdown).
 import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
 import { trackAICrawlerRequest } from "@datafast/ai-crawl";
 import { updateSession } from "@insforge/sdk/ssr/middleware";
 import { BETA_HOME, BETA_LOGIN, SIGNED_OUT_ONLY_PATHS, isPublicBetaPath } from "@/lib/insforge/auth-rules";
 import { botTrackingConfig } from "@/lib/analytics/bot-tracking";
 import { forwardingHeaders } from "@/lib/security/client-ip";
+import { markdownPath, publicPath, wantsMarkdown } from "@/lib/public-pages";
 
 // Paths this site forwards to the API function (next.config.ts rewrites).
 const API_PATHS = /^\/(api\/v1(\/|$)|mcp$|oauth\/(register|token|revoke)$|\.well-known\/oauth-)/;
@@ -14,6 +16,8 @@ export async function proxy(request: NextRequest, event?: NextFetchEvent) {
   // Not awaited: it reports in the background and must never slow a page down.
   trackAICrawlerRequest(request, event, botTrackingConfig());
   if (API_PATHS.test(request.nextUrl.pathname)) return forwardVisitorAddress(request);
+  const page = publicPath(request.nextUrl.pathname);
+  if (page && (request.method === "GET" || request.method === "HEAD")) return negotiateMarkdown(request, page);
   if (!/^\/beta(\/|$)/.test(request.nextUrl.pathname)) return NextResponse.next();
   const response = NextResponse.next({ request });
   // Refreshes the access token before pages render, and clears cookies for a dead session.
@@ -45,6 +49,17 @@ function forwardVisitorAddress(request: NextRequest) {
   requestHeaders.delete("x-ps-proxy-secret");
   for (const [name, value] of Object.entries(forwardingHeaders(request.headers))) requestHeaders.set(name, value);
   return NextResponse.next({ request: { headers: requestHeaders } });
+}
+
+// Public pages answer in the format asked for: Markdown for an agent that prefers it, the
+// normal page otherwise. Vary: Accept keeps caches from handing one format to the other.
+function negotiateMarkdown(request: NextRequest, page: string) {
+  if (wantsMarkdown(request.headers.get("accept"))) {
+    const target = request.nextUrl.clone();
+    target.pathname = markdownPath(page);
+    return NextResponse.rewrite(target, { headers: { Vary: "Accept" } });
+  }
+  return NextResponse.next({ headers: { Vary: "Accept" } });
 }
 
 // Carries refreshed or cleared session cookies over to a redirect.
