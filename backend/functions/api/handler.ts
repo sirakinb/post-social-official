@@ -111,7 +111,9 @@ export function createApiHandler(deps: ApiHandlerDeps) {
     if (request.method === "OPTIONS" && (path.startsWith("/.well-known/") || path.startsWith("/oauth/") || path === "/mcp")) {
       return new Response(null, { status: 204, headers: OPEN_CORS });
     }
-    if (path.startsWith("/.well-known/oauth-protected-resource")) return json(200, protectedResourceMetadata(issuer), OPEN_CORS);
+    if (path.startsWith("/.well-known/oauth-protected-resource")) {
+      return json(200, protectedResourceMetadata(issuer, path.slice("/.well-known/oauth-protected-resource".length)), OPEN_CORS);
+    }
     if (path.startsWith("/.well-known/oauth-authorization-server")) return json(200, authorizationServerMetadata(issuer), OPEN_CORS);
     if (path === "/oauth/register" || path === "/oauth/token" || path === "/oauth/revoke") return oauthRoute(deps, request, path, issuer);
 
