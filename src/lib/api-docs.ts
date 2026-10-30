@@ -3,7 +3,9 @@
 import { availableOperations } from "../../backend/lib/api/operations";
 import type { Platform } from "../../backend/lib/connections/platforms";
 
-export const SITE = "https://www.postsocial.xyz";
+import { SITE } from "@/lib/site";
+
+export { SITE };
 export const MCP_URL = `${SITE}/mcp`;
 export const API_URL = `${SITE}/api/v1`;
 
