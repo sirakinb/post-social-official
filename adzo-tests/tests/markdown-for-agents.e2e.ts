@@ -14,6 +14,7 @@ test('an agent asking for Markdown gets Markdown, a browser gets the page', asyn
     return {
       mdType: md.headers.get('content-type'),
       mdTokens: md.headers.get('x-markdown-tokens'),
+      mdSignal: md.headers.get('content-signal'),
       mdBody: (await md.text()).slice(0, 600),
       htmlType: html.headers.get('content-type'),
       homeBody: (await home.text()).slice(0, 400),
@@ -22,6 +23,7 @@ test('an agent asking for Markdown gets Markdown, a browser gets the page', asyn
   });
   expect(result.mdType).toContain('text/markdown');
   expect(Number(result.mdTokens)).toBeGreaterThan(100);
+  expect(result.mdSignal).toBe('search=yes, ai-input=yes, ai-train=yes');
   expect(result.mdBody.startsWith('---\ntitle:')).toBe(true);
   expect(result.mdBody).toContain('# Quickstart: your first post');
   expect(result.mdBody).not.toContain('<div');
