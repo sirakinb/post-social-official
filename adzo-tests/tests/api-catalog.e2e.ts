@@ -28,3 +28,16 @@ test('the home page points agents to the catalog, and auth.md explains access', 
   expect(result.authType).toContain('text/markdown');
   expect(result.authFirst).toBe('# Post Social auth.md');
 });
+
+test('OAuth resource metadata describes the site at the bare address and the MCP server at /mcp', async ({ app, browser }) => {
+  await app.open('/');
+  const result = await browser.evaluate(async () => {
+    const root = await (await fetch('/.well-known/oauth-protected-resource')).json();
+    const mcp = await (await fetch('/.well-known/oauth-protected-resource/mcp')).json();
+    return { root: root.resource, mcp: mcp.resource, rootServers: root.authorization_servers, bearer: root.bearer_methods_supported };
+  });
+  expect(result.root.endsWith('/mcp')).toBe(false);
+  expect(result.mcp.endsWith('/mcp')).toBe(true);
+  expect(result.rootServers.length).toBe(1);
+  expect(result.bearer).toEqual(['header']);
+});

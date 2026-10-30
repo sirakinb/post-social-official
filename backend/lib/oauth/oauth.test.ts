@@ -6,6 +6,8 @@ describe("OAuth discovery", () => {
   it("points AI apps from the MCP server to this site's sign-in", () => {
     const resource = protectedResourceMetadata("https://www.postsocial.xyz");
     expect(resource).toMatchObject({ resource: "https://www.postsocial.xyz/mcp", authorization_servers: ["https://www.postsocial.xyz"] });
+    // The bare address describes the site itself (RFC 9728), so the resource matches it.
+    expect(protectedResourceMetadata("https://www.postsocial.xyz", "")).toMatchObject({ resource: "https://www.postsocial.xyz", bearer_methods_supported: ["header"], scopes_supported: ["posts"] });
     const server = authorizationServerMetadata("https://www.postsocial.xyz");
     expect(server).toMatchObject({
       issuer: "https://www.postsocial.xyz",
