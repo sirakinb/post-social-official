@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { pageMarkdown, tokenEstimate } from "@/lib/page-markdown";
-import { publicPath } from "@/lib/public-pages";
+import { CONTENT_SIGNAL, publicPath } from "@/lib/public-pages";
 
 // A public page as Markdown, for agents. The proxy sends requests with Accept: text/markdown
 // here (src/proxy.ts); /markdown/docs/quickstart can also be fetched directly. The page is
@@ -25,6 +25,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       "Cache-Control": "public, max-age=3600",
       Vary: "Accept",
       "x-markdown-tokens": String(tokenEstimate(markdown)),
+      "Content-Signal": CONTENT_SIGNAL,
     },
   });
 }

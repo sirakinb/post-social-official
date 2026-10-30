@@ -3,6 +3,11 @@ import { DOCS_PAGES } from "@/lib/docs-nav";
 // The public pages: listed in the sitemap, and served as Markdown to agents that ask for it
 // (Accept: text/markdown). Docs pages come from the docs map, so a new docs page is included
 // without another change.
+// How the public pages may be used (contentsignals.org): in search results, as input to AI
+// answers, and for AI training. Post Social wants to be found and quoted by AI, so all three
+// are yes. Shown in robots.txt and on Markdown responses.
+export const CONTENT_SIGNAL = "search=yes, ai-input=yes, ai-train=yes";
+
 const PAGES = ["/", "/pricing", "/affiliates", "/changelog", "/privacy", "/terms", "/data-deletion"];
 
 export const PUBLIC_PATHS: readonly string[] = [...new Set([...PAGES, ...DOCS_PAGES.map((page) => page.href)])];
