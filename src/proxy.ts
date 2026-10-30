@@ -7,7 +7,7 @@ import { updateSession } from "@insforge/sdk/ssr/middleware";
 import { BETA_HOME, BETA_LOGIN, SIGNED_OUT_ONLY_PATHS, isPublicBetaPath } from "@/lib/insforge/auth-rules";
 import { botTrackingConfig } from "@/lib/analytics/bot-tracking";
 import { forwardingHeaders } from "@/lib/security/client-ip";
-import { markdownPath, publicPath, wantsMarkdown } from "@/lib/public-pages";
+import { HOME_LINKS, markdownPath, publicPath, wantsMarkdown } from "@/lib/public-pages";
 
 // Paths this site forwards to the API function (next.config.ts rewrites).
 const API_PATHS = /^\/(api\/v1(\/|$)|mcp$|oauth\/(register|token|revoke)$|\.well-known\/oauth-)/;
@@ -52,14 +52,16 @@ function forwardVisitorAddress(request: NextRequest) {
 }
 
 // Public pages answer in the format asked for: Markdown for an agent that prefers it, the
-// normal page otherwise. Vary: Accept keeps caches from handing one format to the other.
+// normal page otherwise. Vary: Accept keeps caches from handing one format to the other. The
+// home page also carries Link headers pointing agents to the machine-readable resources.
 function negotiateMarkdown(request: NextRequest, page: string) {
+  const headers: Record<string, string> = { Vary: "Accept", ...(page === "/" ? { Link: HOME_LINKS } : {}) };
   if (wantsMarkdown(request.headers.get("accept"))) {
     const target = request.nextUrl.clone();
     target.pathname = markdownPath(page);
-    return NextResponse.rewrite(target, { headers: { Vary: "Accept" } });
+    return NextResponse.rewrite(target, { headers });
   }
-  return NextResponse.next({ headers: { Vary: "Accept" } });
+  return NextResponse.next({ headers });
 }
 
 // Carries refreshed or cleared session cookies over to a redirect.
