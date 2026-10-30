@@ -41,3 +41,24 @@ test('OAuth resource metadata describes the site at the bare address and the MCP
   expect(result.rootServers.length).toBe(1);
   expect(result.bearer).toEqual(['header']);
 });
+
+test('the MCP server card and the agent skills are published, with matching fingerprints', async ({ app, browser }) => {
+  await app.open('/');
+  const result = await browser.evaluate(async () => {
+    const card = await (await fetch('/.well-known/mcp/server-card.json')).json();
+    const index = await (await fetch('/.well-known/agent-skills/index.json')).json();
+    const checks = [];
+    for (const s of index.skills) {
+      const text = await (await fetch(s.url)).arrayBuffer();
+      const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', text))).map((b) => b.toString(16).padStart(2, '0')).join('');
+      checks.push(s.digest === `sha256:${hash}`);
+    }
+    return { serverName: card.serverInfo?.name, endpoint: card.endpoint, tools: Boolean(card.capabilities?.tools), schema: index.$schema, skills: index.skills.map((s: { name: string }) => s.name), digestsMatch: checks };
+  });
+  expect(result.serverName).toBe('post-social');
+  expect(result.endpoint).toBe('https://www.postsocial.xyz/mcp');
+  expect(result.tools).toBe(true);
+  expect(result.schema).toBe('https://schemas.agentskills.io/discovery/0.2.0/schema.json');
+  expect(result.skills).toEqual(['connect-post-social', 'publish-a-post']);
+  expect(result.digestsMatch).toEqual([true, true]);
+});
