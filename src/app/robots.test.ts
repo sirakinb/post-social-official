@@ -1,21 +1,21 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
-import robots from "./robots";
+import { robotsText } from "@/lib/robots";
 import sitemap from "./sitemap";
 
 afterEach(() => vi.unstubAllEnvs());
 
 describe("robots.txt", () => {
-  it("lets crawlers read the public site, not the signed-in app or AI approval screens", () => {
+  it("lets crawlers read the public site, not the signed-in app or AI approval screens, and says how it may be used", () => {
     vi.stubEnv("NEXT_PUBLIC_APP_ENV", "production");
-    const r = robots();
-    expect(r.rules).toEqual({ userAgent: "*", allow: ["/", "/beta/login", "/beta/signup"], disallow: ["/beta/", "/oauth/"] });
-    expect(r.sitemap).toBe("https://www.postsocial.xyz/sitemap.xml");
+    expect(robotsText()).toBe(
+      ["User-Agent: *", "Content-Signal: search=yes, ai-input=yes, ai-train=yes", "Allow: /", "Allow: /beta/login", "Allow: /beta/signup", "Disallow: /beta/", "Disallow: /oauth/", "", "Sitemap: https://www.postsocial.xyz/sitemap.xml", ""].join("\n"),
+    );
   });
 
   it("asks crawlers to stay off previews and staging", () => {
     vi.stubEnv("NEXT_PUBLIC_APP_ENV", "preview");
-    expect(robots()).toEqual({ rules: { userAgent: "*", disallow: "/" } });
+    expect(robotsText()).toBe("User-Agent: *\nDisallow: /\n");
   });
 });
 
