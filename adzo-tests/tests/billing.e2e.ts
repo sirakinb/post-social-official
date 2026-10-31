@@ -59,6 +59,11 @@ test('a free workspace pays $5 for its 3rd account', { session: LOGIN }, async (
   // check that state instead (a fresh free login is needed to exercise checkout again).
   if (!(await browser.evaluate(() => /Next charge/.test(document.body.innerText)))) {
     await expect(screen.getByText('Your first 2 accounts are free. Account 3 is $5 a month, charged when you add it.')).toBeVisible();
+    // Account 3 is offered only once the 2 free accounts are connected. This login has two
+    // placeholder Bluesky accounts in its dev workspace (no platform behind them); if they
+    // were cleared out, add them again before running this test.
+    const offered = await browser.evaluate(() => [...document.querySelectorAll('button')].some((b) => b.textContent?.includes('Add account 3')));
+    if (!offered) throw new Error('Account 3 is not offered: this login needs its 2 placeholder accounts on dev.');
     await screen.getByRole('button', 'Add account 3 · $5/mo').tap();
     await expect(browser).toHaveURL(/^https:\/\/checkout\.stripe\.com\//, { timeout: 30_000 });
     // Safety: only ever type Stripe's test card into a sandbox checkout.
