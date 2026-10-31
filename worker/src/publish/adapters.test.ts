@@ -204,6 +204,36 @@ describe("Facebook", () => {
     expect(h.calls.filter((c) => c.includes("video_reels"))).toHaveLength(2); // start + finish, each once
   });
 
+  it("waits out Facebook briefly saying a just-published Reel doesn't exist, then publishes it", async () => {
+    let found = false;
+    const h = harness("facebook", { kind: "facebook", media_type: "reel" }, [
+      (u, i) => {
+        if (method(i) !== "POST" || !u.pathname.endsWith("/acct-1/video_reels")) return undefined;
+        return new URLSearchParams(String(i.body)).get("upload_phase") === "start" ? json({ video_id: "v2" }) : json({ success: true });
+      },
+      (u, i) => (u.host === "rupload.facebook.com" && (i.headers as Record<string, string>).file_url ? json({ success: true }) : undefined),
+      (u) => (u.pathname.endsWith("/v2")
+        ? found
+          ? json({ status: { video_status: "ready", publishing_phase: { status: "complete" } } })
+          : json({ error: { code: 100, message: "Unsupported get request. Object with ID 'v2' does not exist" } }, 400)
+        : undefined),
+    ], { media: [{ media_type: "video", mime_type: "video/mp4" }] });
+    expect(await publishFacebook(h.ctx)).toMatchObject({ kind: "wait" });
+    expect(await publishFacebook(h.ctx)).toMatchObject({ kind: "wait" }); // resuming: no second finish call
+    expect(h.calls.filter((c) => c.includes("video_reels"))).toHaveLength(2);
+    found = true;
+    expect(await publishFacebook(h.ctx)).toEqual({ kind: "published", platformId: "v2", liveUrl: "https://www.facebook.com/reel/v2" });
+  });
+
+  it("still fails if Facebook can't find the Reel ten minutes after publishing", async () => {
+    const h = harness("facebook", { kind: "facebook", media_type: "reel" }, [
+      (u) => (u.pathname.endsWith("/v3") ? json({ error: { code: 100, message: "Object with ID 'v3' does not exist" } }, 400) : undefined),
+    ], { media: [{ media_type: "video", mime_type: "video/mp4" }], checkpoint: { video_id: "v3", uploaded: true, publish_started_at: "2026-10-05T11:49:00Z" } });
+    const error = (await publishFacebook(h.ctx).catch((e) => e)) as PublishError;
+    expect(error).toBeInstanceOf(PublishError);
+    expect(error.code).toBe("meta_100");
+  });
+
   it("asks the person to reconnect when the token is rejected", async () => {
     const h = harness("facebook", { kind: "facebook", media_type: "text" }, [
       () => json({ error: { code: 190, message: "Session expired" } }, 400),

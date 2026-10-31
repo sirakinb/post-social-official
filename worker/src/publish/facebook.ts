@@ -71,9 +71,26 @@ async function single(ctx: StepContext, options: FacebookOptions, caption: strin
   return { id: String(result.id) };
 }
 
+// Right after a Reel or video is published, Facebook can briefly answer "Object ... does not
+// exist" (error 100) when asked about it, though the post is fine and goes live (2026-10-29).
+// For the first ten minutes after publishing, that answer means "not ready yet", not failed.
+export const NOT_FOUND_GRACE_MS = 10 * 60_000;
+
+function notFoundYet(ctx: StepContext, error: unknown) {
+  if (!(error instanceof PublishError) || error.code !== "meta_100") return false;
+  const started = Date.parse(String(ctx.checkpoint.publish_started_at ?? ""));
+  return Number.isFinite(started) && ctx.now() - started < NOT_FOUND_GRACE_MS;
+}
+
 // Facebook processes videos after upload; wait until it is ready or fails.
 async function videoReady(ctx: StepContext, videoId: string, reel: boolean) {
-  const body = await graph(ctx, "GET", `/${videoId}`, { fields: "status" }, "Checking the Facebook video");
+  let body: Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+  try {
+    body = await graph(ctx, "GET", `/${videoId}`, { fields: "status" }, "Checking the Facebook video");
+  } catch (error) {
+    if (notFoundYet(ctx, error)) return false;
+    throw error;
+  }
   const status = body.status ?? {};
   const video = String(status.video_status ?? "");
   const publishing = String(status.publishing_phase?.status ?? "");
@@ -108,8 +125,12 @@ async function reel(ctx: StepContext, caption: string) {
     await ctx.save({ publish_started_at: new Date(ctx.now()).toISOString() });
     await graph(ctx, "POST", `/${pageId}/video_reels`, { upload_phase: "finish", video_id: videoId, video_state: "PUBLISHED", description: caption }, "Publishing the Facebook Reel");
   } else {
-    // Resuming: if the finish call never landed, the publishing phase has not started.
-    const body = await graph(ctx, "GET", `/${videoId}`, { fields: "status" }, "Checking the Facebook Reel");
+    // Resuming: if the finish call never landed, the publishing phase has not started. A
+    // brief "does not exist" just after publishing is left to the ready check to wait out.
+    const body = await graph(ctx, "GET", `/${videoId}`, { fields: "status" }, "Checking the Facebook Reel").catch((error) => {
+      if (notFoundYet(ctx, error)) return { status: { publishing_phase: { status: "in_progress" } } };
+      throw error;
+    });
     if (String(body.status?.publishing_phase?.status ?? "not_started") === "not_started") {
       await graph(ctx, "POST", `/${pageId}/video_reels`, { upload_phase: "finish", video_id: videoId, video_state: "PUBLISHED", description: caption }, "Publishing the Facebook Reel");
     }
