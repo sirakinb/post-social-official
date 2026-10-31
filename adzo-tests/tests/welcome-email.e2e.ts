@@ -55,7 +55,10 @@ test('a new customer signs up and confirms their email', async ({ app, screen, b
 
 test('the new customer gets a welcome email from Aki', async () => {
   const user = credentials.user('welcome_email');
-  const run = existsSync(RUN_NOTE) ? JSON.parse(readFileSync(RUN_NOTE, 'utf8')) : { created: true };
+  // The sign-up step's note counts only if it's from this run (the last 30 minutes); run on its
+  // own, this test can't know, so it accepts any of Aki's emails.
+  const note = existsSync(RUN_NOTE) ? JSON.parse(readFileSync(RUN_NOTE, 'utf8')) : null;
+  const run = { created: Boolean(note && Date.now() - note.at < 30 * 60_000 && note.created) };
   const until = Date.now() + 90_000;
   let email: any;
   while (Date.now() < until) {
