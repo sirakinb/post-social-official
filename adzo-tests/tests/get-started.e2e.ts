@@ -6,13 +6,42 @@ import { copyFileSync, mkdirSync } from 'node:fs';
 // steps on Accounts and their progress in the sidebar, and can hide them.
 const SHOTS = '/data/home/videos-work/get-started';
 
+// The newest code sent to a test login (read from the subject: "123456 is your verification code").
+async function codeFor(address: string, since: number, timeoutMs = 120_000): Promise<string> {
+  const until = Date.now() + timeoutMs;
+  while (Date.now() < until) {
+    const res = await fetch(process.env.ADZO_INBOX_URL + '?address=' + encodeURIComponent(address) + '&since=' + (since - 5000), { headers: { authorization: 'Bearer ' + process.env.ADZO_AGENT_TOKEN } });
+    const d: any = await res.json().catch(() => ({}));
+    const code = d.email && (d.email.code || (String(d.email.subject || '').match(/\b(\d{6})\b/) || [])[1]);
+    if (code) return code;
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+  throw new Error('No code arrived for ' + address);
+}
+
 test('a new customer sees the get-started steps and can hide them', async ({ app, screen, browser }) => {
   mkdirSync(SHOTS, { recursive: true });
   const user = credentials.user('newuser_audit');
-  await app.open('/beta/login');
+  // Signs the login up if it doesn't exist (test users get cleared out), else signs in.
+  await app.open('/beta/signup');
+  await screen.getByLabel('Name').fill('Nia Test');
   await screen.getByLabel('Email').fill(user.username);
   await screen.getByLabel('Password').fill(user.password);
-  await screen.getByRole('button', 'Sign in').tap();
+  let since = Date.now();
+  await screen.getByRole('button', 'Create free account').tap();
+  await new Promise((r) => setTimeout(r, 3000));
+  if (!(await browser.evaluate(() => !!document.querySelector('#verify-code')))) {
+    await app.open('/beta/login');
+    await screen.getByLabel('Email').fill(user.username);
+    await screen.getByLabel('Password').fill(user.password);
+    since = Date.now();
+    await screen.getByRole('button', 'Sign in').tap();
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+  if (await browser.evaluate(() => !!document.querySelector('#verify-code'))) {
+    await screen.getByLabel('Code from the email').fill(await codeFor(user.username, since));
+    await screen.getByRole('button', 'Confirm email').tap();
+  }
   await browser.waitForURL(/\/beta\/accounts/, { timeout: 60_000 });
 
   await expect(screen.getByRole('region', 'Get started')).toContainText('0 of 3 done');
