@@ -96,7 +96,7 @@ export async function startConnection(deps: ConnectionDeps, caller: Caller, inpu
     url = started.url;
     pending = JSON.stringify(await seal(started.pending, await importKey(deps.setting("CREDENTIAL_ENCRYPTION_KEY"))));
   } else {
-    url = authorizeUrl(input.platform, state, redirectUri, deps.setting);
+    url = authorizeUrl(input.platform, state, redirectUri, deps.setting, workspaceId);
   }
   await deps.sql(
     `INSERT INTO public.oauth_states (workspace_id, user_id, provider, state_hash, expires_at, return_to, code_verifier_encrypted, profile_id)

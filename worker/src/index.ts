@@ -17,7 +17,7 @@ import { runMetricsSweep } from "./analytics/runner";
 import { runStatsHealthCheck } from "./analytics/health";
 import { createAdminAlert } from "./alerts";
 import { resendSender, runNudgeSweep } from "../../backend/lib/nudges";
-import { PLATFORMS, type Platform } from "../../backend/lib/connections/platforms";
+import { PLATFORMS, statsPreview, type Platform } from "../../backend/lib/connections/platforms";
 import { createTelemetry } from "../../backend/lib/telemetry";
 
 function setting(name: string, fallback?: string) {
@@ -120,10 +120,13 @@ const platformList = (raw: string | undefined) => (raw ?? "").split(",").map((p)
 const analyticsPlatforms = platformList(process.env.ANALYTICS_PLATFORMS);
 const publicPlatforms = platformList(process.env.ANALYTICS_PUBLIC_PLATFORMS);
 const publicApiKey = process.env.SCRAPECREATORS_API_KEY || null;
+// Official reads for the preview's listed workspaces only (ANALYTICS_PREVIEW_PLATFORMS and
+// ANALYTICS_PREVIEW_WORKSPACES; see statsPreview).
+const preview = statsPreview((name) => process.env[name] ?? "");
 // Said at every start, so a deploy that lost these settings shows up in the logs.
-log("analytics", { official: analyticsPlatforms, public: publicApiKey ? publicPlatforms : [], publicKey: Boolean(publicApiKey) });
-if (analyticsPlatforms.length || (publicApiKey && publicPlatforms.length)) {
-  void every(2 * 60 * 1000, "stats sweep", () => runMetricsSweep({ sql, setting: (name) => setting(name), platforms: analyticsPlatforms, publicPlatforms, publicApiKey, log }));
+log("analytics", { official: analyticsPlatforms, public: publicApiKey ? publicPlatforms : [], publicKey: Boolean(publicApiKey), preview: { platforms: preview.platforms, workspaces: preview.workspaces.length } });
+if (analyticsPlatforms.length || preview.platforms.length || (publicApiKey && publicPlatforms.length)) {
+  void every(2 * 60 * 1000, "stats sweep", () => runMetricsSweep({ sql, setting: (name) => setting(name), platforms: analyticsPlatforms, preview, publicPlatforms, publicApiKey, log }));
   void every(10 * 60 * 1000, "follower sweep", () => runFollowerSweep({ sql, platforms: analyticsPlatforms, publicPlatforms, publicApiKey, log }));
 }
 // Daily stats health check for every switched-on platform, alerting only the admin

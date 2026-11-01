@@ -18,6 +18,8 @@ type Post = Dashboard["posts"][number];
 type Account = Dashboard["accounts"][number];
 
 const SOURCE_LABELS = { official: "Official", public: "Public", mixed: "Official + public" } as const;
+// Who reported a post's numbers, when it's the platform's own API.
+const PLATFORM_SOURCES: Record<Platform, string> = { instagram: "Instagram", facebook: "Facebook", threads: "Threads", youtube: "YouTube", tiktok: "TikTok", linkedin: "LinkedIn", bluesky: "Bluesky", x: "X" };
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
 export function AnalyticsView(props: {
@@ -96,6 +98,7 @@ function Overview({ data, topPosts, showSources }: { data: AnalyticsData; topPos
   if (s.followers !== null) tiles.push({ label: "Followers", value: count(s.followers), note: s.follower_change ? `${signed(s.follower_change)} ${s.follower_change_since ? `since ${day(s.follower_change_since)}` : "in the last 30 days"}` : "Across your accounts" });
   tiles.push({ label: "Posts", value: count(s.posts), note: `Published in the last ${data.days} days` });
   if (s.views !== null) tiles.push({ label: "Views", value: count(s.views), note: "Where the platform reports them" });
+  if (s.reach !== null) tiles.push({ label: "Reach", value: count(s.reach), note: "People who saw each post, added up" });
 
   if (s.posts === 0 && !data.accounts.length) {
     return (
@@ -107,7 +110,7 @@ function Overview({ data, topPosts, showSources }: { data: AnalyticsData; topPos
 
   return (
     <>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className={cn("grid gap-3 sm:grid-cols-2", tiles.length > 5 ? "lg:grid-cols-6" : "lg:grid-cols-5")}>
         {tiles.map((t) => (
           <Card key={t.label} className="p-4">
             <p className="text-xs text-ps-muted">{t.label}</p>
@@ -330,9 +333,14 @@ export function PostRow({ post, showSources }: { post: Post; showSources: boolea
         <p className="mt-0.5 text-[11px] text-ps-subtle">
           {post.account} · {day(post.published_at)} · {FORMAT_LABELS[post.format]}
           {post.live_url && <> · <a className="text-ps-plum-soft hover:underline" href={post.live_url} target="_blank" rel="noreferrer">View post</a></>}
-          {showSources && <> · {SOURCE_LABELS[post.source]}</>}
+          {showSources ? <> · {SOURCE_LABELS[post.source]}</> : post.source && post.source !== "public" && <> · From {PLATFORM_SOURCES[post.platform]}</>}
         </p>
         <ul aria-label="Results" className="mt-2 flex flex-wrap gap-1.5">
+          {post.reach !== null && (
+            <li className="rounded-full bg-ps-segment px-2 py-0.5 text-[11px] text-ps-muted">
+              <span className="font-medium tabular-nums text-ps-text">{count(post.reach)}</span> reached
+            </li>
+          )}
           {results.map((r) => (
             <li key={r.label} className="rounded-full bg-ps-segment px-2 py-0.5 text-[11px] text-ps-muted">
               <span className="font-medium tabular-nums text-ps-text">{count(r.value)}</span> {r.label}
