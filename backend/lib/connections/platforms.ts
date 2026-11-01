@@ -56,8 +56,9 @@ export const SCOPES: Record<Platform, string[]> = {
 };
 
 // Read permissions for post stats (Phase 5D). They are requested only where analytics is
-// switched on (ANALYTICS_PLATFORMS), because platforms refuse or skip permissions their
-// review has not approved yet. Facebook's come from its Meta login configuration instead.
+// switched on (ANALYTICS_PLATFORMS, or the preview's listed workspaces), because platforms
+// refuse or skip permissions their review has not approved yet. Facebook's come from its
+// Meta login configuration instead.
 export const ANALYTICS_SCOPES: Record<Platform, string[]> = {
   tiktok: ["video.list"],
   instagram: ["instagram_business_manage_insights"],
@@ -69,14 +70,36 @@ export const ANALYTICS_SCOPES: Record<Platform, string[]> = {
   x: [],
 };
 
-export function analyticsPlatforms(setting: Settings): Platform[] {
-  let raw = "";
+function optional(setting: Settings, name: string) {
   try {
-    raw = setting("ANALYTICS_PLATFORMS");
+    return setting(name) ?? "";
   } catch {
-    return [];
+    return "";
   }
-  return raw.split(",").map((p) => p.trim()).filter((p): p is Platform => PLATFORMS.includes(p as Platform));
+}
+
+const platformList = (raw: string) => raw.split(",").map((p) => p.trim()).filter((p): p is Platform => PLATFORMS.includes(p as Platform));
+
+export function analyticsPlatforms(setting: Settings): Platform[] {
+  return platformList(optional(setting, "ANALYTICS_PLATFORMS"));
+}
+
+// Official stats for a few listed workspaces before a platform approves Post Social: the
+// owner's, to rehearse a review demo, and each platform's reviewer test login. Everyone else
+// keeps the public numbers. ANALYTICS_PREVIEW_PLATFORMS names the platforms (only ones whose
+// developer app grants the permission to those people) and ANALYTICS_PREVIEW_WORKSPACES the
+// workspace ids.
+export type StatsPreview = { platforms: Platform[]; workspaces: string[] };
+export function statsPreview(setting: Settings): StatsPreview {
+  const workspaces = optional(setting, "ANALYTICS_PREVIEW_WORKSPACES").split(",").map((w) => w.trim().toLowerCase()).filter(Boolean);
+  return { platforms: workspaces.length ? platformList(optional(setting, "ANALYTICS_PREVIEW_PLATFORMS")) : [], workspaces };
+}
+
+// Platforms read through their own API for this workspace: everyone's, plus the preview's
+// when the workspace is listed.
+export function officialPlatformsFor(platforms: Platform[], preview: StatsPreview, workspaceId?: string | null): Platform[] {
+  const listed = Boolean(workspaceId) && preview.workspaces.includes(workspaceId!.toLowerCase());
+  return listed ? [...new Set([...platforms, ...preview.platforms])] : platforms;
 }
 
 // Every platform with stats here: read through its own API (ANALYTICS_PLATFORMS) or, until
@@ -89,11 +112,22 @@ export function statsPlatforms(setting: Settings): Platform[] {
     // not set
   }
   const extra = raw.split(",").map((p) => p.trim()).filter((p): p is Platform => PLATFORMS.includes(p as Platform));
-  return [...new Set([...analyticsPlatforms(setting), ...extra])];
+  return [...new Set([...analyticsPlatforms(setting), ...statsPreview(setting).platforms, ...extra])];
 }
 
-export function scopesFor(platform: Platform, setting: Settings) {
-  return analyticsPlatforms(setting).includes(platform) ? [...SCOPES[platform], ...ANALYTICS_SCOPES[platform]] : SCOPES[platform];
+const officialHere = (platform: Platform, setting: Settings, workspaceId?: string | null) =>
+  officialPlatformsFor(analyticsPlatforms(setting), statsPreview(setting), workspaceId).includes(platform);
+
+export function scopesFor(platform: Platform, setting: Settings, workspaceId?: string | null) {
+  return officialHere(platform, setting, workspaceId) ? [...SCOPES[platform], ...ANALYTICS_SCOPES[platform]] : SCOPES[platform];
+}
+
+// Facebook's permissions come from a Meta login configuration. Where its stats are read
+// officially, a second configuration that adds read_insights is used when one is set
+// (META_STATS_LOGIN_CONFIG_ID); everyone else keeps the one without it.
+export function facebookLoginConfig(setting: Settings, workspaceId?: string | null) {
+  const stats = officialHere("facebook", setting, workspaceId) ? optional(setting, "META_STATS_LOGIN_CONFIG_ID") : "";
+  return stats || setting("META_LOGIN_CONFIG_ID");
 }
 
 export const DISPLAY_NAMES: Record<Platform, string> = {
@@ -180,35 +214,35 @@ async function json(response: Response, what: string) {
 
 const inSeconds = (seconds: unknown) => (seconds ? new Date(Date.now() + Number(seconds) * 1000) : undefined);
 
-export function authorizeUrl(platform: Platform, state: string, redirectUri: string, setting: Settings) {
+export function authorizeUrl(platform: Platform, state: string, redirectUri: string, setting: Settings, workspaceId?: string | null) {
   let url: URL;
   switch (platform) {
     case "tiktok":
       url = new URL("https://www.tiktok.com/v2/auth/authorize/");
       url.searchParams.set("client_key", setting("TIKTOK_CLIENT_KEY"));
-      url.searchParams.set("scope", scopesFor("tiktok", setting).join(","));
+      url.searchParams.set("scope", scopesFor("tiktok", setting, workspaceId).join(","));
       break;
     case "instagram":
       url = new URL("https://www.instagram.com/oauth/authorize");
       url.searchParams.set("client_id", setting("INSTAGRAM_APP_ID"));
-      url.searchParams.set("scope", scopesFor("instagram", setting).join(","));
+      url.searchParams.set("scope", scopesFor("instagram", setting, workspaceId).join(","));
       break;
     case "facebook":
       url = new URL(`https://www.facebook.com/${META_VERSION}/dialog/oauth`);
       url.searchParams.set("client_id", setting("META_APP_ID"));
-      url.searchParams.set("scope", scopesFor("facebook", setting).join(","));
-      url.searchParams.set("config_id", setting("META_LOGIN_CONFIG_ID"));
+      url.searchParams.set("scope", scopesFor("facebook", setting, workspaceId).join(","));
+      url.searchParams.set("config_id", facebookLoginConfig(setting, workspaceId));
       url.searchParams.set("override_default_response_type", "true");
       break;
     case "threads":
       url = new URL("https://threads.net/oauth/authorize");
       url.searchParams.set("client_id", setting("THREADS_APP_ID"));
-      url.searchParams.set("scope", scopesFor("threads", setting).join(","));
+      url.searchParams.set("scope", scopesFor("threads", setting, workspaceId).join(","));
       break;
     case "youtube":
       url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
       url.searchParams.set("client_id", setting("GOOGLE_CLIENT_ID"));
-      url.searchParams.set("scope", scopesFor("youtube", setting).join(" "));
+      url.searchParams.set("scope", scopesFor("youtube", setting, workspaceId).join(" "));
       // offline + consent makes Google return a refresh token every time.
       url.searchParams.set("access_type", "offline");
       url.searchParams.set("prompt", "consent");
@@ -217,7 +251,7 @@ export function authorizeUrl(platform: Platform, state: string, redirectUri: str
     case "linkedin":
       url = new URL("https://www.linkedin.com/oauth/v2/authorization");
       url.searchParams.set("client_id", setting("LINKEDIN_CLIENT_ID"));
-      url.searchParams.set("scope", scopesFor("linkedin", setting).join(" "));
+      url.searchParams.set("scope", scopesFor("linkedin", setting, workspaceId).join(" "));
       break;
     case "bluesky":
       // Bluesky's sign-in starts with a pushed request (atproto.ts startSignIn).

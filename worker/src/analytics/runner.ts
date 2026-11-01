@@ -2,7 +2,7 @@
 // after 90 days. Each fetch updates the post's current numbers and today's history row.
 import { parseJson } from "../json";
 import type { Sql } from "../../../backend/lib/access";
-import { DISPLAY_NAMES as PLATFORM_NAMES, type Platform, type Settings } from "../../../backend/lib/connections/platforms";
+import { DISPLAY_NAMES as PLATFORM_NAMES, officialPlatformsFor, type Platform, type Settings, type StatsPreview } from "../../../backend/lib/connections/platforms";
 import { accountToken } from "../credentials";
 import { FETCHERS, type Counters, type FetchContext, type MetricsResult } from "./platforms";
 import { PUBLIC_POST_FIELDS, PUBLIC_POST_READERS, realHandle, type PublicContext, type PublicPostResult } from "./public";
@@ -11,6 +11,7 @@ export type MetricsDeps = {
   sql: Sql;
   setting: Settings;
   platforms: Platform[]; // platforms read through their own API here (ANALYTICS_PLATFORMS)
+  preview?: StatsPreview; // and for these listed workspaces only, these platforms too
   // Platforms read from their public pages through ScrapeCreators (ANALYTICS_PUBLIC_PLATFORMS):
   // on their own until the platform approves Post Social, and to fill gaps where both are on.
   publicPlatforms?: Platform[];
@@ -81,7 +82,7 @@ export async function tiktokStatus(http: typeof fetch, token: string, publishId:
 }
 
 export async function runMetricsSweep(deps: MetricsDeps): Promise<number> {
-  const all = [...new Set([...deps.platforms, ...publicOn(deps)])];
+  const all = [...new Set([...deps.platforms, ...(deps.preview?.platforms ?? []), ...publicOn(deps)])];
   if (!all.length) return 0;
   const now = deps.now ?? Date.now;
   const rows = await deps.sql<Claimed>(`SELECT * FROM public.claim_metrics_to_fetch($1::text[], 20, 300, $2)`, [all, deps.onlyWorkspace ?? null]);
@@ -130,9 +131,12 @@ async function fetchOne(deps: MetricsDeps, row: Claimed, now: () => number) {
     await deps.sql(`UPDATE public.destinations SET live_url = $2, platform_request_id = $3 WHERE id = $1 AND live_url IS NULL`, [row.destination_id, target.live_url, found.postId]);
   }
 
-  const official = deps.platforms.includes(row.platform);
+  const official = officialPlatformsFor(deps.platforms, deps.preview ?? { platforms: [], workspaces: [] }, row.workspace_id).includes(row.platform);
   const reader = deps.publicReaders?.[row.platform] ?? PUBLIC_POST_READERS[row.platform];
   const canReadPublic = publicOn(deps).includes(row.platform) && Boolean(reader) && Boolean(target?.live_url);
+  // A preview platform with no public reads here: other workspaces' posts wait, so they're
+  // picked up once the platform is switched on for them.
+  if (!official && !publicOn(deps).includes(row.platform)) return later(new Date(now() + DAY), null);
   let learnedHandle: string | undefined;
   const readPublic = () =>
     reader!({ apiKey: deps.publicApiKey!, http: deps.http ?? fetch }, target!.live_url!).then((pub) => {
