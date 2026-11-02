@@ -50,6 +50,15 @@ describe("Facebook stats", () => {
     expect(await FETCHERS.facebook(c)).toEqual({ likes: 20, comments: 5, shares: 2, views: 400, extra: {}, unavailable: [] });
   });
 
+  it("reads reach (people who saw the post) alongside views", async () => {
+    const c = ctx("p_1", [
+      (u) => (u.pathname === "/v25.0/p_1" ? json({ reactions: { summary: { total_count: 3 } }, comments: { summary: { total_count: 0 } } }) : undefined),
+      (u) => (u.pathname === "/v25.0/p_1/insights" && u.searchParams.get("metric") === "post_media_view" ? json({ data: [{ name: "post_media_view", values: [{ value: 90 }] }] }) : undefined),
+      (u) => (u.pathname === "/v25.0/p_1/insights" && u.searchParams.get("metric") === "post_total_media_view_unique" ? json({ data: [{ name: "post_total_media_view_unique", values: [{ value: 60 }] }] }) : undefined),
+    ]);
+    expect(await FETCHERS.facebook(c)).toEqual({ likes: 3, comments: 0, shares: 0, views: 90, extra: { reach: 60 }, unavailable: [] });
+  });
+
   it("reads Reel plays from video insights", async () => {
     const c = ctx("v9", [
       (u) => (u.pathname === "/v25.0/v9" ? json({ likes: { summary: { total_count: 8 } }, comments: { summary: { total_count: 1 } } }) : undefined),

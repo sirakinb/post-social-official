@@ -15,6 +15,19 @@ this list. Nothing here is urgent for launch prep.
 | TikTok | TikTok developer portal → **sandbox** app → Login Kit scopes | `video.list` |
 | YouTube | Google Cloud → OAuth consent screen → scopes | `https://www.googleapis.com/auth/youtube.readonly` |
 
+## Official stats for listed workspaces (before approval)
+
+For rehearsing a demo and for each reviewer's test login, without changing anything for
+other users. Per environment (InsForge secrets; redeploy `api`, `connections` and the worker):
+
+| Setting | What |
+|---|---|
+| `ANALYTICS_PREVIEW_PLATFORMS` | Platforms to preview, e.g. `facebook,threads`. Only ones whose app lets these people grant the permission before review (Meta: app roles and reviewers; Google: listed test users). TikTok can't: record its demo on dev's sandbox app. |
+| `ANALYTICS_PREVIEW_WORKSPACES` | Workspace ids that get official stats for those platforms. |
+| `META_STATS_LOGIN_CONFIG_ID` | The Facebook Login for Business configuration that adds `read_insights`, used for those workspaces only. |
+
+People in a listed workspace reconnect the platform once to grant the permission.
+
 ## 2. Reconnect the dev accounts
 
 On `http://localhost:3333/beta/accounts`, reconnect Instagram (@buildwithaiaki), the
