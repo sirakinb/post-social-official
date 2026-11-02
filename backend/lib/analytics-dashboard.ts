@@ -243,8 +243,9 @@ export function buildDashboard(input: {
       follower_change_since: shortHistory[0] ?? null,
       posts: posts.length,
       views: anyViews ? sum("views") : null,
-      // Summed per post, so someone who saw two posts counts twice.
-      reach: reached.length ? reached.reduce((t, p) => t + p.reach!, 0) : null,
+      // Summed per post, so someone who saw two posts counts twice. Only when every post
+      // reports reach: a total missing some posts (Facebook Reels have none) would mislead.
+      reach: posts.length && reached.length === posts.length ? reached.reduce((t, p) => t + p.reach!, 0) : null,
       likes: sum("likes"),
       comments: sum("comments"),
       shares: sum("shares") + sum("reposts") + sum("quotes"),
