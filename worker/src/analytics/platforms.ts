@@ -92,13 +92,20 @@ async function facebook(ctx: FetchContext): Promise<MetricsResult> {
     extra: {},
     unavailable: [],
   };
-  // Views need read_insights. Meta has been renaming this metric, so try both names.
-  for (const metric of ["post_media_view", "post_impressions"]) {
-    const insights = await tryOr(() => getJson(ctx, withToken(`${base}/${ctx.platformId}/insights?metric=${metric}`, token)));
-    const value = insights ? insightValues(insights)[metric] : undefined;
-    if (value !== undefined) return { ...result, views: value };
-  }
-  return { ...result, unavailable: ["views"] };
+  // Views and reach need read_insights. Meta has been renaming these metrics, so try the
+  // new name first, then the old one.
+  const insight = async (metrics: string[]) => {
+    for (const metric of metrics) {
+      const insights = await tryOr(() => getJson(ctx, withToken(`${base}/${ctx.platformId}/insights?metric=${metric}`, token)));
+      const value = insights ? insightValues(insights)[metric] : undefined;
+      if (value !== undefined) return value;
+    }
+    return undefined;
+  };
+  const views = await insight(["post_media_view", "post_impressions"]);
+  if (views === undefined) return { ...result, unavailable: ["views"] };
+  const reach = await insight(["post_total_media_view_unique", "post_impressions_unique"]);
+  return { ...result, views, extra: reach === undefined ? {} : { reach } };
 }
 
 async function threads(ctx: FetchContext): Promise<MetricsResult> {
