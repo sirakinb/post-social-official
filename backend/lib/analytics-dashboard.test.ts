@@ -57,9 +57,15 @@ describe("buildDashboard", () => {
       now: NOW, days: 30, accounts, followers, history: [], refreshesUsed: 0,
       posts: [post("r1", { likes: 4, reach: "320", source: "official" }), post("r2", { likes: 2, reach: 80, source: "official" }), post("r3", { likes: 1 })],
     });
-    expect(withReach.summary.reach).toBe(400);
+    // r3 has no reach, so a total would leave it out: no total, but each post keeps its own.
+    expect(withReach.summary.reach).toBeNull();
     expect(withReach.posts.find((p) => p.destination_id === "r1")).toMatchObject({ reach: 320, source: "official" });
     expect(withReach.posts.find((p) => p.destination_id === "r3")!.reach).toBeNull();
+    const allReach = buildDashboard({
+      now: NOW, days: 30, accounts, followers, history: [], refreshesUsed: 0,
+      posts: [post("r1", { likes: 4, reach: "320", source: "official" }), post("r2", { likes: 2, reach: 80, source: "official" })],
+    });
+    expect(allReach.summary.reach).toBe(400);
   });
 
   it("rates a post by its engagements over its account's latest followers, and leaves it unrated without a count", () => {
