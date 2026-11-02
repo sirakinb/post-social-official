@@ -66,6 +66,27 @@ describe("Facebook stats", () => {
     ], "reel");
     expect(await FETCHERS.facebook(c)).toMatchObject({ likes: 8, comments: 1, views: 1500, unavailable: [] });
   });
+
+  it("reads reach for Reels and for videos, each by its own metric name", async () => {
+    const insights = (id: string, values: Record<string, number>) => (u: URL) =>
+      u.pathname === `/v25.0/${id}/video_insights` && u.searchParams.get("metric")! in values
+        ? json({ data: [{ name: u.searchParams.get("metric"), values: [{ value: values[u.searchParams.get("metric")!] }] }] })
+        : undefined;
+    const basic = (id: string) => (u: URL) => (u.pathname === `/v25.0/${id}` ? json({ likes: { summary: { total_count: 2 } }, comments: { summary: { total_count: 0 } } }) : undefined);
+    const reel = ctx("r1", [basic("r1"), insights("r1", { blue_reels_play_count: 300, post_impressions_unique: 250 })], "reel");
+    expect(await FETCHERS.facebook(reel)).toEqual({ likes: 2, comments: 0, views: 300, extra: { reach: 250 }, unavailable: [] });
+    const video = ctx("v1", [basic("v1"), insights("v1", { total_video_views: 90, total_video_impressions_unique: 70 })], "video");
+    expect(await FETCHERS.facebook(video)).toEqual({ likes: 2, comments: 0, views: 90, extra: { reach: 70 }, unavailable: [] });
+  });
+
+  it("keeps a video's views when its reach can't be read", async () => {
+    const c = ctx("v2", [
+      (u) => (u.pathname === "/v25.0/v2" ? json({ likes: { summary: { total_count: 1 } }, comments: { summary: { total_count: 0 } } }) : undefined),
+      (u) => (u.pathname === "/v25.0/v2/video_insights" && u.searchParams.get("metric") === "total_video_views" ? json({ data: [{ name: "total_video_views", values: [{ value: 40 }] }] }) : undefined),
+      (u) => (u.pathname === "/v25.0/v2/video_insights" ? denied() : undefined),
+    ], "video");
+    expect(await FETCHERS.facebook(c)).toEqual({ likes: 1, comments: 0, views: 40, extra: {}, unavailable: [] });
+  });
 });
 
 describe("Threads, YouTube and TikTok stats", () => {
