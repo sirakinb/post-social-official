@@ -27,6 +27,7 @@ export type PostRow = {
   account: string;
   format: Format;
   source: Source | null;
+  reach?: number | string | null; // people who saw it, where the platform's own API reports it
   fetched_at: string | null;
   next_fetch_at: string | null;
 } & Partial<Record<Counter, number | string | null>>;
@@ -116,6 +117,7 @@ export function buildDashboard(input: {
         format: p.format,
         published_at: p.published_at,
         stats,
+        reach: p.reach === null || p.reach === undefined ? null : Number(p.reach),
         engagements,
         engagement_rate: rate === null ? null : round(rate),
         source: (p.source ?? "official") as Source,
@@ -126,6 +128,7 @@ export function buildDashboard(input: {
   const rates = posts.map((p) => p.engagement_rate).filter((r): r is number => r !== null);
   const sum = (key: Counter) => posts.reduce((total, p) => total + (p.stats[key] ?? 0), 0);
   const anyViews = posts.some((p) => p.stats.views !== undefined);
+  const reached = posts.filter((p) => p.reach !== null);
 
   // Weeks in the period, oldest first.
   const weeks: number[] = [];
@@ -240,6 +243,8 @@ export function buildDashboard(input: {
       follower_change_since: shortHistory[0] ?? null,
       posts: posts.length,
       views: anyViews ? sum("views") : null,
+      // Summed per post, so someone who saw two posts counts twice.
+      reach: reached.length ? reached.reduce((t, p) => t + p.reach!, 0) : null,
       likes: sum("likes"),
       comments: sum("comments"),
       shares: sum("shares") + sum("reposts") + sum("quotes"),
@@ -297,6 +302,7 @@ export async function analyticsDashboard(sql: Sql, caller: Caller, platforms: Pl
     sql<PostRow>(
       `SELECT m.destination_id, m.post_id, m.platform, m.connected_account_id, m.published_at, m.views, m.likes, m.comments, m.shares,
          m.saves, m.reposts, m.quotes, m.source, m.fetched_at, m.next_fetch_at, left(p.caption, 200) AS caption, d.live_url,
+         CASE WHEN m.extra->>'reach' ~ '^[0-9]+$' THEN (m.extra->>'reach')::bigint END AS reach,
          a.display_name AS account,
          CASE WHEN EXISTS (SELECT 1 FROM public.post_media pm JOIN public.media_assets ma ON ma.id = pm.media_asset_id WHERE pm.post_id = m.post_id AND ma.media_type = 'video') THEN 'video'
               WHEN (SELECT count(*) FROM public.post_media pm WHERE pm.post_id = m.post_id) > 1 THEN 'carousel'

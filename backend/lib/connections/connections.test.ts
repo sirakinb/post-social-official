@@ -2,7 +2,7 @@
 import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { importKey, open, seal, sha256Hex } from "./crypto";
-import { SCOPES, authorizeUrl, exchangeCode, refreshTokens, revokeTokens, type Platform } from "./platforms";
+import { ANALYTICS_SCOPES, SCOPES, authorizeUrl, exchangeCode, officialPlatformsFor, refreshTokens, revokeTokens, statsPlatforms, statsPreview, type Platform } from "./platforms";
 import { callbackUrl, originAllowedFor } from "./service";
 
 const settings: Record<string, string> = {
@@ -83,6 +83,48 @@ describe("sign-in links", () => {
     const withOverride = (name: string) => (name === "TIKTOK_REDIRECT_URI" ? "https://old.example/api/oauth/tiktok/callback" : setting(name));
     expect(callbackUrl("tiktok", withOverride)).toBe("https://old.example/api/oauth/tiktok/callback");
     expect(callbackUrl("instagram", withOverride)).toBe("https://fn.example/connections/oauth/instagram/callback");
+  });
+});
+
+describe("official stats for listed workspaces (preview)", () => {
+  const LISTED = "11111111-1111-4111-8111-111111111111";
+  const OTHER = "22222222-2222-4222-8222-222222222222";
+  const withPreview = (extra: Record<string, string>) => (name: string) => (name in extra ? extra[name] : setting(name));
+  const preview = withPreview({
+    ANALYTICS_PREVIEW_PLATFORMS: "facebook, threads",
+    ANALYTICS_PREVIEW_WORKSPACES: `${LISTED.toUpperCase()}, `,
+    META_STATS_LOGIN_CONFIG_ID: "cfg-stats",
+  });
+  const signIn = (platform: Platform, workspaceId: string, s = preview) => new URL(authorizeUrl(platform, "s", callbackUrl(platform, s), s, workspaceId));
+
+  it("asks a listed workspace for the stats permissions, and nobody else", () => {
+    expect(signIn("threads", LISTED).searchParams.get("scope")!.split(",")).toEqual([...SCOPES.threads, ...ANALYTICS_SCOPES.threads]);
+    expect(signIn("threads", OTHER).searchParams.get("scope")!.split(",")).toEqual(SCOPES.threads);
+    // Instagram isn't in the preview, so even the listed workspace isn't asked.
+    expect(signIn("instagram", LISTED).searchParams.get("scope")!.split(",")).toEqual(SCOPES.instagram);
+  });
+
+  it("gives a listed workspace Facebook's second login configuration, with read_insights", () => {
+    expect(signIn("facebook", LISTED).searchParams.get("config_id")).toBe("cfg-stats");
+    expect(signIn("facebook", OTHER).searchParams.get("config_id")).toBe("cfg");
+    // Without a second configuration set, everyone keeps the usual one.
+    const noSecond = withPreview({ ANALYTICS_PREVIEW_PLATFORMS: "facebook", ANALYTICS_PREVIEW_WORKSPACES: LISTED });
+    expect(signIn("facebook", LISTED, noSecond).searchParams.get("config_id")).toBe("cfg");
+  });
+
+  it("is off without listed workspaces, and when nothing is set", () => {
+    expect(statsPreview(withPreview({ ANALYTICS_PREVIEW_PLATFORMS: "facebook" }))).toEqual({ platforms: [], workspaces: [] });
+    expect(statsPreview(setting)).toEqual({ platforms: [], workspaces: [] });
+    expect(signIn("facebook", LISTED, setting).searchParams.get("config_id")).toBe("cfg");
+  });
+
+  it("adds the preview's platforms to the listed workspace's official ones only", () => {
+    const p = statsPreview(preview);
+    expect(officialPlatformsFor(["bluesky"], p, LISTED)).toEqual(["bluesky", "facebook", "threads"]);
+    expect(officialPlatformsFor(["bluesky"], p, OTHER)).toEqual(["bluesky"]);
+    expect(officialPlatformsFor(["bluesky"], p, null)).toEqual(["bluesky"]);
+    // The stats tools stay on for preview platforms.
+    expect(statsPlatforms(preview)).toEqual(["facebook", "threads"]);
   });
 });
 

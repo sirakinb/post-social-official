@@ -44,6 +44,42 @@ const data: AnalyticsData = { ...dashboard, period: "last_30_days", platforms: [
 const view = (tab: Tab, showSources = false) =>
   render(<AnalyticsView data={{ ...data, posts: [] }} postCount={data.posts.length} tab={tab} query={tab === "overview" ? {} : { tab }} posts={data.posts} topPosts={data.posts} showSources={showSources} />);
 
+describe("official numbers on the Analytics page", () => {
+  const official = buildDashboard({
+    now: NOW, days: 30, refreshesUsed: 0, history: [],
+    accounts: [{ id: "ig", platform: "instagram", display_name: "Maker IG", handle: "maker", avatar_url: null }],
+    followers: [],
+    posts: [
+      row("o1", { platform: "facebook", account: "Maker Page", likes: 9, comments: 2, shares: 1, views: 500, source: "official" }),
+      row("o2", { likes: 7, comments: 1, views: 300, saves: 2, shares: 1, reach: 260, source: "official" }),
+      row("p1", { likes: 3, comments: 0 }),
+    ],
+  });
+  const officialData: AnalyticsData = { ...official, period: "last_30_days", platforms: [{ platform: "instagram", platform_name: "Instagram" }, { platform: "facebook", platform_name: "Facebook Pages" }] };
+  const show = (tab: Tab, showSources = false) =>
+    render(<AnalyticsView data={{ ...officialData, posts: [] }} postCount={officialData.posts.length} tab={tab} query={{ tab }} posts={officialData.posts} topPosts={officialData.posts} showSources={showSources} />);
+
+  it("shows reach as a total and on the post that has it", () => {
+    show("overview");
+    expect(screen.getByText("Reach")).toBeInTheDocument();
+    expect(screen.getAllByText("reached")).toHaveLength(1);
+    expect(screen.getAllByText("reached")[0].textContent).toBe("260 reached");
+  });
+
+  it("says which platform reported official numbers, and leaves public numbers unlabelled", () => {
+    show("posts");
+    expect(screen.getByText(/From Facebook/)).toBeInTheDocument();
+    expect(screen.getByText(/From Instagram/)).toBeInTheDocument();
+    expect(screen.getAllByText(/From (Facebook|Instagram)/)).toHaveLength(2);
+  });
+
+  it("admins see where every number came from instead", () => {
+    show("posts", true);
+    expect(screen.queryByText(/From Facebook/)).toBeNull();
+    expect(screen.getAllByText(/Official/).length).toBeGreaterThan(0);
+  });
+});
+
 describe("Analytics page", () => {
   it("has four tabs and platform filters that keep the current tab", () => {
     view("posts");

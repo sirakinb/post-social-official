@@ -144,7 +144,9 @@ Per environment (dev and prod): `RESEND_API_KEY`, `LINKEDIN_CLIENT_ID`,
 `LINKEDIN_CLIENT_SECRET`, `X_CLIENT_ID`, `X_CLIENT_SECRET`,
 `BLUESKY_CLIENT_JWK`, TikTok and Meta app credentials, `STRIPE_SECRET_KEY`,
 `STRIPE_WEBHOOK_SECRET`, `SCRAPECREATORS_API_KEY`, `ANALYTICS_PLATFORMS`,
-`ANALYTICS_PUBLIC_PLATFORMS`, `ALERT_EMAIL`. Dev also has `PUBLISH_ALLOWLIST`
+`ANALYTICS_PUBLIC_PLATFORMS`, `ALERT_EMAIL`, and optionally `ANALYTICS_PREVIEW_PLATFORMS`,
+`ANALYTICS_PREVIEW_WORKSPACES` and `META_STATS_LOGIN_CONFIG_ID` (official stats for listed
+workspaces before a platform approves; see `docs/architecture.md`). Dev also has `PUBLISH_ALLOWLIST`
 (dev only publishes to accounts on that list; prod has no list).
 
 ### Vercel environment variables

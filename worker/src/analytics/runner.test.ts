@@ -133,6 +133,50 @@ describe("stats sweep sources", () => {
   });
 });
 
+describe("official stats for listed workspaces (preview)", () => {
+  const preview = { platforms: ["threads" as const], workspaces: ["w1"] };
+
+  it("reads a listed workspace's post through the platform's own API", async () => {
+    const db = fakeSql("threads", { platform_request_id: "t1", live_url: "u" });
+    let publicReads = 0;
+    await runMetricsSweep(deps(db, {
+      preview,
+      publicPlatforms: ["threads"],
+      publicApiKey: "k",
+      fetchers: { threads: async () => officialResult({ views: 40, likes: 3, comments: 1, reposts: 0, quotes: 0, shares: 0 }) },
+      publicReaders: { threads: async () => ((publicReads++), publicResult({})) },
+    }));
+    expect(publicReads).toBe(0);
+    const w = saved(db.writes)!;
+    expect(w.params[1]).toBe(40);
+    expect(w.params.at(-1)).toBe("official");
+  });
+
+  it("keeps everyone else on the public page", async () => {
+    const db = fakeSql("threads", { platform_request_id: "t1", live_url: "u" });
+    let officialReads = 0;
+    await runMetricsSweep(deps(db, {
+      preview: { ...preview, workspaces: ["someone-else"] },
+      publicPlatforms: ["threads"],
+      publicApiKey: "k",
+      fetchers: { threads: async () => ((officialReads++), officialResult({})) },
+      publicReaders: { threads: async () => publicResult({ likes: 8 }) },
+    }));
+    expect(officialReads).toBe(0);
+    expect(saved(db.writes)!.params.at(-1)).toBe("public");
+  });
+
+  it("claims preview platforms, and leaves other workspaces' posts for later when there's no public read", async () => {
+    const db = fakeSql("threads", { platform_request_id: "t1", live_url: "u" });
+    await runMetricsSweep(deps(db, { preview: { ...preview, workspaces: ["someone-else"] } }));
+    expect(db.claimed()).toEqual(["threads"]);
+    expect(saved(db.writes)).toBeUndefined();
+    const later = db.writes.find((w) => w.query.includes("next_fetch_at = $2"))!;
+    expect(later.params[1]).toBe(new Date(NOW + 24 * 3600_000).toISOString());
+    expect(later.params[2]).toBeNull();
+  });
+});
+
 describe("fillGaps", () => {
   it("keeps official numbers and only fills missing ones", () => {
     const { result, filled } = fillGaps(officialResult({ likes: 1, unavailable: ["views", "saves"] }), publicResult({ likes: 50, views: 9 }));
