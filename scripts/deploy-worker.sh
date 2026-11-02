@@ -38,6 +38,10 @@ trap 'rm -f "$env_file"' EXIT
   # Platforms whose stats come from their public pages (ScrapeCreators) until they approve
   # Post Social; optional, and off without the ScrapeCreators key.
   echo "ANALYTICS_PUBLIC_PLATFORMS=$(secret ANALYTICS_PUBLIC_PLATFORMS 2>/dev/null || true)"
+  # Official stats for a few listed workspaces before a platform approves (the owner's and
+  # each reviewer's test login): the platforms, and the workspace ids. Both optional.
+  echo "ANALYTICS_PREVIEW_PLATFORMS=$(secret ANALYTICS_PREVIEW_PLATFORMS 2>/dev/null || true)"
+  echo "ANALYTICS_PREVIEW_WORKSPACES=$(secret ANALYTICS_PREVIEW_WORKSPACES 2>/dev/null || true)"
   echo "SCRAPECREATORS_API_KEY=$(secret SCRAPECREATORS_API_KEY 2>/dev/null || true)"
   # Daily stats health check alerts, for the admin only: the address, the Resend key to
   # email it, and the ScrapeCreators credit level to warn below. All optional.
@@ -60,7 +64,7 @@ trap 'rm -f "$env_file"' EXIT
 
 # A secret that can't be read lands empty and quietly switches stats off, so say what's on.
 setting_of() { grep "^$1=" "$env_file" | cut -d= -f2-; }
-echo "Analytics: official=[$(setting_of ANALYTICS_PLATFORMS)] public=[$(setting_of ANALYTICS_PUBLIC_PLATFORMS)] ScrapeCreators key: $([[ -n "$(setting_of SCRAPECREATORS_API_KEY)" ]] && echo set || echo MISSING)"
+echo "Analytics: official=[$(setting_of ANALYTICS_PLATFORMS)] preview=[$(setting_of ANALYTICS_PREVIEW_PLATFORMS)] public=[$(setting_of ANALYTICS_PUBLIC_PLATFORMS)] ScrapeCreators key: $([[ -n "$(setting_of SCRAPECREATORS_API_KEY)" ]] && echo set || echo MISSING)"
 if [[ "$target" == "prod" && ( -z "$(setting_of ANALYTICS_PUBLIC_PLATFORMS)" || -z "$(setting_of SCRAPECREATORS_API_KEY)" ) ]]; then
   echo "Post stats would be off on prod: a secret above could not be read. Try again." >&2
   exit 1
