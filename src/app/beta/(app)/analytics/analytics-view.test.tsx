@@ -59,11 +59,23 @@ describe("official numbers on the Analytics page", () => {
   const show = (tab: Tab, showSources = false) =>
     render(<AnalyticsView data={{ ...officialData, posts: [] }} postCount={officialData.posts.length} tab={tab} query={{ tab }} posts={officialData.posts} topPosts={officialData.posts} showSources={showSources} />);
 
-  it("shows reach as a total and on the post that has it", () => {
+  it("shows reach on the post that has it, and no total while other posts lack it", () => {
     show("overview");
-    expect(screen.getByText("Reach")).toBeInTheDocument();
+    expect(screen.queryByText("Reach")).not.toBeInTheDocument();
     expect(screen.getAllByText("reached")).toHaveLength(1);
     expect(screen.getAllByText("reached")[0].textContent).toBe("260 reached");
+  });
+
+  it("shows the reach total when every post reports reach", () => {
+    const all = buildDashboard({
+      now: NOW, days: 30, refreshesUsed: 0, history: [], followers: [],
+      accounts: [{ id: "ig", platform: "instagram", display_name: "Maker IG", handle: "maker", avatar_url: null }],
+      posts: [row("a1", { likes: 1, views: 90, reach: 60, source: "official" }), row("a2", { likes: 2, views: 50, reach: 40, source: "official" })],
+    });
+    const allData: AnalyticsData = { ...all, period: "last_30_days", platforms: [{ platform: "instagram", platform_name: "Instagram" }] };
+    render(<AnalyticsView data={{ ...allData, posts: [] }} postCount={2} tab="overview" query={{ tab: "overview" }} posts={allData.posts} topPosts={allData.posts} showSources={false} />);
+    expect(screen.getByText("Reach")).toBeInTheDocument();
+    expect(screen.getByText("100")).toBeInTheDocument();
   });
 
   it("says which platform reported official numbers, and leaves public numbers unlabelled", () => {
