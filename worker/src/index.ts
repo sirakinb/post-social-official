@@ -19,6 +19,7 @@ import { createAdminAlert } from "./alerts";
 import { resendSender, runNudgeSweep } from "../../backend/lib/nudges";
 import { PLATFORMS, statsPreview, type Platform } from "../../backend/lib/connections/platforms";
 import { createTelemetry } from "../../backend/lib/telemetry";
+import { runInboxSweep, subscribeAccounts } from "./inbox/runner";
 
 function setting(name: string, fallback?: string) {
   const value = process.env[name] ?? fallback;
@@ -157,3 +158,14 @@ if (nudgesOn) {
   setTimeout(() => void every(60 * 60 * 1000, "nudge emails", () => runNudgeSweep({ sql, send, appUrl: webAppUrl, secret: nudgeSecret, log })), 5 * 60 * 1000).unref();
 }
 void every(5 * 60 * 1000, "token refresh", () => refreshDueTokens({ sql, setting: (name) => setting(name) }));
+// Comment-to-DM (worker/src/inbox): only where automations are switched on (INBOX_WORKSPACES),
+// so other environments don't poll for events. Tracked links point at LINK_BASE_URL, or the
+// website.
+const inboxOnHere = Boolean((process.env.INBOX_WORKSPACES ?? "").trim());
+const linkBase = process.env.LINK_BASE_URL || webAppUrl;
+log("inbox", { on: inboxOnHere, links: linkBase || null });
+if (inboxOnHere && linkBase) {
+  const inboxDeps = { sql, setting: (name: string) => setting(name), linkBase, log };
+  void every(4 * 1000, "inbox sweep", () => runInboxSweep(inboxDeps));
+  void every(60 * 1000, "inbox subscribe", () => subscribeAccounts(inboxDeps));
+}

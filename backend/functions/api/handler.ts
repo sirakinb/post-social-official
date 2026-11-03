@@ -9,6 +9,7 @@
 //   /waitlist          the landing page's waitlist (public, POST {email})
 //   /internal/limits   sign-in and password-reset limits, for our website only (shared secret)
 //   /stripe/webhook    subscription changes from Stripe (signed)
+//   /l/{code}          a tracked link from an automation's DM: counts the click, then redirects (public)
 import { ApiError, type AgentCaller, type Caller, type Sql } from "../../lib/access";
 import { callerForKey, keyActions } from "../../lib/api/keys";
 import { handleMcp } from "../../lib/api/mcp";
@@ -39,6 +40,7 @@ import { tiktokCreatorInfo } from "../../lib/connections/tiktok-creator";
 import type { Settings } from "../../lib/connections/platforms";
 import { listAnalytics, postAnalytics, refreshAnalytics } from "../../lib/analytics";
 import { analyticsDashboard } from "../../lib/analytics-dashboard";
+import { automationPosts, createAutomation, deleteAutomation, getAutomation, inboxOn, listAutomations, updateAutomation, type InboxDeps } from "../../lib/inbox/automations";
 import { originAllowed } from "../media/handler";
 import { joinWaitlist } from "../../lib/waitlist";
 import { reportError } from "../../lib/telemetry";
@@ -101,6 +103,7 @@ export function createApiHandler(deps: ApiHandlerDeps) {
     const path = new URL(request.url).pathname.replace(/\/+$/, "").replace(/^\/api(?=\/)/, "") || "/";
 
     if (path.startsWith("/avatars/")) return avatarRoute(deps, request, path);
+    if (path.startsWith("/l/")) return linkRoute(deps, request, path);
     if (path === "/keys") return personRoute(deps, request);
     if (path === "/oauth/consent") return consentRoute(deps, request);
     if (path === "/waitlist") return waitlistRoute(deps, request);
@@ -346,6 +349,19 @@ async function consentRoute(deps: ApiHandlerDeps, request: Request) {
   }
 }
 
+// A tracked link from an automation's DM (/l/<code>): counts the click and sends the person on.
+// No sign-in: the code is unguessable and only leads to the link the creator chose.
+async function linkRoute(deps: ApiHandlerDeps, request: Request, path: string) {
+  if (request.method !== "GET" && request.method !== "HEAD") return json(405, errorBody(405, "Use GET."), { Allow: "GET, HEAD" });
+  const match = path.match(/^\/l\/([A-Za-z0-9]{10})$/);
+  const [row] = match
+    ? await deps.sql<{ record_link_click: string | null }>(`SELECT public.record_link_click($1)`, [match[1]]).catch(() => [])
+    : [];
+  const url = row?.record_link_click;
+  if (!url) return new Response("This link has expired.", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+  return new Response(null, { status: 302, headers: { Location: url, "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" } });
+}
+
 // Web app only: API keys and connected apps, with the person's sign-in token.
 // A connected account's saved profile picture (/avatars/<account id>/<version>), sent on
 // to a short-lived storage link. No sign-in: the platforms show these pictures publicly,
@@ -393,7 +409,17 @@ async function personRoute(deps: ApiHandlerDeps, request: Request) {
       },
     };
     const billing = billingActions({ sql: deps.sql, stripe: deps.stripe ?? null, webAppUrl: deps.webAppUrl, allowedOrigins: deps.allowedOrigins });
-    const actions = { ...allActions, ...statsActions, ...mediaActions, ...billing } as Record<string, (sql: Sql, caller: Caller, input: Record<string, unknown>) => Promise<unknown>>;
+    const inbox: InboxDeps = { sql: deps.sql, inbox: deps.inbox ?? { all: false, workspaces: [] } };
+    const inboxActions = {
+      inbox_status: async (_sql: Sql, _caller: Caller, input: Record<string, unknown>) => ({ enabled: typeof input.workspace_id === "string" && inboxOn(inbox.inbox, input.workspace_id) }),
+      automations: (_sql: Sql, caller: Caller, input: Record<string, unknown>) => listAutomations(inbox, caller, input),
+      automation: (_sql: Sql, caller: Caller, input: Record<string, unknown>) => getAutomation(inbox, caller, input),
+      create_automation: (_sql: Sql, caller: Caller, input: Record<string, unknown>) => createAutomation(inbox, caller, input),
+      update_automation: (_sql: Sql, caller: Caller, input: Record<string, unknown>) => updateAutomation(inbox, caller, input),
+      delete_automation: (_sql: Sql, caller: Caller, input: Record<string, unknown>) => deleteAutomation(inbox, caller, input),
+      automation_posts: (_sql: Sql, caller: Caller, input: Record<string, unknown>) => automationPosts(inbox, caller, input),
+    };
+    const actions = { ...allActions, ...statsActions, ...mediaActions, ...billing, ...inboxActions } as Record<string, (sql: Sql, caller: Caller, input: Record<string, unknown>) => Promise<unknown>>;
     if (!Object.hasOwn(actions, name)) throw new ApiError(400, `Unknown action. Use one of: ${Object.keys(actions).join(", ")}.`);
     const caller: Caller = { userId: user.id, displayName: user.name, entryPoint: "ui" };
     return json(200, await actions[name](deps.sql, caller, body), cors);
