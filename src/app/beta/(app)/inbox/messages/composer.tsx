@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { sendMessage, setConversationStatus } from "../actions";
 
-// The reply box. Instagram allows replies only within 24 hours of the person's last message,
+// The reply box. Replies are allowed only within the reply window (24 hours, or 7 days with Human Agent),
 // so outside that window it explains instead of offering to send.
 export function Composer(props: { conversationId: string; canReply: boolean; replyUntil: string | null; readOnly: boolean }) {
   const router = useRouter();
@@ -13,7 +13,7 @@ export function Composer(props: { conversationId: string; canReply: boolean; rep
   const [error, setError] = useState<string | null>(null);
   if (props.readOnly) return <p className="m-0 border-t border-ps-line px-4 py-3 text-xs text-ps-subtle">Reviewers can read the inbox but not reply.</p>;
   if (!props.canReply) {
-    return <p className="m-0 border-t border-ps-line px-4 py-3 text-xs text-ps-subtle">Instagram allows replies within 24 hours of their last message. You can reply once they message you again.</p>;
+    return <p className="m-0 border-t border-ps-line px-4 py-3 text-xs text-ps-subtle">The reply window has closed. You can reply once they message you again.</p>;
   }
   const until = props.replyUntil ? new Date(props.replyUntil).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" }) : null;
   return (

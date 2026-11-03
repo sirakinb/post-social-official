@@ -38,4 +38,4 @@ export type ActivityRow = {
   created_at: string;
 };
 
-export type AccountOption = { id: string; handle: string | null; display_name: string };
+export type AccountOption = { id: string; platform?: string; handle: string | null; display_name: string };

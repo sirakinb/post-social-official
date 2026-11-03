@@ -13,9 +13,9 @@ export type InboxTab = (typeof TABS)[number]["id"];
 
 type Client = Awaited<ReturnType<typeof import("@/lib/beta/workspace").loadViewer>>["client"];
 
-// The workspace's Instagram accounts, and the one picked in ?account= (null means all of them).
+// The workspace's Instagram accounts, Facebook Pages and Threads accounts, and the one picked in ?account= (null means all of them).
 export async function inboxAccounts(client: Client, workspaceId: string, picked?: string) {
-  const { data } = await client.database.from("connected_accounts").select("id, handle, display_name").eq("workspace_id", workspaceId).eq("platform", "instagram").neq("health", "disconnected").order("display_name");
+  const { data } = await client.database.from("connected_accounts").select("id, platform, handle, display_name").eq("workspace_id", workspaceId).in("platform", ["instagram", "facebook", "threads"]).neq("health", "disconnected").order("display_name");
   const accounts = (data ?? []) as AccountOption[];
   return { accounts, account: accounts.some((a) => a.id === picked) ? picked! : null };
 }

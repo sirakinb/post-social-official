@@ -5,16 +5,17 @@ import { callServer, loadViewer } from "@/lib/beta/workspace";
 import { cn } from "@/lib/utils";
 import { AutoRefresh } from "../auto-refresh";
 import { InboxNav, inboxAccounts, inboxQuery } from "../inbox-nav";
+import { accountLabel } from "../account-label";
 import { Composer, DoneButton } from "./composer";
 
 export const metadata = { title: "Messages · Post Social" };
 
 type Contact = { id: string; username: string | null; name: string | null };
-type Conversation = { id: string; status: "open" | "done"; unread: number; last_message_at: string; last_preview: string | null; can_reply: boolean; reply_until: string | null; contact: Contact; account: { handle: string | null; display_name: string } };
+type Conversation = { id: string; status: "open" | "done"; unread: number; last_message_at: string; last_preview: string | null; can_reply: boolean; reply_until: string | null; contact: Contact; account: { platform?: string; handle: string | null; display_name: string } };
 type Message = { id: string; direction: "in" | "out"; text: string | null; attachments: Array<{ type: string; url: string | null }>; sent_by: string; created_at: string };
 type Pending = { id: string; text: string; status: "queued" | "failed"; error: string | null };
 
-const who = (c: Contact) => (c.username ? `@${c.username}` : c.name ?? "Instagram user");
+const who = (c: Contact) => (c.username ? `@${c.username}` : c.name ?? "Unknown person");
 const ago = (iso: string) => {
   const m = Math.round((Date.now() - Date.parse(iso)) / 60000);
   if (m < 1) return "now";
@@ -22,7 +23,7 @@ const ago = (iso: string) => {
   if (m < 1440) return `${Math.round(m / 60)}h`;
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 };
-const BY: Record<string, string> = { automation: "Automation", person: "You", agent: "AI agent", instagram: "From Instagram" };
+const BY: Record<string, string> = { automation: "Automation", person: "You", agent: "AI agent", instagram: "From the app" };
 
 export default async function MessagesPage({ searchParams }: { searchParams: Promise<{ workspace?: string; account?: string; c?: string; status?: string }> }) {
   const params = await searchParams;
@@ -52,7 +53,7 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
             ))}
           </div>
           {list.conversations.length === 0 ? (
-            <p className="m-0 p-6 text-center text-ps-muted">{status === "open" ? "No open conversations. DMs to your Instagram accounts show up here." : "Nothing marked done yet."}</p>
+            <p className="m-0 p-6 text-center text-ps-muted">{status === "open" ? "No open conversations. DMs to your Instagram accounts and Facebook Pages show up here." : "Nothing marked done yet."}</p>
           ) : (
             <ul className="m-0 list-none overflow-y-auto p-0">
               {list.conversations.map((c) => (
@@ -76,7 +77,7 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
             <div className="flex items-center gap-3 border-b border-ps-line px-4 py-2.5">
               <div className="flex flex-col">
                 <span className="font-medium">{who(open.conversation.contact)}</span>
-                <span className="text-xs text-ps-subtle">to {open.conversation.account.handle ? `@${open.conversation.account.handle}` : open.conversation.account.display_name}</span>
+                <span className="text-xs text-ps-subtle">to {accountLabel(open.conversation.account)}</span>
               </div>
               <span className="flex-1" />
               {workspace.role !== "reviewer" && <DoneButton conversationId={open.conversation.id} status={open.conversation.status} />}

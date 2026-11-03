@@ -1,4 +1,4 @@
-// Comment-to-DM automations: someone comments a keyword on an Instagram post and gets a DM
+// Comment-to-DM automations: someone comments a keyword on an Instagram or Facebook Page post and gets a DM
 // (with up to 3 link buttons), plus an optional public reply. Open to anyone who can connect
 // accounts (not reviewers); every change is audited. The worker does the sending
 // (worker/src/inbox/runner.ts).
@@ -6,16 +6,21 @@ import { ApiError, membership, requireUuid, type Caller, type Sql } from "../acc
 import type { MatchMode } from "./match";
 
 // Where automations are switched on: INBOX_WORKSPACES lists workspace ids, or "all".
-export type InboxSwitch = { all: boolean; workspaces: string[] };
+// INBOX_HUMAN_AGENT lists the platforms whose Human Agent permission is approved: there a
+// person (not an automation or agent) may reply up to 7 days after the last message.
+export type InboxSwitch = { all: boolean; workspaces: string[]; humanAgent?: string[] };
+export const HUMAN_AGENT_PLATFORMS = ["instagram", "facebook"];
 export function inboxSwitch(setting: (name: string) => string | undefined): InboxSwitch {
-  let raw = "";
-  try {
-    raw = setting("INBOX_WORKSPACES") ?? "";
-  } catch {
-    // not set
-  }
-  const list = raw.split(",").map((w) => w.trim().toLowerCase()).filter(Boolean);
-  return { all: list.includes("all"), workspaces: list.filter((w) => w !== "all") };
+  const read = (name: string) => {
+    try {
+      return setting(name) ?? "";
+    } catch {
+      return ""; // not set
+    }
+  };
+  const list = read("INBOX_WORKSPACES").split(",").map((w) => w.trim().toLowerCase()).filter(Boolean);
+  const humanAgent = read("INBOX_HUMAN_AGENT").split(",").map((p) => p.trim().toLowerCase()).filter((p) => HUMAN_AGENT_PLATFORMS.includes(p));
+  return { all: list.includes("all"), workspaces: list.filter((w) => w !== "all"), humanAgent };
 }
 export const inboxOn = (on: InboxSwitch, workspaceId: string) => on.all || on.workspaces.includes(workspaceId.toLowerCase());
 
@@ -128,12 +133,14 @@ function repeatMode(value: unknown): Automation["repeat_mode"] {
 
 function postId(value: unknown) {
   const id = text(value, "the post id", 64, false);
-  if (id && !/^[0-9A-Za-z_]+$/.test(id)) throw new ApiError(400, "The Instagram post id isn't valid.");
+  if (id && !/^[0-9A-Za-z_]+$/.test(id)) throw new ApiError(400, "The post id isn't valid.");
   return id;
 }
 
 type Values = Omit<Automation, "id" | "workspace_id" | "connected_account_id" | "is_active" | "created_at" | "updated_at" | "post_id">;
-function cleanValues(input: Record<string, unknown>, before?: Automation): Values {
+// Threads has no DMs: there an automation answers with the public reply only.
+function cleanValues(input: Record<string, unknown>, platform: string, before?: Automation): Values {
+  const publicOnly = platform === "threads";
   const pick = <K extends keyof Values>(key: K, clean: (v: unknown) => Values[K]) => (input[key] === undefined && before ? before[key] : clean(input[key]));
   const values: Values = {
     name: pick("name", (v) => text(v, "a name", LIMITS.name, true)!),
@@ -141,14 +148,15 @@ function cleanValues(input: Record<string, unknown>, before?: Automation): Value
     keywords: pick("keywords", (v) => words(v, "Keywords", LIMITS.keywords)),
     match_mode: pick("match_mode", matchMode),
     exclude_keywords: pick("exclude_keywords", (v) => words(v, "Excluded words", LIMITS.keywords)),
-    dm_message: pick("dm_message", (v) => text(v, "the DM", LIMITS.dm, true)!),
-    dm_variations: pick("dm_variations", (v) => variations(v, "DM variations", LIMITS.dm)),
-    dm_buttons: pick("dm_buttons", cleanButtons),
+    dm_message: publicOnly ? "" : pick("dm_message", (v) => text(v, "the DM", LIMITS.dm, true)!),
+    dm_variations: publicOnly ? [] : pick("dm_variations", (v) => variations(v, "DM variations", LIMITS.dm)),
+    dm_buttons: publicOnly ? [] : pick("dm_buttons", cleanButtons),
     comment_reply: pick("comment_reply", (v) => text(v, "the public reply", LIMITS.reply, false)),
     comment_reply_variations: pick("comment_reply_variations", (v) => variations(v, "Reply variations", LIMITS.reply)),
     repeat_mode: pick("repeat_mode", repeatMode),
   };
   if (values.comment_reply_variations.length && !values.comment_reply) throw new ApiError(400, "Add the public reply before its variations.");
+  if (publicOnly && !values.comment_reply) throw new ApiError(400, "Threads has no DMs, so a Threads automation needs the public reply.");
   return values;
 }
 
@@ -168,20 +176,20 @@ async function automationFor(deps: InboxDeps, caller: Caller, automationId: unkn
   return { automation, member };
 }
 
-// The account must be an Instagram account in this workspace that is still connected.
-async function instagramAccount(sql: Sql, workspaceId: string, accountId: unknown) {
+// The account must be an Instagram account, Facebook Page or Threads account in this workspace that is still connected.
+async function inboxAccount(sql: Sql, workspaceId: string, accountId: unknown) {
   const id = requireUuid(accountId, "Account");
   const [account] = await sql<{ id: string; platform: string; health: string }>(
     `SELECT id, platform, health FROM public.connected_accounts WHERE id = $1 AND workspace_id = $2`,
     [id, workspaceId],
   );
   if (!account) throw new ApiError(404, "That account was not found in this workspace.");
-  if (account.platform !== "instagram") throw new ApiError(400, "Comment-to-DM works on Instagram accounts for now.");
+  if (!["instagram", "facebook", "threads"].includes(account.platform)) throw new ApiError(400, "Automations work on Instagram, Facebook Pages and Threads.");
   if (account.health === "disconnected") throw new ApiError(409, "That account is disconnected. Reconnect it first.");
   return account;
 }
 
-// Our post id for an Instagram post, when it was published through Post Social.
+// Our post id for an Instagram or Facebook post, when it was published through Post Social.
 async function ourPostId(sql: Sql, accountId: string, platformPostId: string | null) {
   if (!platformPostId) return null;
   const [row] = await sql<{ post_id: string }>(
@@ -223,8 +231,8 @@ export async function createAutomation(deps: InboxDeps, caller: Caller, input: R
   const workspaceId = requireUuid(input.workspace_id, "Workspace");
   const member = await membership(deps.sql, caller, workspaceId, true, "Reviewers cannot change automations.");
   requireOn(deps, workspaceId);
-  const account = await instagramAccount(deps.sql, workspaceId, input.account_id);
-  const values = cleanValues(input);
+  const account = await inboxAccount(deps.sql, workspaceId, input.account_id);
+  const values = cleanValues(input, account.platform);
   const [{ count }] = await deps.sql<{ count: number }>(`SELECT count(*)::int AS count FROM public.comment_automations WHERE workspace_id = $1`, [workspaceId]);
   if (Number(count) >= MAX_AUTOMATIONS) throw new ApiError(409, `A workspace can have up to ${MAX_AUTOMATIONS} automations.`);
   const post = await ourPostId(deps.sql, account.id, values.platform_post_id);
@@ -253,7 +261,8 @@ export async function createAutomation(deps: InboxDeps, caller: Caller, input: R
 
 export async function updateAutomation(deps: InboxDeps, caller: Caller, input: Record<string, unknown>) {
   const { automation: before, member } = await automationFor(deps, caller, input.automation_id, true);
-  const values = cleanValues(input, before);
+  const [{ platform }] = await deps.sql<{ platform: string }>(`SELECT platform FROM public.connected_accounts WHERE id = $1`, [before.connected_account_id]);
+  const values = cleanValues(input, platform, before);
   const active = input.is_active === undefined ? before.is_active : Boolean(input.is_active);
   const post = values.platform_post_id === before.platform_post_id ? before.post_id : await ourPostId(deps.sql, before.connected_account_id, values.platform_post_id);
   const [automation] = await deps.sql<Automation>(
@@ -289,12 +298,12 @@ export async function deleteAutomation(deps: InboxDeps, caller: Caller, input: {
   return { deleted: true, automation_id: automation.id };
 }
 
-// The Instagram posts an automation can be attached to: recent posts published through
+// The posts an automation can be attached to: recent posts published through
 // Post Social on that account.
 export async function automationPosts(deps: InboxDeps, caller: Caller, input: { workspace_id?: unknown; account_id?: unknown }) {
   const workspaceId = requireUuid(input.workspace_id, "Workspace");
   await membership(deps.sql, caller, workspaceId, false);
-  const account = await instagramAccount(deps.sql, workspaceId, input.account_id);
+  const account = await inboxAccount(deps.sql, workspaceId, input.account_id);
   const posts = await deps.sql(
     `SELECT d.platform_request_id AS platform_post_id, d.post_id, d.live_url, d.updated_at AS published_at, left(p.caption, 120) AS caption
      FROM public.destinations d JOIN public.posts p ON p.id = d.post_id

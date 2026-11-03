@@ -13,7 +13,7 @@ export default async function NewAutomationPage({ searchParams }: { searchParams
   if (!workspace) return <p className="p-8 text-ps-muted">You are not a member of any workspace yet.</p>;
   const status = await callServer<{ enabled: boolean }>("inbox_status", { workspace_id: workspace.id });
   if (!status?.enabled || workspace.role === "reviewer") notFound();
-  const { data } = await client.database.from("connected_accounts").select("id, handle, display_name").eq("workspace_id", workspace.id).eq("platform", "instagram").neq("health", "disconnected").order("display_name");
+  const { data } = await client.database.from("connected_accounts").select("id, platform, handle, display_name").eq("workspace_id", workspace.id).in("platform", ["instagram", "facebook", "threads"]).neq("health", "disconnected").order("display_name");
   const accounts = (data ?? []) as AccountOption[];
   const back = `/beta/inbox/automations${params.workspace ? `?workspace=${encodeURIComponent(params.workspace)}` : ""}`;
 
@@ -26,8 +26,8 @@ export default async function NewAutomationPage({ searchParams }: { searchParams
         <AutomationForm workspaceId={workspace.id} accounts={accounts} backHref={back} />
       ) : (
         <Card className="mt-6 p-8 text-center">
-          <p className="m-0 text-[15px] font-medium">Connect an Instagram account first</p>
-          <p className="mt-1 text-ps-muted">Automations answer comments on Instagram Business and Creator accounts.</p>
+          <p className="m-0 text-[15px] font-medium">Connect an Instagram, Facebook or Threads account first</p>
+          <p className="mt-1 text-ps-muted">Automations answer comments on Instagram Business and Creator accounts, Facebook Pages and Threads.</p>
           <Link href="/beta/accounts" className="mt-3 inline-flex h-9 items-center rounded-lg bg-ps-plum px-3.5 text-[13px] font-medium text-ps-ground">Go to Accounts</Link>
         </Card>
       )}

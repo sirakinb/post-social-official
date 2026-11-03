@@ -78,6 +78,22 @@ describe("inbox: sending", () => {
     expect(status(db).params[1]).toMatch(/24 hours/);
   });
 
+  it("lets a person reply up to 7 days later with the Human Agent tag, where it's approved", async () => {
+    const late = (sentBy: string, setting = "instagram") => {
+      const db = fakeSql({ outbox: [item({ kind: "message", sent_by: sentBy })], lastInbound: Date.now() - 3 * 24 * HOUR });
+      const graph = fakeGraph();
+      return { db, graph, deps: { ...deps(db, graph), setting: (name: string) => (name === "INBOX_HUMAN_AGENT" ? setting : "") } };
+    };
+    const person = late("person");
+    expect(await runOutbox(person.deps)).toBe(1);
+    expect(person.graph.calls[0].body).toEqual({ recipient: { id: "fan" }, message: { text: "Thanks!" }, messaging_type: "MESSAGE_TAG", tag: "HUMAN_AGENT" });
+    const agent = late("agent");
+    expect(await runOutbox(agent.deps)).toBe(0);
+    const off = late("person", "");
+    expect(await runOutbox(off.deps)).toBe(0);
+    expect(off.graph.calls).toHaveLength(0);
+  });
+
   it("DMs a commenter once, by comment, within 7 days", async () => {
     const fresh = { platform_comment_id: "c9", commenter_id: "fan", commenter_username: "jay", created_at: new Date().toISOString(), dm_sent_at: null };
     const db = fakeSql({ outbox: [item({ kind: "private_reply" })], comment: fresh });

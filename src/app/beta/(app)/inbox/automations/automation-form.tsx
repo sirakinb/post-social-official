@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Card } from "@/components/beta/ui";
 import { cn } from "@/lib/utils";
 import { automationPosts, createAutomation, updateAutomation, type AutomationInput } from "./actions";
+import { accountLabel } from "../account-label";
 import type { AccountOption, AutomationRow } from "./types";
 
 const field = "h-9 w-full rounded-lg border border-ps-line-strong bg-ps-ground px-2.5 text-[13px] text-ps-text placeholder:text-ps-subtle";
@@ -28,7 +29,7 @@ function Field(props: { label: string; hint?: string; optional?: boolean; childr
 }
 
 // What the follower sees: the DM, its link buttons and the public reply under their comment.
-function Preview(props: { keyword: string; dm: string; buttons: Array<{ label: string; url: string }>; reply: string }) {
+function Preview(props: { keyword: string; dm: string; buttons: Array<{ label: string; url: string }>; reply: string; publicOnly: boolean }) {
   const sample = (text: string) => text.replace(/\{username\}/g, "@jay");
   return (
     <div className="flex flex-col gap-4">
@@ -39,7 +40,7 @@ function Preview(props: { keyword: string; dm: string; buttons: Array<{ label: s
           {props.reply && <p className="m-0 mt-2 border-l-2 border-ps-line pl-2.5 text-[13px] text-ps-muted"><span className="font-medium text-ps-text">You</span> {sample(props.reply)}</p>}
         </div>
       </div>
-      <div>
+      {!props.publicOnly && <div>
         <p className="m-0 mb-2 text-xs text-ps-subtle">In their DMs</p>
         <div className="rounded-xl border border-ps-line bg-ps-ground p-3">
           <div className="max-w-[260px] rounded-2xl rounded-bl-md bg-ps-segment px-3 py-2 text-[13px] whitespace-pre-wrap">{sample(props.dm) || "Your message"}</div>
@@ -47,7 +48,7 @@ function Preview(props: { keyword: string; dm: string; buttons: Array<{ label: s
             <div key={i} className="mt-1.5 max-w-[260px] rounded-xl border border-ps-line-strong px-3 py-2 text-center text-[13px] font-medium text-ps-plum">{b.label}</div>
           ))}
         </div>
-      </div>
+      </div>}
     </div>
   );
 }
@@ -56,6 +57,8 @@ export function AutomationForm(props: { workspaceId: string; accounts: AccountOp
   const router = useRouter();
   const a = props.automation;
   const [accountId, setAccountId] = useState(a?.connected_account_id ?? props.accounts[0]?.id ?? "");
+  // Threads has no DMs: there the automation only replies publicly.
+  const publicOnly = (a?.account?.platform ?? props.accounts.find((x) => x.id === accountId)?.platform) === "threads";
   const [name, setName] = useState(a?.name ?? "");
   const [postId, setPostId] = useState<string>(a?.platform_post_id ?? "");
   const [posts, setPosts] = useState<Array<{ platform_post_id: string; caption: string | null; published_at: string }>>([]);
@@ -112,9 +115,9 @@ export function AutomationForm(props: { workspaceId: string; accounts: AccountOp
             <input required maxLength={80} value={name} onChange={(e) => setName(e.target.value)} placeholder="Free guide" className={field} />
           </Field>
           {!a && (
-            <Field label="Instagram account">
+            <Field label="Account">
               <select value={accountId} onChange={(e) => (setAccountId(e.target.value), setPostId(""))} className={field}>
-                {props.accounts.map((acc) => <option key={acc.id} value={acc.id}>{acc.handle ? `@${acc.handle}` : acc.display_name}</option>)}
+                {props.accounts.map((acc) => <option key={acc.id} value={acc.id}>{accountLabel(acc)}</option>)}
               </select>
             </Field>
           )}
@@ -147,9 +150,9 @@ export function AutomationForm(props: { workspaceId: string; accounts: AccountOp
           </Field>
         </Card>
 
-        <Card className="flex flex-col gap-4 p-5">
+        {!publicOnly && <Card className="flex flex-col gap-4 p-5">
           <h2 className="m-0 text-[13px] font-medium">The DM</h2>
-          <Field label="Message" hint="{username} becomes their @handle. Instagram allows one DM per comment.">
+          <Field label="Message" hint="{username} becomes their @handle (their name on Facebook). One DM per comment.">
             <textarea required maxLength={640} rows={4} value={dm} onChange={(e) => setDm(e.target.value)} placeholder="Hey {username}! Here's the free guide 👇" className={cn(field, "h-auto resize-y py-2")} />
           </Field>
           <div className="flex flex-col gap-2">
@@ -165,24 +168,24 @@ export function AutomationForm(props: { workspaceId: string; accounts: AccountOp
               <button type="button" onClick={() => setButtons([...buttons, { label: "", url: "" }])} className="self-start text-xs text-ps-plum hover:underline">Add a button</button>
             )}
           </div>
-        </Card>
+        </Card>}
 
         <Card className="flex flex-col gap-4 p-5">
-          <h2 className="m-0 text-[13px] font-medium">Also</h2>
-          <Field label="Public reply to the comment" optional hint="Posted under their comment after the DM goes out.">
-            <input maxLength={300} value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Sent you a DM 📩" className={field} />
+          <h2 className="m-0 text-[13px] font-medium">{publicOnly ? "The reply" : "Also"}</h2>
+          <Field label="Public reply to the comment" optional={!publicOnly} hint={publicOnly ? "Threads has no DMs, so the automation replies under their comment." : "Posted under their comment after the DM goes out."}>
+            <input required={publicOnly} maxLength={300} value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Sent you a DM 📩" className={field} />
           </Field>
           <Field label="If someone comments again">
             <select value={repeat} onChange={(e) => setRepeat(e.target.value as AutomationInput["repeat_mode"])} className={field}>
-              <option value="once">{"Don't DM them again"}</option>
-              <option value="every_comment">DM them every time</option>
+              <option value="once">{publicOnly ? "Don't reply to them again" : "Don't DM them again"}</option>
+              <option value="every_comment">{publicOnly ? "Reply every time" : "DM them every time"}</option>
             </select>
           </Field>
         </Card>
 
         {error && <p role="alert" className="m-0 text-xs text-ps-failed-text">{error}</p>}
         <div className="flex items-center gap-2">
-          <button type="submit" disabled={busy || !name.trim() || !dm.trim() || !accountId} className="h-9 rounded-lg bg-ps-plum px-4 text-[13px] font-medium text-ps-ground hover:bg-ps-plum-hover disabled:opacity-60">
+          <button type="submit" disabled={busy || !name.trim() || !(publicOnly ? reply.trim() : dm.trim()) || !accountId} className="h-9 rounded-lg bg-ps-plum px-4 text-[13px] font-medium text-ps-ground hover:bg-ps-plum-hover disabled:opacity-60">
             {busy ? "Saving…" : a ? "Save changes" : "Turn on automation"}
           </button>
           <button type="button" onClick={() => router.push(props.backHref)} className="h-9 rounded-lg px-3 text-xs text-ps-subtle hover:text-ps-text">Cancel</button>
@@ -191,7 +194,7 @@ export function AutomationForm(props: { workspaceId: string; accounts: AccountOp
       <aside className="lg:sticky lg:top-6 lg:self-start">
         <Card className="p-5">
           <h2 className="m-0 mb-4 text-[13px] font-medium">Preview</h2>
-          <Preview keyword={splitWords(keywords)[0] ?? ""} dm={dm} buttons={usedButtons} reply={reply} />
+          <Preview keyword={splitWords(keywords)[0] ?? ""} dm={dm} buttons={usedButtons} reply={reply} publicOnly={publicOnly} />
         </Card>
       </aside>
     </form>

@@ -27,7 +27,7 @@ export default async function AutomationsPage({ searchParams }: { searchParams: 
       <div className="mt-5 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="m-0 text-lg font-medium">Automations</h1>
-          <p className="mt-1 text-ps-muted">When someone comments a keyword on your Instagram post, they get a DM with a link.</p>
+          <p className="mt-1 text-ps-muted">When someone comments a keyword on your post, they get a DM with a link.</p>
         </div>
         {canEdit && (
           <Link href={`/beta/inbox/automations/new${q}`} className="flex h-9 items-center rounded-lg bg-ps-plum px-3.5 text-[13px] font-medium text-ps-ground hover:bg-ps-plum-hover">
@@ -40,7 +40,7 @@ export default async function AutomationsPage({ searchParams }: { searchParams: 
         <Card className="mt-6 p-8 text-center">
           <p className="m-0 text-[15px] font-medium">No automations yet</p>
           <p className="mx-auto mt-1 max-w-[440px] text-ps-muted">
-            Pick an Instagram post, a keyword like GUIDE and the link to send. Everyone who comments the keyword gets a DM with it.
+            Pick a post, a keyword like GUIDE and the link to send. Everyone who comments the keyword gets a DM with it.
           </p>
         </Card>
       ) : (
@@ -61,7 +61,7 @@ export default async function AutomationsPage({ searchParams }: { searchParams: 
                 <tr key={a.id} className="border-b border-ps-line last:border-0 hover:bg-ps-fg/[0.02]">
                   <td className="px-4 py-3">
                     <Link href={`/beta/inbox/automations/${a.id}${q}`} className="flex items-center gap-2.5 text-ps-text hover:underline">
-                      <PlatformMark platform="instagram" size={18} />
+                      <PlatformMark platform={a.account?.platform === "facebook" || a.account?.platform === "threads" ? a.account.platform : "instagram"} size={18} />
                       <span className="flex flex-col">
                         <span className="font-medium">{a.name}</span>
                         <span className="text-xs text-ps-subtle">

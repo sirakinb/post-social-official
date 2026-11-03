@@ -1,4 +1,4 @@
-// Meta's webhooks for Instagram comments and messages (connections function,
+// Meta's webhooks for Instagram and Facebook Page comments and messages, and Threads replies (connections function,
 // /meta/webhooks). Meta first checks the address with a GET carrying our verify token, then
 // POSTs events signed with the app secret. Events are stored as they arrive and handled by
 // the worker, so Meta gets its answer straight away.
@@ -28,11 +28,27 @@ export async function signatureValid(rawBody: string, header: string | null, sec
   return false;
 }
 
-export type StoredEvent = { platform: "instagram" | "facebook"; entryId: string; field: string; payload: unknown };
+export type StoredEvent = { platform: "instagram" | "facebook" | "threads"; entryId: string; field: string; payload: unknown };
+
+// Threads sends its own shape: { target_id (the account), values: { field, value } }, one per
+// delivery or several in a list.
+function threadsEvents(body: unknown): StoredEvent[] {
+  const deliveries = (Array.isArray(body) ? body : [body]) as Array<{ target_id?: unknown; values?: unknown }>;
+  const events: StoredEvent[] = [];
+  for (const d of deliveries.slice(0, 100)) {
+    const entryId = String(d?.target_id ?? "");
+    if (!entryId) continue;
+    for (const v of (Array.isArray(d.values) ? d.values : [d.values]) as Array<{ field?: string; value?: unknown }>) {
+      if (v?.field) events.push({ platform: "threads", entryId, field: String(v.field), payload: v.value ?? {} });
+    }
+  }
+  return events;
+}
 
 // Splits a delivery into one stored event per change (comments) or message (messaging).
 export function eventsIn(body: unknown): StoredEvent[] {
-  const delivery = (body ?? {}) as { object?: string; entry?: Array<Record<string, unknown>> };
+  const delivery = (body ?? {}) as { object?: string; entry?: Array<Record<string, unknown>>; values?: unknown };
+  if (Array.isArray(body) || delivery.values) return threadsEvents(body);
   const platform = delivery.object === "instagram" ? "instagram" : delivery.object === "page" ? "facebook" : null;
   if (!platform || !Array.isArray(delivery.entry)) return [];
   const events: StoredEvent[] = [];

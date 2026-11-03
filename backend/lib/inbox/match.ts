@@ -61,6 +61,7 @@ export function pickVariation(main: string, variations: string[], random: () => 
 }
 
 // {username} in a message becomes the commenter's handle.
-export function personalize(text: string, username: string | null) {
-  return text.replace(/\{username\}/g, username ? `@${username}` : "there");
+// {username} becomes @handle (Instagram), or the person's name where there are no handles (Facebook).
+export function personalize(text: string, username: string | null, name?: string | null) {
+  return text.replace(/\{username\}/g, username ? `@${username}` : name || "there");
 }

@@ -48,7 +48,7 @@ export function CommentActions(props: { commentId: string; canDm: boolean; hidde
             value={text}
             onChange={(e) => setText(e.target.value)}
             maxLength={1000}
-            placeholder={mode === "reply" ? "Public reply…" : "Private DM (Instagram allows one per comment)…"}
+            placeholder={mode === "reply" ? "Public reply…" : "Private DM (one per comment)…"}
             className="h-9 flex-1 rounded-lg border border-ps-line-strong bg-ps-ground px-2.5 text-[13px] text-ps-text placeholder:text-ps-subtle"
           />
           <button type="submit" disabled={busy || !text.trim()} className="h-9 rounded-lg bg-ps-plum px-3.5 text-[13px] font-medium text-ps-ground hover:bg-ps-plum-hover disabled:opacity-60">

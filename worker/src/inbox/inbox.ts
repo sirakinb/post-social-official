@@ -1,10 +1,22 @@
 // The inbox side of Meta's webhooks (backend/lib/inbox/inbox.ts): stores every comment and DM
 // with the person behind it, and sends the replies people queue in Post Social (a DM, a
 // public comment reply, a DM to a commenter, hiding a comment).
-import { accountFor, graph, GraphError, tokenFor, type Account, type CommentValue, type InboxDeps } from "./runner";
+import { accountFor, fromAccount, graph, GraphError, META, PLATFORM_NAME, threadsReply, tokenFor, type Account, type CommentValue, type InboxDeps, type InboxPlatform } from "./runner";
 
 const REPLY_WINDOW_MS = 24 * 60 * 60 * 1000; // Meta: reply within 24 hours of their last message
 const PRIVATE_REPLY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // one DM per comment, within 7 days
+const HUMAN_AGENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // a person's reply, with Meta's HUMAN_AGENT tag
+
+// Platforms whose Human Agent permission is approved (INBOX_HUMAN_AGENT).
+const humanAgentOn = (deps: InboxDeps, platform: string) => {
+  let raw = "";
+  try {
+    raw = deps.setting("INBOX_HUMAN_AGENT") ?? "";
+  } catch {
+    // not set
+  }
+  return raw.split(",").map((p) => p.trim().toLowerCase()).includes(platform);
+};
 
 export type MessagingEvent = {
   sender?: { id?: string };
@@ -16,14 +28,14 @@ export type MessagingEvent = {
 
 const isOwn = (account: Account, id: string | null | undefined) => Boolean(id) && (id === account.webhook_id || id === account.external_account_id);
 
-async function upsertContact(deps: InboxDeps, account: Account, userId: string, username: string | null, source: "comment" | "message") {
+async function upsertContact(deps: InboxDeps, account: Account, userId: string, username: string | null, source: "comment" | "message", name: string | null = null) {
   const [contact] = await deps.sql<{ id: string }>(
-    `INSERT INTO public.contacts (workspace_id, connected_account_id, platform, platform_user_id, username, source)
-     VALUES ($1, $2, 'instagram', $3, $4, $5)
+    `INSERT INTO public.contacts (workspace_id, connected_account_id, platform, platform_user_id, username, source, name)
+     VALUES ($1, $2, $6, $3, $4, $5, $7)
      ON CONFLICT (connected_account_id, platform_user_id) DO UPDATE
-       SET last_seen_at = now(), username = coalesce(EXCLUDED.username, contacts.username)
+       SET last_seen_at = now(), username = coalesce(EXCLUDED.username, contacts.username), name = coalesce(EXCLUDED.name, contacts.name)
      RETURNING id`,
-    [account.workspace_id, account.id, userId, username, source],
+    [account.workspace_id, account.id, userId, username, source, account.platform ?? "instagram", name],
   );
   return contact.id;
 }
@@ -67,25 +79,25 @@ async function addMessage(
 }
 
 // A comment on one of the account's posts: kept for the Comments tab, with its contact.
-export async function recordComment(deps: InboxDeps, entryId: string, comment: CommentValue & { parent_id?: string }) {
+export async function recordComment(deps: InboxDeps, entryId: string, comment: CommentValue, platform: InboxPlatform = "instagram") {
   if (!comment.id) return;
-  const account = await accountFor(deps, entryId);
+  const account = await accountFor(deps, entryId, platform);
   if (!account) return;
-  const fromAccount = isOwn(account, comment.from?.id);
-  const contactId = !fromAccount && comment.from?.id ? await upsertContact(deps, account, comment.from.id, comment.from.username ?? null, "comment") : null;
+  const own = fromAccount(account, comment.from);
+  const contactId = !own && comment.from?.id ? await upsertContact(deps, account, comment.from.id, comment.from.username ?? null, "comment", comment.from.name ?? null) : null;
   await deps.sql(
     `INSERT INTO public.inbox_comments (workspace_id, connected_account_id, contact_id, platform_comment_id, platform_post_id, parent_comment_id, commenter_id, commenter_username, text, from_account)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      ON CONFLICT (connected_account_id, platform_comment_id) DO NOTHING`,
-    [account.workspace_id, account.id, contactId, comment.id, comment.media?.id ?? null, comment.parent_id ?? null, comment.from?.id ?? null, comment.from?.username ?? null,
-      (comment.text ?? "").slice(0, 2200), fromAccount],
+    [account.workspace_id, account.id, contactId, comment.id, comment.media?.id ?? null, comment.parent_id ?? null, comment.from?.id ?? null, comment.from?.username ?? comment.from?.name ?? null,
+      (comment.text ?? "").slice(0, 2200), own],
   );
 }
 
-// A DM, either way: from a person (inbound), or from the account itself in Instagram's app
+// A DM, either way: from a person (inbound), or from the account itself in the platform's app
 // (an "echo"; ours are already recorded, so only unknown ones are added).
-export async function recordMessage(deps: InboxDeps, entryId: string, event: MessagingEvent) {
-  const account = await accountFor(deps, entryId);
+export async function recordMessage(deps: InboxDeps, entryId: string, event: MessagingEvent, platform: InboxPlatform = "instagram") {
+  const account = await accountFor(deps, entryId, platform);
   if (!account) return;
   const message = event.message;
   const postback = event.postback;
@@ -119,8 +131,9 @@ export async function recordOutgoing(
   actorId: string | null,
   comment?: { commentId: string; replied?: boolean },
   mid: string | null = null,
+  name: string | null = null,
 ) {
-  const contactId = await upsertContact(deps, account, userId, username, "comment");
+  const contactId = await upsertContact(deps, account, userId, username, "comment", name);
   const conversationId = await upsertConversation(deps, account, contactId);
   await addMessage(deps, account, conversationId, { direction: "out", mid, text, attachments: [], sentBy, actorId, at: new Date() });
   if (comment) {
@@ -134,17 +147,18 @@ export async function recordOutgoing(
 
 // Names and handles for people who messaged first (Meta's DM events carry only an id).
 export async function fillContactProfiles(deps: InboxDeps) {
-  const due = await deps.sql<{ id: string; platform_user_id: string; connected_account_id: string; display_name: string }>(
-    `SELECT c.id, c.platform_user_id, c.connected_account_id, a.display_name FROM public.contacts c
+  const due = await deps.sql<{ id: string; platform_user_id: string; connected_account_id: string; display_name: string; platform: InboxPlatform }>(
+    `SELECT c.id, c.platform_user_id, c.connected_account_id, a.display_name, a.platform FROM public.contacts c
      JOIN public.connected_accounts a ON a.id = c.connected_account_id
-     WHERE c.username IS NULL AND c.profile_checked_at IS NULL AND a.health <> 'disconnected' LIMIT 10`,
+     WHERE c.username IS NULL AND c.name IS NULL AND c.profile_checked_at IS NULL AND a.health <> 'disconnected'
+       AND a.platform IN ('instagram', 'facebook') LIMIT 10`,
     [],
   );
   let filled = 0;
   for (const contact of due) {
     try {
-      const token = await tokenFor(deps, { id: contact.connected_account_id, display_name: contact.display_name });
-      const profile = await graph(deps, token, `${encodeURIComponent(contact.platform_user_id)}?fields=name,username`);
+      const token = await tokenFor(deps, { id: contact.connected_account_id, display_name: contact.display_name, platform: contact.platform });
+      const profile = await graph(deps, token, `${encodeURIComponent(contact.platform_user_id)}?fields=${META[contact.platform].profile}`, { platform: contact.platform });
       await deps.sql(`UPDATE public.contacts SET username = $2, name = $3, profile_checked_at = now() WHERE id = $1`, [contact.id, profile.username ?? null, profile.name ?? null]);
       filled++;
     } catch {
@@ -168,12 +182,16 @@ type Outbox = {
 
 async function sendOne(deps: InboxDeps, item: Outbox) {
   const [account] = await deps.sql<Account>(
-    `SELECT a.id, a.workspace_id, a.platform, a.display_name, a.external_account_id, ia.webhook_id
+    `SELECT a.id, a.workspace_id, a.platform, a.display_name, a.external_account_id, a.handle, ia.webhook_id
      FROM public.connected_accounts a LEFT JOIN public.inbox_accounts ia ON ia.connected_account_id = a.id WHERE a.id = $1`,
     [item.connected_account_id],
   );
   if (!account) throw new GraphError("The account is no longer connected.");
   const token = await tokenFor(deps, account);
+  const platform = account.platform;
+  const name = PLATFORM_NAME[platform] ?? "Instagram";
+
+  if (platform === "threads" && (item.kind === "message" || item.kind === "private_reply")) throw new GraphError("Threads has no DMs.");
 
   if (item.kind === "message") {
     const [c] = await deps.sql<{ platform_user_id: string; last_inbound_at: string | null; username: string | null }>(
@@ -181,10 +199,14 @@ async function sendOne(deps: InboxDeps, item: Outbox) {
       [item.conversation_id],
     );
     if (!c) throw new GraphError("That conversation is gone.");
-    if (!c.last_inbound_at || Date.now() - Date.parse(c.last_inbound_at) > REPLY_WINDOW_MS) {
-      throw new GraphError("Instagram only allows replies within 24 hours of their last message.");
+    const since = c.last_inbound_at ? Date.now() - Date.parse(c.last_inbound_at) : Infinity;
+    // Past 24 hours only a person's reply may go, tagged HUMAN_AGENT, up to 7 days.
+    const tagged = since > REPLY_WINDOW_MS && item.sent_by === "person" && since <= HUMAN_AGENT_WINDOW_MS && humanAgentOn(deps, account.platform);
+    if (since > REPLY_WINDOW_MS && !tagged) {
+      throw new GraphError(`${name} only allows replies within 24 hours of their last message.`);
     }
-    const sent = await graph(deps, token, "me/messages", { method: "POST", body: { recipient: { id: c.platform_user_id }, message: { text: item.text } } });
+    const body = { recipient: { id: c.platform_user_id }, message: { text: item.text }, ...(tagged ? { messaging_type: "MESSAGE_TAG", tag: "HUMAN_AGENT" } : {}) };
+    const sent = await graph(deps, token, "me/messages", { method: "POST", body, platform });
     await recordOutgoing(deps, account, c.platform_user_id, c.username, item.text ?? "", item.sent_by, item.actor_id, undefined, sent.message_id ?? null);
     return;
   }
@@ -197,12 +219,13 @@ async function sendOne(deps: InboxDeps, item: Outbox) {
   const id = encodeURIComponent(comment.platform_comment_id);
 
   if (item.kind === "comment_reply") {
-    await graph(deps, token, `${id}/replies`, { method: "POST", body: { message: item.text } });
+    if (platform === "threads") await threadsReply(deps, token, comment.platform_comment_id, item.text ?? "");
+    else await graph(deps, token, META[platform].reply(id), { method: "POST", body: { message: item.text }, platform });
     await deps.sql(`UPDATE public.inbox_comments SET replied_at = now() WHERE id = $1`, [item.comment_id]);
   } else if (item.kind === "private_reply") {
-    if (comment.dm_sent_at) throw new GraphError("This commenter already got a DM for this comment. Instagram allows one.");
-    if (Date.now() - Date.parse(comment.created_at) > PRIVATE_REPLY_WINDOW_MS) throw new GraphError("Instagram only allows a DM to a commenter within 7 days of the comment.");
-    const sent = await graph(deps, token, "me/messages", { method: "POST", body: { recipient: { comment_id: comment.platform_comment_id }, message: { text: item.text } } });
+    if (comment.dm_sent_at) throw new GraphError(`This commenter already got a DM for this comment. ${name} allows one.`);
+    if (Date.now() - Date.parse(comment.created_at) > PRIVATE_REPLY_WINDOW_MS) throw new GraphError(`${name} only allows a DM to a commenter within 7 days of the comment.`);
+    const sent = await graph(deps, token, "me/messages", { method: "POST", body: { recipient: { comment_id: comment.platform_comment_id }, message: { text: item.text } }, platform });
     if (comment.commenter_id) {
       await recordOutgoing(deps, account, comment.commenter_id, comment.commenter_username, item.text ?? "", item.sent_by, item.actor_id, { commentId: comment.platform_comment_id }, sent.message_id ?? null);
     } else {
@@ -210,13 +233,13 @@ async function sendOne(deps: InboxDeps, item: Outbox) {
     }
   } else {
     const hide = item.kind === "hide_comment";
-    await graph(deps, token, `${id}?hide=${hide}`, { method: "POST" });
+    await graph(deps, token, META[platform].hide(id, hide), { method: "POST", platform });
     await deps.sql(`UPDATE public.inbox_comments SET hidden = $2 WHERE id = $1`, [item.comment_id, hide]);
   }
 }
 
-// Sends what people queued. A refusal from Instagram (window closed, comment deleted) fails
-// the item with Instagram's reason; the person sees it in the inbox.
+// Sends what people queued. A refusal from the platform (window closed, comment deleted) fails
+// the item with its reason; the person sees it in the inbox.
 export async function runOutbox(deps: InboxDeps) {
   const items = await deps.sql<Outbox>(`SELECT * FROM public.claim_inbox_outbox(10, 120)`, []);
   let sent = 0;
