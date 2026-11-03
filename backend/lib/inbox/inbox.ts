@@ -191,12 +191,13 @@ function cleanEmail(value: unknown) {
   return value.trim().toLowerCase();
 }
 
-export async function listContacts(deps: InboxDeps, caller: Caller, input: { workspace_id?: unknown; search?: unknown; tag?: unknown; limit?: unknown; offset?: unknown }) {
+export async function listContacts(deps: InboxDeps, caller: Caller, input: { workspace_id?: unknown; search?: unknown; tag?: unknown; account_id?: unknown; limit?: unknown; offset?: unknown }) {
   const workspaceId = requireUuid(input.workspace_id, "Workspace");
   await membership(deps.sql, caller, workspaceId, false);
   requireOn(deps, workspaceId);
   const search = typeof input.search === "string" && input.search.trim() ? `%${input.search.trim().toLowerCase().replace(/[%_]/g, "")}%` : null;
   const tag = typeof input.tag === "string" && input.tag.trim() ? input.tag.trim().toLowerCase() : null;
+  const accountId = input.account_id ? requireUuid(input.account_id, "Account") : null;
   const { limit, offset } = page(input);
   const contacts = await deps.sql(
     `SELECT ct.id, ct.username, ct.name, ct.email, ct.tags, ct.notes, ct.source, ct.first_seen_at, ct.last_seen_at, ${ACCOUNT_JSON} AS account,
@@ -206,9 +207,9 @@ export async function listContacts(deps: InboxDeps, caller: Caller, input: { wor
      FROM public.contacts ct JOIN public.connected_accounts a ON a.id = ct.connected_account_id
      WHERE ct.workspace_id = $1
        AND ($2::text IS NULL OR lower(coalesce(ct.username, '')) LIKE $2 OR lower(coalesce(ct.name, '')) LIKE $2 OR lower(coalesce(ct.email, '')) LIKE $2)
-       AND ($3::text IS NULL OR $3 = ANY(ct.tags))
+       AND ($3::text IS NULL OR $3 = ANY(ct.tags)) AND ($6::uuid IS NULL OR ct.connected_account_id = $6)
      ORDER BY ct.last_seen_at DESC LIMIT $4 OFFSET $5`,
-    [workspaceId, search, tag, limit, offset],
+    [workspaceId, search, tag, limit, offset, accountId],
   );
   return { contacts };
 }

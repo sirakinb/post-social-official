@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card } from "@/components/beta/ui";
 import { callServer, loadViewer } from "@/lib/beta/workspace";
-import { InboxNav } from "../inbox-nav";
+import { InboxNav, inboxAccounts, inboxQuery } from "../inbox-nav";
 import { ContactEditor } from "./contact-editor";
 
 export const metadata = { title: "Contacts · Post Social" };
@@ -25,18 +25,19 @@ type Contact = {
 
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
-export default async function ContactsPage({ searchParams }: { searchParams: Promise<{ workspace?: string; q?: string; tag?: string }> }) {
+export default async function ContactsPage({ searchParams }: { searchParams: Promise<{ workspace?: string; account?: string; q?: string; tag?: string }> }) {
   const params = await searchParams;
-  const { workspace } = await loadViewer("/beta/inbox/contacts", params.workspace);
+  const { workspace, client } = await loadViewer("/beta/inbox/contacts", params.workspace);
   if (!workspace) return <p className="p-8 text-ps-muted">You are not a member of any workspace yet.</p>;
-  const data = await callServer<{ contacts: Contact[] }>("contacts", { workspace_id: workspace.id, search: params.q ?? "", tag: params.tag ?? "", limit: 100 });
+  const { accounts, account } = await inboxAccounts(client, workspace.id, params.account);
+  const data = await callServer<{ contacts: Contact[] }>("contacts", { workspace_id: workspace.id, ...(account ? { account_id: account } : {}), search: params.q ?? "", tag: params.tag ?? "", limit: 100 });
   if (!data) notFound();
-  const ws: Record<string, string> = params.workspace ? { workspace: params.workspace } : {};
+  const ws = inboxQuery(params.workspace, account);
   const canEdit = workspace.role !== "reviewer";
 
   return (
     <div className="flex w-full max-w-[1180px] flex-col px-4 sm:px-8 pb-12 pt-6">
-      <InboxNav active="contacts" workspace={params.workspace} />
+      <InboxNav active="contacts" workspace={params.workspace} accounts={accounts} account={account} />
       <div className="mt-5 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="m-0 text-lg font-medium">Contacts</h1>
@@ -44,6 +45,7 @@ export default async function ContactsPage({ searchParams }: { searchParams: Pro
         </div>
         <form className="flex gap-2" action="/beta/inbox/contacts">
           {params.workspace && <input type="hidden" name="workspace" value={params.workspace} />}
+          {account && <input type="hidden" name="account" value={account} />}
           {params.tag && <input type="hidden" name="tag" value={params.tag} />}
           <input name="q" defaultValue={params.q ?? ""} placeholder="Search handle, name or email" aria-label="Search contacts" className="h-9 w-64 rounded-lg border border-ps-line-strong bg-ps-ground px-2.5 text-[13px] text-ps-text placeholder:text-ps-subtle" />
         </form>

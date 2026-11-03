@@ -4,7 +4,7 @@ import { Card, Status } from "@/components/beta/ui";
 import { callServer, loadViewer } from "@/lib/beta/workspace";
 import { cn } from "@/lib/utils";
 import { AutoRefresh } from "../auto-refresh";
-import { InboxNav } from "../inbox-nav";
+import { InboxNav, inboxAccounts, inboxQuery } from "../inbox-nav";
 import { CommentActions } from "./comment-actions";
 
 export const metadata = { title: "Comments · Post Social" };
@@ -32,20 +32,21 @@ const FILTERS = [
 const PENDING_LABEL: Record<string, string> = { comment_reply: "Reply", private_reply: "DM", hide_comment: "Hiding", unhide_comment: "Unhiding" };
 const when = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
-export default async function CommentsPage({ searchParams }: { searchParams: Promise<{ workspace?: string; filter?: string }> }) {
+export default async function CommentsPage({ searchParams }: { searchParams: Promise<{ workspace?: string; account?: string; filter?: string }> }) {
   const params = await searchParams;
-  const { workspace } = await loadViewer("/beta/inbox/comments", params.workspace);
+  const { workspace, client } = await loadViewer("/beta/inbox/comments", params.workspace);
   if (!workspace) return <p className="p-8 text-ps-muted">You are not a member of any workspace yet.</p>;
   const filter = FILTERS.some((f) => f.id === params.filter) ? params.filter! : "all";
-  const data = await callServer<{ comments: Comment[] }>("comments", { workspace_id: workspace.id, filter });
+  const { accounts, account } = await inboxAccounts(client, workspace.id, params.account);
+  const data = await callServer<{ comments: Comment[] }>("comments", { workspace_id: workspace.id, filter, ...(account ? { account_id: account } : {}) });
   if (!data) notFound();
   const canAct = workspace.role !== "reviewer";
-  const href = (id: string) => `/beta/inbox/comments?${new URLSearchParams({ ...(params.workspace ? { workspace: params.workspace } : {}), ...(id === "all" ? {} : { filter: id }) })}`;
+  const href = (id: string) => `/beta/inbox/comments?${new URLSearchParams({ ...inboxQuery(params.workspace, account), ...(id === "all" ? {} : { filter: id }) })}`;
 
   return (
     <div className="flex w-full max-w-[1180px] flex-col px-4 sm:px-8 pb-12 pt-6">
       <AutoRefresh seconds={10} />
-      <InboxNav active="comments" workspace={params.workspace} />
+      <InboxNav active="comments" workspace={params.workspace} accounts={accounts} account={account} />
       <div className="mt-5 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="m-0 text-lg font-medium">Comments</h1>

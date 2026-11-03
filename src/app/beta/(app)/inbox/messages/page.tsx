@@ -4,7 +4,7 @@ import { Card } from "@/components/beta/ui";
 import { callServer, loadViewer } from "@/lib/beta/workspace";
 import { cn } from "@/lib/utils";
 import { AutoRefresh } from "../auto-refresh";
-import { InboxNav } from "../inbox-nav";
+import { InboxNav, inboxAccounts, inboxQuery } from "../inbox-nav";
 import { Composer, DoneButton } from "./composer";
 
 export const metadata = { title: "Messages · Post Social" };
@@ -24,23 +24,24 @@ const ago = (iso: string) => {
 };
 const BY: Record<string, string> = { automation: "Automation", person: "You", agent: "AI agent", instagram: "From Instagram" };
 
-export default async function MessagesPage({ searchParams }: { searchParams: Promise<{ workspace?: string; c?: string; status?: string }> }) {
+export default async function MessagesPage({ searchParams }: { searchParams: Promise<{ workspace?: string; account?: string; c?: string; status?: string }> }) {
   const params = await searchParams;
-  const { workspace } = await loadViewer("/beta/inbox/messages", params.workspace);
+  const { workspace, client } = await loadViewer("/beta/inbox/messages", params.workspace);
   if (!workspace) return <p className="p-8 text-ps-muted">You are not a member of any workspace yet.</p>;
   const status = params.status === "done" ? "done" : "open";
-  const list = await callServer<{ conversations: Conversation[] }>("conversations", { workspace_id: workspace.id, status });
+  const { accounts, account } = await inboxAccounts(client, workspace.id, params.account);
+  const list = await callServer<{ conversations: Conversation[] }>("conversations", { workspace_id: workspace.id, status, ...(account ? { account_id: account } : {}) });
   if (!list) notFound();
   const selectedId = params.c ?? list.conversations[0]?.id;
   const open = selectedId ? await callServer<{ conversation: Conversation; messages: Message[]; pending: Pending[] }>("conversation", { conversation_id: selectedId }) : null;
-  const base = new URLSearchParams(params.workspace ? { workspace: params.workspace } : {});
+  const base = new URLSearchParams(inboxQuery(params.workspace, account));
   const link = (extra: Record<string, string>) => `/beta/inbox/messages?${new URLSearchParams({ ...Object.fromEntries(base), ...extra })}`;
   const unread = list.conversations.reduce((n, c) => n + c.unread, 0);
 
   return (
     <div className="flex w-full max-w-[1180px] flex-col px-4 sm:px-8 pb-12 pt-6">
       <AutoRefresh />
-      <InboxNav active="messages" workspace={params.workspace} unread={unread} />
+      <InboxNav active="messages" workspace={params.workspace} unread={unread} accounts={accounts} account={account} />
       <Card className="mt-5 grid min-h-[560px] overflow-hidden md:grid-cols-[300px_minmax(0,1fr)]">
         <div className="flex flex-col border-b border-ps-line md:border-b-0 md:border-r">
           <div className="flex gap-1 border-b border-ps-line p-2 text-xs">
