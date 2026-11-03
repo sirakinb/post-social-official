@@ -115,6 +115,17 @@ describe("inbox: sending", () => {
     expect(db.writes.find((w) => w.query.includes("SET deleted_at"))!.params).toEqual(["cm1"]);
   });
 
+  it("treats a comment that's already gone as deleted, and keeps other refusals", async () => {
+    const comment = { platform_comment_id: "c9", commenter_id: null, commenter_username: null, created_at: new Date().toISOString(), dm_sent_at: null };
+    const refusing = (message: string) => (async () => new Response(JSON.stringify({ error: { message, code: 100 } }), { status: 400 })) as unknown as typeof fetch;
+    const gone = fakeSql({ outbox: [item({ kind: "delete_comment", text: null })], comment });
+    expect(await runOutbox({ ...deps(gone, fakeGraph()), http: refusing("Unsupported post request. Object with ID 'c9' does not exist") })).toBe(1);
+    expect(gone.writes.some((w) => w.query.includes("SET deleted_at"))).toBe(true);
+    const other = fakeSql({ outbox: [item({ kind: "delete_comment", text: null })], comment });
+    expect(await runOutbox({ ...deps(other, fakeGraph()), http: refusing("Invalid parameter") })).toBe(0);
+    expect(other.writes.some((w) => w.query.includes("SET deleted_at"))).toBe(false);
+  });
+
   it("hides a comment", async () => {
     const db = fakeSql({ outbox: [item({ kind: "hide_comment", text: null })], comment: { platform_comment_id: "c9", commenter_id: null, commenter_username: null, created_at: new Date().toISOString(), dm_sent_at: null } });
     const graph = fakeGraph();

@@ -151,7 +151,9 @@ export async function listComments(deps: InboxDeps, caller: Caller, input: { wor
              WHERE d.connected_account_id = c.connected_account_id AND d.platform_request_id = c.platform_post_id LIMIT 1) AS post_caption,
             (SELECT d.live_url FROM public.destinations d WHERE d.connected_account_id = c.connected_account_id AND d.platform_request_id = c.platform_post_id LIMIT 1) AS post_url,
             (SELECT jsonb_agg(jsonb_build_object('kind', o.kind, 'status', o.status, 'error', o.error) ORDER BY o.created_at)
-             FROM public.inbox_outbox o WHERE o.comment_id = c.id AND o.status <> 'sent') AS pending
+             FROM (SELECT DISTINCT ON (kind) kind, status, error, created_at FROM public.inbox_outbox
+                   WHERE comment_id = c.id ORDER BY kind, created_at DESC) o
+             WHERE o.status <> 'sent') AS pending
      FROM public.inbox_comments c JOIN public.connected_accounts a ON a.id = c.connected_account_id
      WHERE c.workspace_id = $1 AND NOT c.from_account AND c.deleted_at IS NULL
        AND ($2 = 'all' OR ($2 = 'unreplied' AND c.replied_at IS NULL AND c.dm_sent_at IS NULL AND NOT c.hidden) OR ($2 = 'hidden' AND c.hidden))

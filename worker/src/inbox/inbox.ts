@@ -233,7 +233,10 @@ async function sendOne(deps: InboxDeps, item: Outbox) {
     }
   } else if (item.kind === "delete_comment") {
     if (platform === "threads") throw new GraphError("Threads doesn't let apps delete replies.");
-    await graph(deps, token, id, { method: "DELETE", platform });
+    // Already gone there (deleted by its writer or in the app): it just leaves the inbox.
+    await graph(deps, token, id, { method: "DELETE", platform }).catch((error) => {
+      if (!(error instanceof GraphError && error.code === 100 && /does not exist/i.test(error.message))) throw error;
+    });
     await deps.sql(`UPDATE public.inbox_comments SET deleted_at = now() WHERE id = $1`, [item.comment_id]);
   } else {
     const hide = item.kind === "hide_comment";
