@@ -89,18 +89,24 @@ export async function subscribeAccounts(deps: InboxDeps) {
   return done;
 }
 
-const randomCode = (random: () => number) => {
+// Link codes come from crypto randomness so they can't be guessed; bytes past 228 are skipped to keep letters even.
+const randomCode = () => {
   const letters = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
-  return Array.from({ length: 10 }, () => letters[Math.floor(random() * letters.length)]).join("");
+  let code = "";
+  while (code.length < 10) {
+    for (const b of crypto.getRandomValues(new Uint8Array(16))) {
+      if (b < 228 && code.length < 10) code += letters[b % letters.length];
+    }
+  }
+  return code;
 };
 
 // The DM: plain text, or Instagram's button card with each link wrapped so clicks count.
 async function buildMessage(deps: InboxDeps, rule: Rule, runId: string, text: string) {
   if (!rule.dm_buttons.length) return { text };
-  const random = deps.random ?? Math.random;
   const buttons = [];
   for (const button of rule.dm_buttons) {
-    const code = randomCode(random);
+    const code = randomCode();
     await deps.sql(
       `INSERT INTO public.tracked_links (code, workspace_id, automation_id, run_id, url) VALUES ($1, $2, $3, $4, $5)`,
       [code, rule.workspace_id, rule.id, runId, button.url],
