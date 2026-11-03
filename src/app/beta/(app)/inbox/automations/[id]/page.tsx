@@ -27,6 +27,10 @@ const outcome: Record<ActivityRow["status"], { tone: "live" | "failed" | "quiet"
   skipped: { tone: "quiet", label: "Skipped" },
 };
 
+// The worker claims a comment as "skipped" with the reason "Sending" until the DM goes out
+// (worker/src/inbox/runner.ts answerComment).
+const sending = (r: ActivityRow) => r.status === "skipped" && r.reason === "Sending";
+
 // One automation: its numbers, every comment it answered, and editing.
 export default async function AutomationPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ workspace?: string; edit?: string }> }) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
@@ -99,8 +103,14 @@ export default async function AutomationPage({ params, searchParams }: { params:
                         <span className="text-ps-muted">{r.comment_text}</span>
                       </td>
                       <td className="px-4 py-3">
-                        <Status tone={outcome[r.status].tone} label={outcome[r.status].label} />
-                        {r.reason && r.status !== "sent" && <p className="m-0 mt-1 text-xs text-ps-subtle">{r.reason}</p>}
+                        {sending(r) ? (
+                          <Status tone="quiet" label="Sending" />
+                        ) : (
+                          <>
+                            <Status tone={outcome[r.status].tone} label={outcome[r.status].label} />
+                            {r.reason && r.status !== "sent" && <p className="m-0 mt-1 text-xs text-ps-subtle">{r.reason}</p>}
+                          </>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-ps-muted">{r.reply_status === "sent" ? "Posted" : r.reply_status === "failed" ? "Didn't post" : "—"}</td>
                       <td className="px-4 py-3 text-right tabular-nums">{r.clicks}</td>
