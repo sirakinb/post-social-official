@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Card, PlatformMark, Status } from "@/components/beta/ui";
 import { callServer, loadViewer } from "@/lib/beta/workspace";
 import type { AutomationRow } from "./types";
+import { InboxNav } from "../inbox-nav";
 
 export const metadata = { title: "Automations · Post Social" };
 
@@ -20,7 +21,8 @@ export default async function AutomationsPage({ searchParams }: { searchParams: 
 
   return (
     <div className="flex w-full max-w-[1180px] flex-col px-4 sm:px-8 pb-12 pt-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <InboxNav active="automations" workspace={params.workspace} />
+      <div className="mt-5 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="m-0 text-lg font-medium">Automations</h1>
           <p className="mt-1 text-ps-muted">When someone comments a keyword on your Instagram post, they get a DM with your link.</p>

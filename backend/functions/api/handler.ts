@@ -40,6 +40,7 @@ import { tiktokCreatorInfo } from "../../lib/connections/tiktok-creator";
 import type { Settings } from "../../lib/connections/platforms";
 import { listAnalytics, postAnalytics, refreshAnalytics } from "../../lib/analytics";
 import { analyticsDashboard } from "../../lib/analytics-dashboard";
+import { dmCommenter, getConversation, hideComment, listComments, listContacts, listConversations, replyToComment, sendMessage, setConversationStatus, updateContact } from "../../lib/inbox/inbox";
 import { automationPosts, createAutomation, deleteAutomation, getAutomation, inboxOn, listAutomations, updateAutomation, type InboxDeps } from "../../lib/inbox/automations";
 import { originAllowed } from "../media/handler";
 import { joinWaitlist } from "../../lib/waitlist";
@@ -418,6 +419,16 @@ async function personRoute(deps: ApiHandlerDeps, request: Request) {
       update_automation: (_sql: Sql, caller: Caller, input: Record<string, unknown>) => updateAutomation(inbox, caller, input),
       delete_automation: (_sql: Sql, caller: Caller, input: Record<string, unknown>) => deleteAutomation(inbox, caller, input),
       automation_posts: (_sql: Sql, caller: Caller, input: Record<string, unknown>) => automationPosts(inbox, caller, input),
+      conversations: (_sql: Sql, caller: Caller, input: Record<string, unknown>) => listConversations(inbox, caller, input),
+      conversation: (_sql: Sql, caller: Caller, input: Record<string, unknown>) => getConversation(inbox, caller, input),
+      send_message: (_sql: Sql, caller: Caller, input: Record<string, unknown>) => sendMessage(inbox, caller, input),
+      update_conversation: (_sql: Sql, caller: Caller, input: Record<string, unknown>) => setConversationStatus(inbox, caller, input),
+      comments: (_sql: Sql, caller: Caller, input: Record<string, unknown>) => listComments(inbox, caller, input),
+      reply_to_comment: (_sql: Sql, caller: Caller, input: Record<string, unknown>) => replyToComment(inbox, caller, input),
+      dm_commenter: (_sql: Sql, caller: Caller, input: Record<string, unknown>) => dmCommenter(inbox, caller, input),
+      hide_comment: (_sql: Sql, caller: Caller, input: Record<string, unknown>) => hideComment(inbox, caller, input),
+      contacts: (_sql: Sql, caller: Caller, input: Record<string, unknown>) => listContacts(inbox, caller, input),
+      update_contact: (_sql: Sql, caller: Caller, input: Record<string, unknown>) => updateContact(inbox, caller, input),
     };
     const actions = { ...allActions, ...statsActions, ...mediaActions, ...billing, ...inboxActions } as Record<string, (sql: Sql, caller: Caller, input: Record<string, unknown>) => Promise<unknown>>;
     if (!Object.hasOwn(actions, name)) throw new ApiError(400, `Unknown action. Use one of: ${Object.keys(actions).join(", ")}.`);

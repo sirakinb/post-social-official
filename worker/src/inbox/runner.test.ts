@@ -21,6 +21,12 @@ function fakeSql(opts: { alreadySent?: number; claimed?: boolean } = {}) {
       return opts.claimed === false ? [] : [{ id: "run1" }];
     }
     if (query.includes("FROM public.inbox_accounts ia JOIN")) return [{ ...account, webhook_id: null }];
+    if (query.includes("INSERT INTO public.contacts")) return [{ id: "ct1" }];
+    if (query.includes("INSERT INTO public.conversations")) return [{ id: "cv1" }];
+    if (query.includes("INSERT INTO public.messages")) {
+      writes.push({ query, params });
+      return [{ id: "m1" }];
+    }
     writes.push({ query, params });
     return [];
   }) as Sql;
@@ -60,6 +66,9 @@ describe("comment-to-DM", () => {
     expect(link.params.slice(1)).toEqual(["w1", "auto1", "run1", "https://example.com/g"]);
     const done = db.writes.find((w) => w.query.includes("UPDATE public.automation_runs SET status"))!;
     expect(done.params.slice(1)).toEqual(["sent", null, "Hi @jay, here you go", "sent"]);
+    // The DM also shows in the commenter's conversation, marked as sent by the automation.
+    const logged = db.writes.find((w) => w.query.includes("INSERT INTO public.messages"))!;
+    expect(logged.params.slice(2, 7)).toEqual(["out", null, "Hi @jay, here you go", "[]", "automation"]);
   });
 
   it("never answers the account's own comments", async () => {
