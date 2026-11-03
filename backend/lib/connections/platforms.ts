@@ -2,6 +2,7 @@
 // (its oauth, token lifecycle and revocation code); runtime-neutral (fetch
 // only). Scopes are exactly those in the PRD, section 6. Bluesky's sign-in is different
 // (pushed requests and DPoP-bound tokens) and lives in atproto.ts.
+import { inboxOn, inboxSwitch } from "../inbox/automations";
 import { BLUESKY_SCOPE, publicProfile, refreshSession, revokeSession, type BlueskySession } from "./atproto";
 import type { TokenSet } from "./crypto";
 import { X_PRICES } from "../pricing";
@@ -118,8 +119,15 @@ export function statsPlatforms(setting: Settings): Platform[] {
 const officialHere = (platform: Platform, setting: Settings, workspaceId?: string | null) =>
   officialPlatformsFor(analyticsPlatforms(setting), statsPreview(setting), workspaceId).includes(platform);
 
+// Comment-to-DM (backend/lib/inbox) needs Instagram's comment and message permissions, asked
+// for only where automations are switched on (INBOX_WORKSPACES).
+export const INBOX_SCOPES: Partial<Record<Platform, string[]>> = {
+  instagram: ["instagram_business_manage_comments", "instagram_business_manage_messages"],
+};
+
 export function scopesFor(platform: Platform, setting: Settings, workspaceId?: string | null) {
-  return officialHere(platform, setting, workspaceId) ? [...SCOPES[platform], ...ANALYTICS_SCOPES[platform]] : SCOPES[platform];
+  const base = officialHere(platform, setting, workspaceId) ? [...SCOPES[platform], ...ANALYTICS_SCOPES[platform]] : SCOPES[platform];
+  return workspaceId && INBOX_SCOPES[platform] && inboxOn(inboxSwitch((name) => optional(setting, name)), workspaceId) ? [...base, ...INBOX_SCOPES[platform]!] : base;
 }
 
 // Facebook's permissions come from a Meta login configuration. Where its stats are read

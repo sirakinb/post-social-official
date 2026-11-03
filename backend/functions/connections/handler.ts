@@ -16,6 +16,8 @@
 //   POST /meta/data-deletion            Meta data-deletion callback
 //   GET  /meta/data-deletion/status     ?code=
 //   POST /meta/deauthorize              Meta deauthorize callback
+//   GET  /meta/webhooks                 Meta's webhook address check (hub.challenge)
+//   POST /meta/webhooks                 Instagram comment and message events (signed)
 import { ApiError, type Caller } from "../../lib/access";
 import { accountLimitMessage } from "../../lib/billing";
 import type { SignedInUser } from "../../lib/insforge-admin";
@@ -23,12 +25,14 @@ import { callbackUrl, completeConnection, disconnectAccount, finishingOrigin, is
 import { deletionStatus, handleDataDeletion, handleDeauthorize } from "../../lib/connections/meta-deletion";
 import { createProfile, deleteProfile, moveAccount, setTiktokDelivery, updateProfile } from "../../lib/connections/profiles";
 import { clientKey, clientMetadata, publicJwk } from "../../lib/connections/atproto";
+import { receiveWebhook, verifyWebhook } from "../../lib/inbox/webhooks";
 
 export type ConnectionsHandlerDeps = ConnectionDeps & {
   userForToken: (token: string | null) => Promise<SignedInUser | null>;
   webAppHome: string; // where to send people when there is no saved return address
   metaAppSecrets: string[];
   selfBaseUrl: string; // public base URL of this function, for the deletion status link
+  metaWebhookVerifyToken?: string | null; // our answer to Meta's webhook address check
 };
 
 const JSON_HEADERS = { "Content-Type": "application/json", "Cache-Control": "no-store" };
@@ -96,6 +100,14 @@ export function createConnectionsHandler(deps: ConnectionsHandlerDeps) {
       }
       if (path === "/meta/deauthorize" && method === "POST") {
         return json(200, await handleDeauthorize({ sql: deps.sql, appSecrets: deps.metaAppSecrets }, request));
+      }
+      if (path === "/meta/webhooks" && method === "GET") {
+        const challenge = verifyWebhook(new URL(request.url).searchParams, deps.metaWebhookVerifyToken ?? null);
+        return challenge === null ? json(403, { error: "Verification failed." }) : new Response(challenge, { status: 200, headers: { "Content-Type": "text/plain" } });
+      }
+      if (path === "/meta/webhooks" && method === "POST") {
+        const { status } = await receiveWebhook({ sql: deps.sql, appSecrets: deps.metaAppSecrets }, request);
+        return json(status, status === 200 ? { received: true } : { error: "Not accepted." });
       }
 
       if (path === "/start" || path === "/disconnect" || path === "/complete" || isPersonAction(path)) {

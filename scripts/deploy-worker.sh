@@ -42,6 +42,10 @@ trap 'rm -f "$env_file"' EXIT
   # each reviewer's test login): the platforms, and the workspace ids. Both optional.
   echo "ANALYTICS_PREVIEW_PLATFORMS=$(secret ANALYTICS_PREVIEW_PLATFORMS 2>/dev/null || true)"
   echo "ANALYTICS_PREVIEW_WORKSPACES=$(secret ANALYTICS_PREVIEW_WORKSPACES 2>/dev/null || true)"
+  # Comment-to-DM: the workspaces it's switched on for (or "all"), and where tracked links
+  # point (defaults to the website). Both optional; without the first the inbox sweeps are off.
+  echo "INBOX_WORKSPACES=$(secret INBOX_WORKSPACES 2>/dev/null || true)"
+  echo "LINK_BASE_URL=$(secret LINK_BASE_URL 2>/dev/null || true)"
   echo "SCRAPECREATORS_API_KEY=$(secret SCRAPECREATORS_API_KEY 2>/dev/null || true)"
   # Daily stats health check alerts, for the admin only: the address, the Resend key to
   # email it, and the ScrapeCreators credit level to warn below. All optional.

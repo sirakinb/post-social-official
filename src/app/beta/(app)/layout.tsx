@@ -6,7 +6,7 @@ import { RegisterServiceWorker } from "@/components/register-service-worker";
 import { Sidebar } from "@/components/beta/sidebar";
 import { ThemeToggle } from "@/components/beta/theme-toggle";
 import { GET_STARTED_HIDDEN_COOKIE, loadGetStarted, stepsDone } from "@/lib/beta/get-started";
-import { loadViewer } from "@/lib/beta/workspace";
+import { callServer, loadViewer } from "@/lib/beta/workspace";
 import { THEME_COOKIE, parseTheme } from "@/lib/beta/theme";
 import { signOut } from "../actions";
 import { analyticsEnabled } from "./stats-switch";
@@ -20,13 +20,16 @@ export default async function BetaAppLayout({ children }: { children: React.Reac
   let plan: { name: string; used: number; limit: number; resets: string } | null = null;
   let started: number | null = null;
   let noAccounts = false;
+  let inbox = false;
   if (workspace) {
     const showSteps = workspace.role !== "reviewer" && !jar.get(GET_STARTED_HIDDEN_COOKIE);
-    const [{ data: planRow }, { data: usage }, steps] = await Promise.all([
+    const [{ data: planRow }, { data: usage }, steps, inboxStatus] = await Promise.all([
       client.database.from("workspace_plans").select("plans(name, max_posts_per_month)").eq("workspace_id", workspace.id).maybeSingle(),
       client.database.rpc("workspace_usage", { target_workspace: workspace.id }),
       showSteps ? loadGetStarted(client, workspace.id) : null,
+      callServer<{ enabled: boolean }>("inbox_status", { workspace_id: workspace.id }),
     ]);
+    inbox = Boolean(inboxStatus?.enabled);
     if (steps && stepsDone(steps) < 3) started = stepsDone(steps);
     noAccounts = steps ? !steps.account : false;
     const p = (planRow as { plans: { name: string; max_posts_per_month: number } | null } | null)?.plans;
@@ -52,6 +55,7 @@ export default async function BetaAppLayout({ children }: { children: React.Reac
         noAccounts={noAccounts}
         signOut={signOut}
         analytics={analyticsEnabled()}
+        inbox={inbox}
       />
       <div className="min-w-0 flex-1">
         {/* The light/dark switch, top right above every page. */}
