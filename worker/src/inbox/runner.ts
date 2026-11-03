@@ -7,6 +7,7 @@ import type { Sql } from "../../../backend/lib/access";
 import type { Settings } from "../../../backend/lib/connections/platforms";
 import { personalize, pickAutomation, pickVariation, type AutomationRule } from "../../../backend/lib/inbox/match";
 import { accountToken } from "../credentials";
+import { recordComment, recordMessage, recordOutgoing, type MessagingEvent } from "./inbox";
 
 const GRAPH = "https://graph.instagram.com/v25.0";
 const FIELDS = ["comments", "messages"];
@@ -21,7 +22,7 @@ export type InboxDeps = {
   log?: (message: string, details?: Record<string, unknown>) => void;
 };
 
-type Account = { id: string; workspace_id: string; platform: "instagram"; display_name: string; external_account_id: string; webhook_id: string | null };
+export type Account = { id: string; workspace_id: string; platform: "instagram"; display_name: string; external_account_id: string; webhook_id: string | null };
 type Rule = AutomationRule & {
   workspace_id: string;
   connected_account_id: string;
@@ -32,16 +33,16 @@ type Rule = AutomationRule & {
   comment_reply_variations: string[];
   repeat_mode: "once" | "every_comment";
 };
-type CommentValue = { id?: string; text?: string; from?: { id?: string; username?: string }; media?: { id?: string } };
+export type CommentValue = { id?: string; text?: string; from?: { id?: string; username?: string }; media?: { id?: string } };
 type StoredEvent = { id: number; platform: string; entry_id: string; field: string; payload: CommentValue };
 
-class GraphError extends Error {
+export class GraphError extends Error {
   constructor(message: string, public code?: number) {
     super(message);
   }
 }
 
-async function graph(deps: InboxDeps, token: string, path: string, init: { method?: string; body?: unknown } = {}) {
+export async function graph(deps: InboxDeps, token: string, path: string, init: { method?: string; body?: unknown } = {}) {
   const http = deps.http ?? fetch;
   const response = await http(`${GRAPH}/${path}`, {
     method: init.method ?? "GET",
@@ -53,7 +54,7 @@ async function graph(deps: InboxDeps, token: string, path: string, init: { metho
   return body;
 }
 
-const tokenFor = (deps: InboxDeps, account: { id: string; display_name: string }) =>
+export const tokenFor = (deps: InboxDeps, account: { id: string; display_name: string }) =>
   deps.token ? deps.token(account.id) : accountToken(deps, { id: account.id, platform: "instagram", displayName: account.display_name });
 
 // Learns each new account's webhook id and subscribes it to comment and message events.
@@ -88,18 +89,24 @@ export async function subscribeAccounts(deps: InboxDeps) {
   return done;
 }
 
-const randomCode = (random: () => number) => {
+// Link codes come from crypto randomness so they can't be guessed; bytes past 228 are skipped to keep letters even.
+const randomCode = () => {
   const letters = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
-  return Array.from({ length: 10 }, () => letters[Math.floor(random() * letters.length)]).join("");
+  let code = "";
+  while (code.length < 10) {
+    for (const b of crypto.getRandomValues(new Uint8Array(16))) {
+      if (b < 228 && code.length < 10) code += letters[b % letters.length];
+    }
+  }
+  return code;
 };
 
 // The DM: plain text, or Instagram's button card with each link wrapped so clicks count.
 async function buildMessage(deps: InboxDeps, rule: Rule, runId: string, text: string) {
   if (!rule.dm_buttons.length) return { text };
-  const random = deps.random ?? Math.random;
   const buttons = [];
   for (const button of rule.dm_buttons) {
-    const code = randomCode(random);
+    const code = randomCode();
     await deps.sql(
       `INSERT INTO public.tracked_links (code, workspace_id, automation_id, run_id, url) VALUES ($1, $2, $3, $4, $5)`,
       [code, rule.workspace_id, rule.id, runId, button.url],
@@ -109,7 +116,7 @@ async function buildMessage(deps: InboxDeps, rule: Rule, runId: string, text: st
   return { attachment: { type: "template", payload: { template_type: "button", text, buttons } } };
 }
 
-async function accountFor(deps: InboxDeps, entryId: string) {
+export async function accountFor(deps: InboxDeps, entryId: string) {
   const [account] = await deps.sql<Account>(
     `SELECT a.id, a.workspace_id, a.platform, a.display_name, a.external_account_id, ia.webhook_id
      FROM public.connected_accounts a LEFT JOIN public.inbox_accounts ia ON ia.connected_account_id = a.id
@@ -180,6 +187,7 @@ export async function answerComment(deps: InboxDeps, entryId: string, comment: C
     `UPDATE public.automation_runs SET status = $2, reason = $3, dm_text = $4, reply_status = $5 WHERE id = $1`,
     [run.id, status, reason, dmText, replyStatus],
   );
+  if (status === "sent" && commenterId) await recordOutgoing(deps, account, commenterId, comment.from?.username ?? null, dmText, "automation", null, { commentId, replied: replyStatus === "sent" });
   return status;
 }
 
@@ -189,7 +197,11 @@ export async function runInboxSweep(deps: InboxDeps) {
   let handled = 0;
   for (const event of events) {
     try {
-      if (event.platform === "instagram" && event.field === "comments") await answerComment(deps, event.entry_id, event.payload);
+      if (event.platform === "instagram" && event.field === "comments") {
+        await recordComment(deps, event.entry_id, event.payload);
+        await answerComment(deps, event.entry_id, event.payload);
+      }
+      if (event.platform === "instagram" && event.field === "messages") await recordMessage(deps, event.entry_id, event.payload as MessagingEvent);
       await deps.sql(`UPDATE public.inbox_webhook_events SET processed_at = now(), error = NULL WHERE id = $1`, [event.id]);
       handled++;
     } catch (error) {

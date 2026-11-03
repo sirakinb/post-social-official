@@ -3,27 +3,31 @@ import { notFound } from "next/navigation";
 import { Card, PlatformMark, Status } from "@/components/beta/ui";
 import { callServer, loadViewer } from "@/lib/beta/workspace";
 import type { AutomationRow } from "./types";
+import { InboxNav, inboxAccounts, inboxQuery } from "../inbox-nav";
 
 export const metadata = { title: "Automations · Post Social" };
 
 const count = (n: number) => n.toLocaleString("en-US");
 
 // Inbox → Automations: every comment-to-DM automation with its numbers.
-export default async function AutomationsPage({ searchParams }: { searchParams: Promise<{ workspace?: string }> }) {
+export default async function AutomationsPage({ searchParams }: { searchParams: Promise<{ workspace?: string; account?: string }> }) {
   const params = await searchParams;
-  const { workspace } = await loadViewer("/beta/inbox/automations", params.workspace);
+  const { workspace, client } = await loadViewer("/beta/inbox/automations", params.workspace);
   if (!workspace) return <p className="p-8 text-ps-muted">You are not a member of any workspace yet.</p>;
-  const data = await callServer<{ enabled: boolean; automations: AutomationRow[] }>("automations", { workspace_id: workspace.id });
+  const { accounts, account } = await inboxAccounts(client, workspace.id, params.account);
+  const data = await callServer<{ enabled: boolean; automations: AutomationRow[] }>("automations", { workspace_id: workspace.id, ...(account ? { account_id: account } : {}) });
   if (!data?.enabled) notFound();
   const canEdit = workspace.role !== "reviewer";
-  const q = params.workspace ? `?workspace=${encodeURIComponent(params.workspace)}` : "";
+  const query = new URLSearchParams(inboxQuery(params.workspace, account)).toString();
+  const q = query ? `?${query}` : "";
 
   return (
     <div className="flex w-full max-w-[1180px] flex-col px-4 sm:px-8 pb-12 pt-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <InboxNav active="automations" workspace={params.workspace} accounts={accounts} account={account} />
+      <div className="mt-5 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="m-0 text-lg font-medium">Automations</h1>
-          <p className="mt-1 text-ps-muted">When someone comments a keyword on your Instagram post, they get a DM with your link.</p>
+          <p className="mt-1 text-ps-muted">When someone comments a keyword on your Instagram post, they get a DM with a link.</p>
         </div>
         {canEdit && (
           <Link href={`/beta/inbox/automations/new${q}`} className="flex h-9 items-center rounded-lg bg-ps-plum px-3.5 text-[13px] font-medium text-ps-ground hover:bg-ps-plum-hover">

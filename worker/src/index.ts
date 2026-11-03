@@ -20,6 +20,7 @@ import { resendSender, runNudgeSweep } from "../../backend/lib/nudges";
 import { PLATFORMS, statsPreview, type Platform } from "../../backend/lib/connections/platforms";
 import { createTelemetry } from "../../backend/lib/telemetry";
 import { runInboxSweep, subscribeAccounts } from "./inbox/runner";
+import { fillContactProfiles, runOutbox } from "./inbox/inbox";
 
 function setting(name: string, fallback?: string) {
   const value = process.env[name] ?? fallback;
@@ -166,6 +167,7 @@ const linkBase = process.env.LINK_BASE_URL || webAppUrl;
 log("inbox", { on: inboxOnHere, links: linkBase || null });
 if (inboxOnHere && linkBase) {
   const inboxDeps = { sql, setting: (name: string) => setting(name), linkBase, log };
-  void every(4 * 1000, "inbox sweep", () => runInboxSweep(inboxDeps));
-  void every(60 * 1000, "inbox subscribe", () => subscribeAccounts(inboxDeps));
+  // Webhook events first, then replies people queued in the inbox.
+  void every(4 * 1000, "inbox sweep", async () => (await runInboxSweep(inboxDeps)) + (await runOutbox(inboxDeps)));
+  void every(60 * 1000, "inbox subscribe", async () => (await subscribeAccounts(inboxDeps)) + (await fillContactProfiles(inboxDeps)));
 }

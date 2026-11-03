@@ -21,7 +21,7 @@ const ITEMS: Item[] = [
   { href: "/beta/drafts", label: "Drafts", match: (p) => p.startsWith("/beta/drafts"), icon: icon(<><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M9 13h6M9 17h4" /></>) },
   { href: "/beta/calendar", label: "Calendar", match: (p) => p.startsWith("/beta/calendar"), icon: icon(<><rect x="3" y="4.5" width="18" height="16" rx="2" /><path d="M3 9.5h18M8 2.5v4M16 2.5v4" /></>) },
   { href: "/beta/analytics", label: "Analytics", match: (p) => p.startsWith("/beta/analytics") || p.startsWith("/beta/stats"), icon: icon(<><path d="M4 20V10" /><path d="M10 20V4" /><path d="M16 20v-7" /><path d="M21 20H3" /></>) },
-  { href: "/beta/inbox/automations", label: "Inbox", match: (p) => p.startsWith("/beta/inbox"), icon: icon(<><path d="M3 13h5l2 3h4l2-3h5" /><path d="M5 5h14l2 8v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6z" /></>) },
+  { href: "/beta/inbox", label: "Inbox", match: (p) => p.startsWith("/beta/inbox"), icon: icon(<><path d="M3 13h5l2 3h4l2-3h5" /><path d="M5 5h14l2 8v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6z" /></>) },
   { href: "/beta/activity", label: "Logs", match: (p) => p.startsWith("/beta/activity"), icon: icon(<path d="M3 12h4l3-8 4 16 3-8h4" />) },
   { href: "/beta/api", label: "Connect your AI", match: (p) => p.startsWith("/beta/api") || p.startsWith("/beta/keys"), icon: icon(<><path d="m8 8-5 4 5 4" /><path d="m16 8 5 4-5 4" /><path d="m13.5 5-3 14" /></>) },
   { href: "/beta/usage", label: "Usage", match: (p) => p.startsWith("/beta/usage"), icon: icon(<><path d="M21 12a9 9 0 1 1-9-9" /><path d="M21 12h-9V3" /></>) },

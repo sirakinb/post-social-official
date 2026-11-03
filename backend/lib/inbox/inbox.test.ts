@@ -84,3 +84,45 @@ describe("Meta webhooks", () => {
     expect(eventsIn({ object: "user", entry: [] })).toEqual([]);
   });
 });
+
+describe("inbox replies (service)", async () => {
+  const { sendMessage, dmCommenter, updateContact } = await import("./inbox");
+  const agent = { kind: "key" as const, credentialId: "k", workspaceId: "w1", actorId: "act", mode: "live" as const, displayName: "Claude", entryPoint: "mcp" as const };
+  const on = { all: false, workspaces: ["w1"] };
+  const db = (rows: Record<string, unknown>[]) => {
+    const writes: string[] = [];
+    const sql = (async (query: string) => {
+      if (query.includes("INSERT INTO public.inbox_outbox")) return (writes.push(query), [{ id: "o1", status: "queued" }]);
+      if (query.includes("count(*)::int AS n FROM public.inbox_outbox")) return [{ n: 0 }];
+      if (query.includes("UPDATE public.contacts")) return (writes.push(query), [{ id: "ct1" }]);
+      return rows;
+    }) as never;
+    return { sql, writes };
+  };
+  const id = "11111111-1111-4111-8111-111111111111";
+
+  it("queues a DM reply only inside Instagram's 24-hour window", async () => {
+    const open = db([{ workspace_id: "w1", connected_account_id: "acc", can_reply: true }]);
+    await sendMessage({ sql: open.sql, inbox: on }, agent, { conversation_id: id, text: "On it" });
+    expect(open.writes).toHaveLength(1);
+    const closed = db([{ workspace_id: "w1", connected_account_id: "acc", can_reply: false }]);
+    await expect(sendMessage({ sql: closed.sql, inbox: on }, agent, { conversation_id: id, text: "On it" })).rejects.toThrow(/24 hours/);
+    expect(closed.writes).toHaveLength(0);
+  });
+
+  it("allows one DM per comment, within 7 days", async () => {
+    const recent = new Date().toISOString();
+    await expect(dmCommenter({ sql: db([{ workspace_id: "w1", connected_account_id: "acc", dm_sent_at: recent, created_at: recent }]).sql, inbox: on }, agent, { comment_id: id, text: "hi" })).rejects.toThrow(/one per comment/);
+    const old = new Date(Date.now() - 8 * 86_400_000).toISOString();
+    await expect(dmCommenter({ sql: db([{ workspace_id: "w1", connected_account_id: "acc", dm_sent_at: null, created_at: old }]).sql, inbox: on }, agent, { comment_id: id, text: "hi" })).rejects.toThrow(/7 days/);
+  });
+
+  it("is off where the inbox isn't switched on, and checks contact fields", async () => {
+    const open = db([{ workspace_id: "w1", connected_account_id: "acc", can_reply: true }]);
+    await expect(sendMessage({ sql: open.sql, inbox: { all: false, workspaces: [] } }, agent, { conversation_id: id, text: "x" })).rejects.toThrow(/switched on/);
+    const contact = db([{ workspace_id: "w1", email: null, tags: [], notes: null }]);
+    await expect(updateContact({ sql: contact.sql, inbox: on }, agent, { contact_id: id, email: "nope" })).rejects.toThrow(/email/);
+    await updateContact({ sql: contact.sql, inbox: on }, agent, { contact_id: id, email: "Jay@Example.com", tags: ["VIP", "vip", "lead"] });
+    expect(contact.writes).toHaveLength(1);
+  });
+});
