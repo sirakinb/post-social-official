@@ -26,7 +26,7 @@ export const META: Record<InboxPlatform, { host: string; fields: string[]; reply
   },
   facebook: {
     host: "https://graph.facebook.com/v25.0",
-    fields: ["feed", "messages"],
+    fields: ["feed", "messages", "message_echoes", "messaging_postbacks"], // echoes: replies sent from the Page's own inbox
     reply: (id) => `${id}/comments`,
     hide: (id, hide) => `${id}?is_hidden=${hide}`,
     profile: "name",

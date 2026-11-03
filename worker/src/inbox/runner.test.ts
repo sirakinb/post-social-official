@@ -118,12 +118,12 @@ describe("comment-to-DM", () => {
     expect(await answerComment(deps(fakeSql({ platform: "facebook" }), fakeGraph()), "page1", { ...comment, from: { id: "page1" } }, "facebook")).toBe("own comment");
   });
 
-  it("subscribes a Facebook Page to feed and message webhooks", async () => {
+  it("subscribes a Facebook Page to feed, message, echo and button-tap webhooks", async () => {
     const db = fakeSql({ platform: "facebook" });
     const graph = fakeGraph();
     expect(await subscribeAccounts(deps(db, graph))).toBe(1);
-    expect(graph.calls.map((c) => c.url)).toEqual(["https://graph.facebook.com/v25.0/page1/subscribed_apps?subscribed_fields=feed,messages"]);
-    expect(db.writes.find((w) => w.query.includes("SET webhook_id"))!.params).toEqual(["acc", "page1", ["feed", "messages"]]);
+    expect(graph.calls.map((c) => c.url)).toEqual(["https://graph.facebook.com/v25.0/page1/subscribed_apps?subscribed_fields=feed,messages,message_echoes,messaging_postbacks"]);
+    expect(db.writes.find((w) => w.query.includes("SET webhook_id"))!.params).toEqual(["acc", "page1", ["feed", "messages", "message_echoes", "messaging_postbacks"]]);
   });
 
   it("answers a Threads reply publicly only (Threads has no DMs), and never its own", async () => {
