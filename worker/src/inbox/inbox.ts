@@ -53,6 +53,8 @@ async function upsertConversation(deps: InboxDeps, account: Account, contactId: 
 const preview = (text: string | null, attachments: unknown[]) => (text ? text.slice(0, 140) : attachments.length ? "Sent an attachment" : null);
 
 // Adds a message to a conversation (once per platform id) and moves the conversation on.
+// Our own send can be recorded after the platform's echo of it (which has no text for link
+// buttons): it fills that row in. Anything else seen twice is left alone.
 async function addMessage(
   deps: InboxDeps,
   account: Account,
@@ -62,7 +64,9 @@ async function addMessage(
   const [inserted] = await deps.sql<{ id: string }>(
     `INSERT INTO public.messages (workspace_id, conversation_id, direction, platform_message_id, text, attachments, sent_by, actor_id, created_at)
      VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9)
-     ON CONFLICT (conversation_id, platform_message_id) WHERE platform_message_id IS NOT NULL DO NOTHING
+     ON CONFLICT (conversation_id, platform_message_id) WHERE platform_message_id IS NOT NULL DO UPDATE
+       SET text = coalesce(nullif(messages.text, ''), EXCLUDED.text), sent_by = EXCLUDED.sent_by, actor_id = EXCLUDED.actor_id
+       WHERE messages.direction = 'out' AND EXCLUDED.sent_by IN ('automation', 'person', 'agent') AND messages.sent_by NOT IN ('automation', 'person', 'agent')
      RETURNING id`,
     [account.workspace_id, conversationId, m.direction, m.mid, m.text, JSON.stringify(m.attachments), m.sentBy, m.actorId, m.at.toISOString()],
   );

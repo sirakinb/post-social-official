@@ -265,11 +265,13 @@ export async function answerComment(deps: InboxDeps, entryId: string, comment: C
   let status: "sent" | "failed" = "sent";
   let reason: string | null = null;
   let replyStatus: "sent" | "failed" | "none" = "none";
+  let messageId: string | null = null;
   if (platform === "threads") return answerOnThreads(deps, account, rule, run.id, commentId, username, random);
   try {
     const token = await tokenFor(deps, account);
     const message = await buildMessage(deps, rule, run.id, dmText);
-    await graph(deps, token, "me/messages", { method: "POST", body: { recipient: { comment_id: commentId }, message }, platform });
+    const sent = await graph(deps, token, "me/messages", { method: "POST", body: { recipient: { comment_id: commentId }, message }, platform });
+    messageId = sent.message_id ?? null;
     if (rule.comment_reply) {
       try {
         const reply = personalize(pickVariation(rule.comment_reply, rule.comment_reply_variations, random), username, name);
@@ -288,7 +290,7 @@ export async function answerComment(deps: InboxDeps, entryId: string, comment: C
     `UPDATE public.automation_runs SET status = $2, reason = $3, dm_text = $4, reply_status = $5 WHERE id = $1`,
     [run.id, status, reason, dmText, replyStatus],
   );
-  if (status === "sent" && commenterId) await recordOutgoing(deps, account, commenterId, username, dmText, "automation", null, { commentId, replied: replyStatus === "sent" }, null, name);
+  if (status === "sent" && commenterId) await recordOutgoing(deps, account, commenterId, username, dmText, "automation", null, { commentId, replied: replyStatus === "sent" }, messageId, name);
   return status;
 }
 

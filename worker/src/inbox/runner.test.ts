@@ -69,7 +69,7 @@ describe("comment-to-DM", () => {
     expect(done.params.slice(1)).toEqual(["sent", null, "Hi @jay, here you go", "sent"]);
     // The DM also shows in the commenter's conversation, marked as sent by the automation.
     const logged = db.writes.find((w) => w.query.includes("INSERT INTO public.messages"))!;
-    expect(logged.params.slice(2, 7)).toEqual(["out", null, "Hi @jay, here you go", "[]", "automation"]);
+    expect(logged.params.slice(2, 7)).toEqual(["out", "m1", "Hi @jay, here you go", "[]", "automation"]);
   });
 
   it("never answers the account's own comments", async () => {
