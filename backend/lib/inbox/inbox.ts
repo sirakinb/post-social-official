@@ -1,11 +1,12 @@
-// The inbox: Instagram DMs (conversations), comments on the account's posts, and the people
+// The inbox: Instagram and Facebook Page DMs (conversations), comments on the account's posts, and the people
 // behind them (contacts). Reading is open to every member; replying, hiding and editing
 // contacts are not open to reviewers. Replies are queued here and sent by the worker
 // (worker/src/inbox/inbox.ts), which holds the accounts' access, usually within seconds.
 import { ApiError, isAgentCaller, membership, requireUuid, type Caller } from "../access";
-import { inboxOn, type InboxDeps } from "./automations";
+import { HUMAN_AGENT_PLATFORMS, inboxOn, type InboxDeps } from "./automations";
 
 const REPLY_WINDOW_HOURS = 24;
+const HUMAN_AGENT_DAYS = 7;
 const PRIVATE_REPLY_DAYS = 7;
 const MAX_TEXT = 1000;
 
@@ -39,8 +40,19 @@ async function owned<T extends { workspace_id: string }>(deps: InboxDeps, caller
 }
 
 const CONTACT_JSON = `jsonb_build_object('id', ct.id, 'username', ct.username, 'name', ct.name, 'email', ct.email, 'tags', ct.tags)`;
-const ACCOUNT_JSON = `jsonb_build_object('id', a.id, 'handle', a.handle, 'display_name', a.display_name)`;
-const CAN_REPLY = `(cv.last_inbound_at IS NOT NULL AND cv.last_inbound_at > now() - interval '${REPLY_WINDOW_HOURS} hours')`;
+const ACCOUNT_JSON = `jsonb_build_object('id', a.id, 'platform', a.platform, 'handle', a.handle, 'display_name', a.display_name)`;
+// How long after their last message a reply may go out: 24 hours, or 7 days for a person's
+// reply where the platform's Human Agent permission is approved (never for agents).
+function replyWindow(deps: InboxDeps, person: boolean) {
+  const platforms = person ? (deps.inbox.humanAgent ?? []).filter((p) => HUMAN_AGENT_PLATFORMS.includes(p)) : [];
+  const hours = `interval '${REPLY_WINDOW_HOURS} hours'`;
+  const span = platforms.length ? `CASE WHEN a.platform IN (${platforms.map((p) => `'${p}'`).join(", ")}) THEN interval '${HUMAN_AGENT_DAYS} days' ELSE ${hours} END` : hours;
+  return { can: `(cv.last_inbound_at IS NOT NULL AND cv.last_inbound_at > now() - ${span})`, until: `cv.last_inbound_at + ${span}` };
+}
+const windowFields = (deps: InboxDeps, caller: Caller) => {
+  const w = replyWindow(deps, !isAgentCaller(caller));
+  return `${w.can} AS can_reply, CASE WHEN ${w.can} THEN ${w.until} END AS reply_until`;
+};
 
 // --- Messages -------------------------------------------------------------------------
 
@@ -53,8 +65,7 @@ export async function listConversations(deps: InboxDeps, caller: Caller, input: 
   const { limit, offset } = page(input);
   const conversations = await deps.sql(
     `SELECT cv.id, cv.status, cv.unread, cv.last_message_at, cv.last_inbound_at, cv.last_preview,
-            ${CAN_REPLY} AS can_reply,
-            CASE WHEN ${CAN_REPLY} THEN cv.last_inbound_at + interval '${REPLY_WINDOW_HOURS} hours' END AS reply_until,
+            ${windowFields(deps, caller)},
             ${CONTACT_JSON} AS contact, ${ACCOUNT_JSON} AS account
      FROM public.conversations cv
      JOIN public.contacts ct ON ct.id = cv.contact_id
@@ -70,8 +81,7 @@ export async function getConversation(deps: InboxDeps, caller: Caller, input: { 
   const id = requireUuid(input.conversation_id, "Conversation");
   const rows = await deps.sql<{ workspace_id: string }>(
     `SELECT cv.id, cv.workspace_id, cv.status, cv.unread, cv.last_message_at, cv.last_inbound_at,
-            ${CAN_REPLY} AS can_reply,
-            CASE WHEN ${CAN_REPLY} THEN cv.last_inbound_at + interval '${REPLY_WINDOW_HOURS} hours' END AS reply_until,
+            ${windowFields(deps, caller)},
             ${CONTACT_JSON} AS contact, ${ACCOUNT_JSON} AS account
      FROM public.conversations cv JOIN public.contacts ct ON ct.id = cv.contact_id JOIN public.connected_accounts a ON a.id = cv.connected_account_id
      WHERE cv.id = $1`,
@@ -94,11 +104,12 @@ export async function getConversation(deps: InboxDeps, caller: Caller, input: { 
 export async function sendMessage(deps: InboxDeps, caller: Caller, input: { conversation_id?: unknown; text?: unknown }) {
   const id = requireUuid(input.conversation_id, "Conversation");
   const rows = await deps.sql<{ workspace_id: string; connected_account_id: string; can_reply: boolean }>(
-    `SELECT cv.workspace_id, cv.connected_account_id, ${CAN_REPLY} AS can_reply FROM public.conversations cv WHERE cv.id = $1`,
+    `SELECT cv.workspace_id, cv.connected_account_id, ${replyWindow(deps, !isAgentCaller(caller)).can} AS can_reply
+     FROM public.conversations cv JOIN public.connected_accounts a ON a.id = cv.connected_account_id WHERE cv.id = $1`,
     [id],
   );
   const { row, member } = await owned(deps, caller, rows, "conversation", true);
-  if (!row.can_reply) throw new ApiError(409, `Instagram only allows replies within ${REPLY_WINDOW_HOURS} hours of their last message. You can reply once they message you again.`);
+  if (!row.can_reply) throw new ApiError(409, `The reply window has closed (${REPLY_WINDOW_HOURS} hours after their last message, or ${HUMAN_AGENT_DAYS} days for a person's reply where Human Agent is approved). You can reply once they message you again.`);
   const text = message(input.text);
   const [queued] = await deps.sql(
     `INSERT INTO public.inbox_outbox (workspace_id, connected_account_id, kind, conversation_id, text, sent_by, actor_id)
@@ -129,7 +140,7 @@ export async function listComments(deps: InboxDeps, caller: Caller, input: { wor
   const { limit, offset } = page(input);
   const comments = await deps.sql(
     `SELECT c.id, c.platform_comment_id, c.platform_post_id, c.commenter_username, c.text, c.hidden, c.replied_at, c.dm_sent_at, c.created_at, c.contact_id,
-            (c.dm_sent_at IS NULL AND c.created_at > now() - interval '${PRIVATE_REPLY_DAYS} days') AS can_dm,
+            (a.platform <> 'threads' AND c.dm_sent_at IS NULL AND c.created_at > now() - interval '${PRIVATE_REPLY_DAYS} days') AS can_dm,
             ${ACCOUNT_JSON} AS account,
             (SELECT left(p.caption, 120) FROM public.destinations d JOIN public.posts p ON p.id = d.post_id
              WHERE d.connected_account_id = c.connected_account_id AND d.platform_request_id = c.platform_post_id LIMIT 1) AS post_caption,
@@ -146,10 +157,11 @@ export async function listComments(deps: InboxDeps, caller: Caller, input: { wor
   return { comments };
 }
 
-type CommentRow = { workspace_id: string; connected_account_id: string; dm_sent_at: string | null; created_at: string; hidden: boolean };
+type CommentRow = { workspace_id: string; connected_account_id: string; dm_sent_at: string | null; created_at: string; hidden: boolean; platform?: string };
 async function commentFor(deps: InboxDeps, caller: Caller, commentId: unknown) {
   const id = requireUuid(commentId, "Comment");
-  const rows = await deps.sql<CommentRow>(`SELECT workspace_id, connected_account_id, dm_sent_at, created_at, hidden FROM public.inbox_comments WHERE id = $1`, [id]);
+  const rows = await deps.sql<CommentRow>(`SELECT c.workspace_id, c.connected_account_id, c.dm_sent_at, c.created_at, c.hidden, a.platform
+     FROM public.inbox_comments c JOIN public.connected_accounts a ON a.id = c.connected_account_id WHERE c.id = $1`, [id]);
   const { row, member } = await owned(deps, caller, rows, "comment", true);
   return { id, comment: row, member };
 }
@@ -157,8 +169,9 @@ async function commentFor(deps: InboxDeps, caller: Caller, commentId: unknown) {
 async function queueForComment(deps: InboxDeps, caller: Caller, kind: string, input: { comment_id?: unknown }, text: string | null) {
   const { id, comment, member } = await commentFor(deps, caller, input.comment_id);
   if (kind === "private_reply") {
-    if (comment.dm_sent_at) throw new ApiError(409, "This commenter already got a DM for this comment. Instagram allows one per comment.");
-    if (Date.now() - Date.parse(comment.created_at) > PRIVATE_REPLY_DAYS * 86_400_000) throw new ApiError(409, `Instagram only allows a DM to a commenter within ${PRIVATE_REPLY_DAYS} days of the comment.`);
+    if (comment.platform === "threads") throw new ApiError(409, "Threads has no DMs. Reply publicly instead.");
+    if (comment.dm_sent_at) throw new ApiError(409, "This commenter already got a DM for this comment. Meta allows one per comment.");
+    if (Date.now() - Date.parse(comment.created_at) > PRIVATE_REPLY_DAYS * 86_400_000) throw new ApiError(409, `Meta only allows a DM to a commenter within ${PRIVATE_REPLY_DAYS} days of the comment.`);
     const [{ n }] = await deps.sql<{ n: number }>(`SELECT count(*)::int AS n FROM public.inbox_outbox WHERE comment_id = $1 AND kind = 'private_reply' AND status = 'queued'`, [id]);
     if (n) throw new ApiError(409, "A DM to this commenter is already on its way.");
   }

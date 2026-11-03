@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Sql } from "../../../backend/lib/access";
-import { answerComment, subscribeAccounts, type InboxDeps } from "./runner";
+import { answerComment, facebookComment, subscribeAccounts, threadsComment, type InboxDeps } from "./runner";
 
 const account = { id: "acc", workspace_id: "w1", platform: "instagram", display_name: "Maker", external_account_id: "app-scoped", webhook_id: "1784" };
 const automation = {
@@ -10,17 +10,18 @@ const automation = {
 };
 
 // A stand-in database for one account and one automation; records every write.
-function fakeSql(opts: { alreadySent?: number; claimed?: boolean } = {}) {
+function fakeSql(opts: { alreadySent?: number; claimed?: boolean; platform?: string } = {}) {
+  const acct = { ...account, platform: opts.platform ?? "instagram", ...(opts.platform === "facebook" ? { external_account_id: "page1", webhook_id: "page1" } : {}), ...(opts.platform === "threads" ? { external_account_id: "t1", webhook_id: "t1", handle: "maker" } : {}) };
   const writes: Array<{ query: string; params: unknown[] }> = [];
   const sql = (async (query: string, params: unknown[]) => {
-    if (query.includes("FROM public.connected_accounts a LEFT JOIN public.inbox_accounts")) return [account];
+    if (query.includes("FROM public.connected_accounts a LEFT JOIN public.inbox_accounts")) return [acct];
     if (query.includes("FROM public.comment_automations WHERE connected_account_id")) return [automation];
     if (query.includes("count(*)::int AS n FROM public.automation_runs")) return [{ n: opts.alreadySent ?? 0 }];
     if (query.includes("INSERT INTO public.automation_runs")) {
       writes.push({ query, params });
       return opts.claimed === false ? [] : [{ id: "run1" }];
     }
-    if (query.includes("FROM public.inbox_accounts ia JOIN")) return [{ ...account, webhook_id: null }];
+    if (query.includes("FROM public.inbox_accounts ia JOIN")) return [{ ...acct, webhook_id: null }];
     if (query.includes("INSERT INTO public.contacts")) return [{ id: "ct1" }];
     if (query.includes("INSERT INTO public.conversations")) return [{ id: "cv1" }];
     if (query.includes("INSERT INTO public.messages")) {
@@ -100,5 +101,42 @@ describe("comment-to-DM", () => {
     ]);
     const saved = db.writes.find((w) => w.query.includes("SET webhook_id"))!;
     expect(saved.params).toEqual(["acc", "1784", ["comments", "messages"]]);
+  });
+
+  it("answers a Facebook Page comment the same way, by name, through the Page's Graph calls", async () => {
+    const comment = facebookComment({ item: "comment", verb: "add", comment_id: "p1_c1", post_id: "page1_p1", parent_id: "page1_p1", from: { id: "psid9", name: "Jay Doe" }, message: "guide pls" })!;
+    expect(comment).toEqual({ id: "p1_c1", text: "guide pls", from: { id: "psid9", name: "Jay Doe" }, media: { id: "page1_p1" }, parent_id: undefined });
+    expect(facebookComment({ item: "comment", verb: "edited", comment_id: "x" })).toBeNull();
+    expect(facebookComment({ item: "reaction", verb: "add" })).toBeNull();
+    const db = fakeSql({ platform: "facebook" });
+    const graph = fakeGraph();
+    expect(await answerComment(deps(db, graph), "page1", comment, "facebook")).toBe("sent");
+    const [dm, reply] = graph.calls;
+    expect(dm.url).toBe("https://graph.facebook.com/v25.0/me/messages");
+    expect((dm.body as { message: { attachment: { payload: { text: string } } } }).message.attachment.payload.text).toBe("Hi Jay Doe, here you go");
+    expect(reply.url).toBe("https://graph.facebook.com/v25.0/p1_c1/comments");
+    expect(await answerComment(deps(fakeSql({ platform: "facebook" }), fakeGraph()), "page1", { ...comment, from: { id: "page1" } }, "facebook")).toBe("own comment");
+  });
+
+  it("subscribes a Facebook Page to feed, message, echo and button-tap webhooks", async () => {
+    const db = fakeSql({ platform: "facebook" });
+    const graph = fakeGraph();
+    expect(await subscribeAccounts(deps(db, graph))).toBe(1);
+    expect(graph.calls.map((c) => c.url)).toEqual(["https://graph.facebook.com/v25.0/page1/subscribed_apps?subscribed_fields=feed,messages,message_echoes,messaging_postbacks"]);
+    expect(db.writes.find((w) => w.query.includes("SET webhook_id"))!.params).toEqual(["acc", "page1", ["feed", "messages", "message_echoes", "messaging_postbacks"]]);
+  });
+
+  it("answers a Threads reply publicly only (Threads has no DMs), and never its own", async () => {
+    const reply = threadsComment({ id: "r1", username: "jay", text: "GUIDE", root_post: { id: "post1" }, replied_to: { id: "post1" } })!;
+    expect(reply).toEqual({ id: "r1", text: "GUIDE", from: { id: "jay", username: "jay" }, media: { id: "post1" }, parent_id: undefined });
+    const db = fakeSql({ platform: "threads" });
+    const graph = fakeGraph();
+    expect(await answerComment({ ...deps(db, graph), wait: async () => {} }, "t1", reply, "threads")).toBe("sent");
+    expect(graph.calls.map((c) => c.url)).toEqual([
+      "https://graph.threads.net/v1.0/me/threads?media_type=TEXT&reply_to_id=r1&text=Sent%20you%20a%20DM",
+      "https://graph.threads.net/v1.0/me/threads_publish?creation_id=r1",
+    ]);
+    expect(db.writes.find((w) => w.query.includes("UPDATE public.automation_runs SET status"))!.params).toEqual(["run1", "sent", null, null, "sent"]);
+    expect(await answerComment(deps(fakeSql({ platform: "threads" }), fakeGraph()), "t1", { ...reply, from: { id: "Maker", username: "Maker" } }, "threads")).toBe("own comment");
   });
 });

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card } from "@/components/beta/ui";
 import { callServer, loadViewer } from "@/lib/beta/workspace";
+import { accountLabel } from "../account-label";
 import { InboxNav, inboxAccounts, inboxQuery } from "../inbox-nav";
 import { ContactEditor } from "./contact-editor";
 
@@ -41,7 +42,7 @@ export default async function ContactsPage({ searchParams }: { searchParams: Pro
       <div className="mt-5 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="m-0 text-lg font-medium">Contacts</h1>
-          <p className="mt-1 text-ps-muted">Everyone who commented on or messaged your Instagram accounts.</p>
+          <p className="mt-1 text-ps-muted">Everyone who commented on or messaged your Instagram, Facebook or Threads accounts.</p>
         </div>
         <form className="flex gap-2" action="/beta/inbox/contacts">
           {params.workspace && <input type="hidden" name="workspace" value={params.workspace} />}
@@ -58,7 +59,7 @@ export default async function ContactsPage({ searchParams }: { searchParams: Pro
       )}
 
       {data.contacts.length === 0 ? (
-        <Card className="mt-6 p-8 text-center text-ps-muted">{params.q || params.tag ? "No contacts match." : "No contacts yet. Anyone who comments on or messages your Instagram accounts appears here."}</Card>
+        <Card className="mt-6 p-8 text-center text-ps-muted">{params.q || params.tag ? "No contacts match." : "No contacts yet. Anyone who comments on or messages your Instagram, Facebook or Threads accounts appears here."}</Card>
       ) : (
         <Card className="mt-6 overflow-x-auto">
           <table className="w-full min-w-[820px] border-collapse text-left">
@@ -76,8 +77,8 @@ export default async function ContactsPage({ searchParams }: { searchParams: Pro
                 <tr key={c.id} className="border-b border-ps-line align-top last:border-0">
                   <td className="px-4 py-3">
                     <span className="flex flex-col">
-                      <span className="font-medium">{c.username ? `@${c.username}` : c.name ?? "Instagram user"}</span>
-                      <span className="text-xs text-ps-subtle">{c.name && c.username ? `${c.name} · ` : ""}via {c.account.handle ? `@${c.account.handle}` : c.account.display_name}</span>
+                      <span className="font-medium">{c.username ? `@${c.username}` : c.name ?? "Unknown person"}</span>
+                      <span className="text-xs text-ps-subtle">{c.name && c.username ? `${c.name} · ` : ""}via {accountLabel(c.account)}</span>
                       {c.notes && <span className="mt-1 text-xs text-ps-muted">{c.notes}</span>}
                     </span>
                     {canEdit && <ContactEditor id={c.id} email={c.email} tags={c.tags} notes={c.notes} />}

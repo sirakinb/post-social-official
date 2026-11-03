@@ -82,6 +82,9 @@ describe("Meta webhooks", () => {
     });
     expect(events.map((e) => [e.entryId, e.field])).toEqual([["178", "comments"], ["178", "messages"]]);
     expect(eventsIn({ object: "user", entry: [] })).toEqual([]);
+    expect(eventsIn({ app_id: "1", topic: "moderate", target_id: "t77", values: { field: "replies", value: { id: "r1", text: "guide" } } })).toEqual([
+      { platform: "threads", entryId: "t77", field: "replies", payload: { id: "r1", text: "guide" } },
+    ]);
   });
 });
 
@@ -124,5 +127,22 @@ describe("inbox replies (service)", async () => {
     await expect(updateContact({ sql: contact.sql, inbox: on }, agent, { contact_id: id, email: "nope" })).rejects.toThrow(/email/);
     await updateContact({ sql: contact.sql, inbox: on }, agent, { contact_id: id, email: "Jay@Example.com", tags: ["VIP", "vip", "lead"] });
     expect(contact.writes).toHaveLength(1);
+  });
+});
+
+describe("inbox permissions at sign-in", async () => {
+  const { scopesFor, facebookLoginConfig } = await import("../connections/platforms");
+  const settings: Record<string, string> = { INBOX_WORKSPACES: "w1", META_LOGIN_CONFIG_ID: "basic", META_INBOX_LOGIN_CONFIG_ID: "inbox" };
+  const setting = (name: string) => {
+    if (!(name in settings)) throw new Error("unset");
+    return settings[name];
+  };
+
+  it("asks for comment and message permissions only where the inbox is on", () => {
+    expect(scopesFor("facebook", setting, "w1")).toEqual(expect.arrayContaining(["pages_messaging", "pages_manage_engagement", "pages_read_user_content", "pages_manage_metadata"]));
+    expect(scopesFor("facebook", setting, "w2")).not.toContain("pages_messaging");
+    expect(scopesFor("instagram", setting, "w1")).toContain("instagram_business_manage_messages");
+    expect(facebookLoginConfig(setting, "w1")).toBe("inbox");
+    expect(facebookLoginConfig(setting, "w2")).toBe("basic");
   });
 });

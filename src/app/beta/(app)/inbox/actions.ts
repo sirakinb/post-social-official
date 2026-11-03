@@ -6,7 +6,7 @@ import { getAccessTokenCookieName } from "@insforge/sdk/ssr";
 import { OUR_SIDE, UNREACHABLE, requestError } from "../../../../../backend/lib/support";
 
 // Inbox changes go through the `api` function with the person's own session, so the same
-// checks (no reviewers, Instagram's reply windows) apply as for the API and MCP.
+// checks (no reviewers, Meta's reply windows) apply as for the API and MCP.
 async function call<T>(body: Record<string, unknown>): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
   const base = process.env.API_BASE_URL;
   if (!base) return { ok: false, error: OUR_SIDE };
