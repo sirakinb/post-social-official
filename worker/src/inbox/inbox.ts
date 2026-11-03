@@ -172,7 +172,7 @@ type Outbox = {
   id: string;
   workspace_id: string;
   connected_account_id: string;
-  kind: "message" | "comment_reply" | "private_reply" | "hide_comment" | "unhide_comment";
+  kind: "message" | "comment_reply" | "private_reply" | "hide_comment" | "unhide_comment" | "delete_comment";
   conversation_id: string | null;
   comment_id: string | null;
   text: string | null;
@@ -231,6 +231,10 @@ async function sendOne(deps: InboxDeps, item: Outbox) {
     } else {
       await deps.sql(`UPDATE public.inbox_comments SET dm_sent_at = now() WHERE id = $1`, [item.comment_id]);
     }
+  } else if (item.kind === "delete_comment") {
+    if (platform === "threads") throw new GraphError("Threads doesn't let apps delete replies.");
+    await graph(deps, token, id, { method: "DELETE", platform });
+    await deps.sql(`UPDATE public.inbox_comments SET deleted_at = now() WHERE id = $1`, [item.comment_id]);
   } else {
     const hide = item.kind === "hide_comment";
     await graph(deps, token, META[platform].hide(id, hide), { method: "POST", platform });

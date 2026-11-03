@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { AutoRefresh } from "../auto-refresh";
 import { InboxNav, inboxAccounts, inboxQuery } from "../inbox-nav";
 import { accountLabel } from "../account-label";
-import { CommentActions } from "./comment-actions";
+import { CommentActions, DeleteButton } from "./comment-actions";
 
 export const metadata = { title: "Comments · Post Social" };
 
@@ -18,6 +18,8 @@ type Comment = {
   replied_at: string | null;
   dm_sent_at: string | null;
   can_dm: boolean;
+  can_delete: boolean;
+  replies: Array<{ id: string; text: string | null; created_at: string }> | null;
   created_at: string;
   post_caption: string | null;
   post_url: string | null;
@@ -30,7 +32,7 @@ const FILTERS = [
   { id: "unreplied", label: "Unreplied" },
   { id: "hidden", label: "Hidden" },
 ] as const;
-const PENDING_LABEL: Record<string, string> = { comment_reply: "Reply", private_reply: "DM", hide_comment: "Hiding", unhide_comment: "Unhiding" };
+const PENDING_LABEL: Record<string, string> = { comment_reply: "Reply", private_reply: "DM", hide_comment: "Hiding", unhide_comment: "Unhiding", delete_comment: "Deleting" };
 const when = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
 export default async function CommentsPage({ searchParams }: { searchParams: Promise<{ workspace?: string; account?: string; filter?: string }> }) {
@@ -51,7 +53,7 @@ export default async function CommentsPage({ searchParams }: { searchParams: Pro
       <div className="mt-5 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="m-0 text-lg font-medium">Comments</h1>
-          <p className="mt-1 text-ps-muted">Comments and replies on your Instagram, Facebook and Threads posts. Reply, DM the commenter or hide it.</p>
+          <p className="mt-1 text-ps-muted">Comments and replies on your Instagram, Facebook and Threads posts. Reply, DM the commenter, hide it or delete it.</p>
         </div>
         <nav aria-label="Filter" className="flex gap-1 rounded-lg border border-ps-line bg-ps-surface p-1 text-xs">
           {FILTERS.map((f) => (
@@ -81,7 +83,14 @@ export default async function CommentsPage({ searchParams }: { searchParams: Pro
                   {PENDING_LABEL[p.kind] ?? "Change"}: {p.status === "failed" ? `didn't go through. ${p.error ?? ""}` : "sending…"}
                 </p>
               ))}
-              {canAct && <CommentActions commentId={c.id} canDm={c.can_dm} hidden={c.hidden} replied={Boolean(c.replied_at)} />}
+              {(c.replies ?? []).map((r) => (
+                <div key={r.id} className="mt-2 border-l border-ps-line pl-3 text-[13px]">
+                  <span className="text-xs text-ps-subtle">Your reply · {when(r.created_at)}</span>
+                  <p className="m-0 whitespace-pre-wrap text-ps-muted">{r.text}</p>
+                  {canAct && c.can_delete && <span className="text-xs"><DeleteButton commentId={r.id} label="Delete reply" /></span>}
+                </div>
+              ))}
+              {canAct && <CommentActions commentId={c.id} canDm={c.can_dm} canDelete={c.can_delete} hidden={c.hidden} replied={Boolean(c.replied_at)} />}
             </article>
           ))}
         </Card>

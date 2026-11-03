@@ -89,7 +89,7 @@ describe("Meta webhooks", () => {
 });
 
 describe("inbox replies (service)", async () => {
-  const { sendMessage, dmCommenter, updateContact } = await import("./inbox");
+  const { sendMessage, dmCommenter, updateContact, deleteComment, setConversationStatus } = await import("./inbox");
   const agent = { kind: "key" as const, credentialId: "k", workspaceId: "w1", actorId: "act", mode: "live" as const, displayName: "Claude", entryPoint: "mcp" as const };
   const on = { all: false, workspaces: ["w1"] };
   const db = (rows: Record<string, unknown>[]) => {
@@ -118,6 +118,22 @@ describe("inbox replies (service)", async () => {
     await expect(dmCommenter({ sql: db([{ workspace_id: "w1", connected_account_id: "acc", dm_sent_at: recent, created_at: recent }]).sql, inbox: on }, agent, { comment_id: id, text: "hi" })).rejects.toThrow(/one per comment/);
     const old = new Date(Date.now() - 8 * 86_400_000).toISOString();
     await expect(dmCommenter({ sql: db([{ workspace_id: "w1", connected_account_id: "acc", dm_sent_at: null, created_at: old }]).sql, inbox: on }, agent, { comment_id: id, text: "hi" })).rejects.toThrow(/7 days/);
+  });
+
+  it("deletes Instagram and Facebook comments, not Threads replies", async () => {
+    const recent = new Date().toISOString();
+    const ig = db([{ workspace_id: "w1", connected_account_id: "acc", dm_sent_at: null, created_at: recent, hidden: false, platform: "instagram" }]);
+    await deleteComment({ sql: ig.sql, inbox: on }, agent, { comment_id: id });
+    expect(ig.writes[0]).toContain("INSERT INTO public.inbox_outbox");
+    const threads = db([{ workspace_id: "w1", connected_account_id: "acc", dm_sent_at: null, created_at: recent, hidden: false, platform: "threads" }]);
+    await expect(deleteComment({ sql: threads.sql, inbox: on }, agent, { comment_id: id })).rejects.toThrow(/Threads/);
+    expect(threads.writes).toHaveLength(0);
+  });
+
+  it("archives a conversation, and rejects other statuses", async () => {
+    const conv = db([{ workspace_id: "w1" }]);
+    expect(await setConversationStatus({ sql: conv.sql, inbox: on }, agent, { conversation_id: id, status: "archived" })).toEqual({ conversation_id: id, status: "archived" });
+    await expect(setConversationStatus({ sql: conv.sql, inbox: on }, agent, { conversation_id: id, status: "gone" })).rejects.toThrow(/open, done or archived/);
   });
 
   it("is off where the inbox isn't switched on, and checks contact fields", async () => {

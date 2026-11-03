@@ -57,22 +57,28 @@ export function Composer(props: { conversationId: string; canReply: boolean; rep
   );
 }
 
-export function DoneButton(props: { conversationId: string; status: "open" | "done" }) {
+// Done or Archive moves a conversation off the open list (it comes back when they write
+// again); Reopen brings it back now. Meta doesn't let apps delete DMs, so nothing changes there.
+export function DoneButton(props: { conversationId: string; status: "open" | "done" | "archived" }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const set = async (status: "open" | "done" | "archived") => {
+    setBusy(true);
+    await setConversationStatus(props.conversationId, status);
+    setBusy(false);
+    router.refresh();
+  };
+  const button = "h-8 rounded-lg border border-ps-line-strong px-3 text-xs hover:border-ps-fg/30 disabled:opacity-60";
   return (
-    <button
-      type="button"
-      disabled={busy}
-      onClick={async () => {
-        setBusy(true);
-        await setConversationStatus(props.conversationId, props.status === "open" ? "done" : "open");
-        setBusy(false);
-        router.refresh();
-      }}
-      className="h-8 rounded-lg border border-ps-line-strong px-3 text-xs hover:border-ps-fg/30 disabled:opacity-60"
-    >
-      {props.status === "open" ? "Mark done" : "Reopen"}
-    </button>
+    <span className="flex gap-2">
+      {props.status === "open" ? (
+        <button type="button" disabled={busy} onClick={() => set("done")} className={button}>Mark done</button>
+      ) : (
+        <button type="button" disabled={busy} onClick={() => set("open")} className={button}>Reopen</button>
+      )}
+      {props.status !== "archived" && (
+        <button type="button" disabled={busy} onClick={() => set("archived")} title="Removes it from your inbox here, not from Instagram or Messenger" className={button}>Archive</button>
+      )}
+    </span>
   );
 }

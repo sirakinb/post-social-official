@@ -60,7 +60,8 @@ export async function listConversations(deps: InboxDeps, caller: Caller, input: 
   const workspaceId = requireUuid(input.workspace_id, "Workspace");
   await membership(deps.sql, caller, workspaceId, false);
   requireOn(deps, workspaceId);
-  const status = input.status === "done" ? "done" : input.status === "all" ? null : "open";
+  // "all" is open and done; archived conversations show only when asked for.
+  const status = input.status === "done" || input.status === "archived" ? input.status : input.status === "all" ? null : "open";
   const accountId = input.account_id ? requireUuid(input.account_id, "Account") : null;
   const { limit, offset } = page(input);
   const conversations = await deps.sql(
@@ -70,7 +71,7 @@ export async function listConversations(deps: InboxDeps, caller: Caller, input: 
      FROM public.conversations cv
      JOIN public.contacts ct ON ct.id = cv.contact_id
      JOIN public.connected_accounts a ON a.id = cv.connected_account_id
-     WHERE cv.workspace_id = $1 AND ($2::text IS NULL OR cv.status = $2) AND ($3::uuid IS NULL OR cv.connected_account_id = $3)
+     WHERE cv.workspace_id = $1 AND (cv.status = $2 OR ($2::text IS NULL AND cv.status <> 'archived')) AND ($3::uuid IS NULL OR cv.connected_account_id = $3)
      ORDER BY cv.last_message_at DESC LIMIT $4 OFFSET $5`,
     [workspaceId, status, accountId, limit, offset],
   );
@@ -121,10 +122,10 @@ export async function sendMessage(deps: InboxDeps, caller: Caller, input: { conv
 
 export async function setConversationStatus(deps: InboxDeps, caller: Caller, input: { conversation_id?: unknown; status?: unknown }) {
   const id = requireUuid(input.conversation_id, "Conversation");
-  if (input.status !== "open" && input.status !== "done") throw new ApiError(400, "status must be open or done.");
+  if (input.status !== "open" && input.status !== "done" && input.status !== "archived") throw new ApiError(400, "status must be open, done or archived.");
   const rows = await deps.sql<{ workspace_id: string }>(`SELECT workspace_id FROM public.conversations WHERE id = $1`, [id]);
   await owned(deps, caller, rows, "conversation", true);
-  await deps.sql(`UPDATE public.conversations SET status = $2, unread = CASE WHEN $2 = 'done' THEN 0 ELSE unread END WHERE id = $1`, [id, input.status]);
+  await deps.sql(`UPDATE public.conversations SET status = $2, unread = CASE WHEN $2 = 'open' THEN unread ELSE 0 END WHERE id = $1`, [id, input.status]);
   return { conversation_id: id, status: input.status };
 }
 
@@ -141,6 +142,10 @@ export async function listComments(deps: InboxDeps, caller: Caller, input: { wor
   const comments = await deps.sql(
     `SELECT c.id, c.platform_comment_id, c.platform_post_id, c.commenter_username, c.text, c.hidden, c.replied_at, c.dm_sent_at, c.created_at, c.contact_id,
             (a.platform <> 'threads' AND c.dm_sent_at IS NULL AND c.created_at > now() - interval '${PRIVATE_REPLY_DAYS} days') AS can_dm,
+            (a.platform <> 'threads') AS can_delete,
+            (SELECT jsonb_agg(jsonb_build_object('id', r.id, 'text', r.text, 'created_at', r.created_at) ORDER BY r.created_at)
+             FROM public.inbox_comments r WHERE r.connected_account_id = c.connected_account_id AND r.parent_comment_id = c.platform_comment_id
+               AND r.from_account AND r.deleted_at IS NULL) AS replies,
             ${ACCOUNT_JSON} AS account,
             (SELECT left(p.caption, 120) FROM public.destinations d JOIN public.posts p ON p.id = d.post_id
              WHERE d.connected_account_id = c.connected_account_id AND d.platform_request_id = c.platform_post_id LIMIT 1) AS post_caption,
@@ -148,7 +153,7 @@ export async function listComments(deps: InboxDeps, caller: Caller, input: { wor
             (SELECT jsonb_agg(jsonb_build_object('kind', o.kind, 'status', o.status, 'error', o.error) ORDER BY o.created_at)
              FROM public.inbox_outbox o WHERE o.comment_id = c.id AND o.status <> 'sent') AS pending
      FROM public.inbox_comments c JOIN public.connected_accounts a ON a.id = c.connected_account_id
-     WHERE c.workspace_id = $1 AND NOT c.from_account
+     WHERE c.workspace_id = $1 AND NOT c.from_account AND c.deleted_at IS NULL
        AND ($2 = 'all' OR ($2 = 'unreplied' AND c.replied_at IS NULL AND c.dm_sent_at IS NULL AND NOT c.hidden) OR ($2 = 'hidden' AND c.hidden))
        AND ($3::uuid IS NULL OR c.connected_account_id = $3) AND ($4::text IS NULL OR c.platform_post_id = $4)
      ORDER BY c.created_at DESC LIMIT $5 OFFSET $6`,
@@ -168,6 +173,11 @@ async function commentFor(deps: InboxDeps, caller: Caller, commentId: unknown) {
 
 async function queueForComment(deps: InboxDeps, caller: Caller, kind: string, input: { comment_id?: unknown }, text: string | null) {
   const { id, comment, member } = await commentFor(deps, caller, input.comment_id);
+  if (kind === "delete_comment") {
+    if (comment.platform === "threads") throw new ApiError(409, "Threads doesn't let apps delete replies. Hide it instead.");
+    const [{ n }] = await deps.sql<{ n: number }>(`SELECT count(*)::int AS n FROM public.inbox_outbox WHERE comment_id = $1 AND kind = 'delete_comment' AND status = 'queued'`, [id]);
+    if (n) throw new ApiError(409, "This comment is already being deleted.");
+  }
   if (kind === "private_reply") {
     if (comment.platform === "threads") throw new ApiError(409, "Threads has no DMs. Reply publicly instead.");
     if (comment.dm_sent_at) throw new ApiError(409, "This commenter already got a DM for this comment. Meta allows one per comment.");
@@ -187,6 +197,8 @@ export const replyToComment = (deps: InboxDeps, caller: Caller, input: { comment
 export const dmCommenter = (deps: InboxDeps, caller: Caller, input: { comment_id?: unknown; text?: unknown }) => queueForComment(deps, caller, "private_reply", input, message(input.text));
 export const hideComment = (deps: InboxDeps, caller: Caller, input: { comment_id?: unknown; hidden?: unknown }) =>
   queueForComment(deps, caller, input.hidden === false ? "unhide_comment" : "hide_comment", input, null);
+// Deletes a comment on Instagram or Facebook for good: someone's comment, or the account's own reply.
+export const deleteComment = (deps: InboxDeps, caller: Caller, input: { comment_id?: unknown }) => queueForComment(deps, caller, "delete_comment", input, null);
 
 // --- Contacts -------------------------------------------------------------------------
 

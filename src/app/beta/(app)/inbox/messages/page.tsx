@@ -11,7 +11,7 @@ import { Composer, DoneButton } from "./composer";
 export const metadata = { title: "Messages · Post Social" };
 
 type Contact = { id: string; username: string | null; name: string | null };
-type Conversation = { id: string; status: "open" | "done"; unread: number; last_message_at: string; last_preview: string | null; can_reply: boolean; reply_until: string | null; contact: Contact; account: { platform?: string; handle: string | null; display_name: string } };
+type Conversation = { id: string; status: "open" | "done" | "archived"; unread: number; last_message_at: string; last_preview: string | null; can_reply: boolean; reply_until: string | null; contact: Contact; account: { platform?: string; handle: string | null; display_name: string } };
 type Message = { id: string; direction: "in" | "out"; text: string | null; attachments: Array<{ type: string; url: string | null }>; sent_by: string; created_at: string };
 type Pending = { id: string; text: string; status: "queued" | "failed"; error: string | null };
 
@@ -29,7 +29,7 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
   const params = await searchParams;
   const { workspace, client } = await loadViewer("/beta/inbox/messages", params.workspace);
   if (!workspace) return <p className="p-8 text-ps-muted">You are not a member of any workspace yet.</p>;
-  const status = params.status === "done" ? "done" : "open";
+  const status = params.status === "done" || params.status === "archived" ? params.status : "open";
   const { accounts, account } = await inboxAccounts(client, workspace.id, params.account);
   const list = await callServer<{ conversations: Conversation[] }>("conversations", { workspace_id: workspace.id, status, ...(account ? { account_id: account } : {}) });
   if (!list) notFound();
@@ -46,19 +46,19 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
       <Card className="mt-5 grid min-h-[560px] overflow-hidden md:grid-cols-[300px_minmax(0,1fr)]">
         <div className="flex flex-col border-b border-ps-line md:border-b-0 md:border-r">
           <div className="flex gap-1 border-b border-ps-line p-2 text-xs">
-            {(["open", "done"] as const).map((s) => (
+            {(["open", "done", "archived"] as const).map((s) => (
               <Link key={s} href={link(s === "open" ? {} : { status: s })} className={cn("rounded-md px-2.5 py-1", s === status ? "bg-ps-segment text-ps-text" : "text-ps-muted hover:text-ps-text")}>
-                {s === "open" ? "Open" : "Done"}
+                {s === "open" ? "Open" : s === "done" ? "Done" : "Archived"}
               </Link>
             ))}
           </div>
           {list.conversations.length === 0 ? (
-            <p className="m-0 p-6 text-center text-ps-muted">{status === "open" ? "No open conversations. DMs to your Instagram accounts and Facebook Pages show up here." : "Nothing marked done yet."}</p>
+            <p className="m-0 p-6 text-center text-ps-muted">{status === "open" ? "No open conversations. DMs to your Instagram accounts and Facebook Pages show up here." : status === "done" ? "Nothing marked done yet." : "Nothing archived. Archiving removes a conversation from here, not from Instagram or Messenger."}</p>
           ) : (
             <ul className="m-0 list-none overflow-y-auto p-0">
               {list.conversations.map((c) => (
                 <li key={c.id}>
-                  <Link href={link({ ...(status === "done" ? { status } : {}), c: c.id })} className={cn("flex flex-col gap-0.5 border-b border-ps-line px-3 py-2.5 hover:bg-ps-fg/[0.03]", c.id === selectedId && "bg-ps-fg/[0.05]")}>
+                  <Link href={link({ ...(status === "open" ? {} : { status }), c: c.id })} className={cn("flex flex-col gap-0.5 border-b border-ps-line px-3 py-2.5 hover:bg-ps-fg/[0.03]", c.id === selectedId && "bg-ps-fg/[0.05]")}>
                     <span className="flex items-center gap-2">
                       <span className={cn("truncate", c.unread ? "font-medium text-ps-text" : "text-ps-text")}>{who(c.contact)}</span>
                       {c.unread > 0 && <span className="h-2 w-2 shrink-0 rounded-full bg-ps-plum" aria-label={`${c.unread} unread`} />}

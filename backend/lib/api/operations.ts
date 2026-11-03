@@ -12,7 +12,7 @@ import { listAccounts, listMedia, listPosts, listResults } from "./reads";
 import { createProfile, deleteProfile, listProfiles, moveAccount, setTiktokDelivery, updateProfile } from "../connections/profiles";
 import { PERIODS, usageReport } from "../usage";
 import { X_PRICES } from "../pricing";
-import { dmCommenter, getConversation, hideComment, listComments, listContacts, listConversations, replyToComment, sendMessage, setConversationStatus, updateContact } from "../inbox/inbox";
+import { deleteComment, dmCommenter, getConversation, hideComment, listComments, listContacts, listConversations, replyToComment, sendMessage, setConversationStatus, updateContact } from "../inbox/inbox";
 import { LIMITS, MATCH_MODES, createAutomation, deleteAutomation, getAutomation, listAutomations, updateAutomation, type InboxSwitch } from "../inbox/automations";
 
 export type ApiDeps = {
@@ -213,7 +213,7 @@ const automationOperations: Operation[] = [
       "Lists DM conversations on the workspace's Instagram accounts and Facebook Pages, newest first: the person, the last message, unread count, and can_reply (Meta allows replies only within 24 hours of the person's last message; reply_until says until when).",
     method: "GET",
     path: "/v1/conversations",
-    input: { properties: { status: { type: "string", enum: ["open", "done", "all"], default: "open" }, account_id: id("connected Instagram account or Facebook Page"), ...paging } },
+    input: { properties: { status: { type: "string", enum: ["open", "done", "archived", "all"], default: "open" }, account_id: id("connected Instagram account or Facebook Page"), ...paging } },
     readOnly: true,
     run: (deps, caller, input) => listConversations({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, { ...input, workspace_id: caller.workspaceId }),
   },
@@ -244,11 +244,11 @@ const automationOperations: Operation[] = [
   {
     name: "update_conversation",
     inbox: true,
-    title: "Mark a conversation done",
-    description: "Marks a conversation done (it leaves the open list until the person writes again) or open.",
+    title: "Mark a conversation done or archive it",
+    description: "Marks a conversation done or archived (either leaves the open list until the person writes again), or open again. Archived ones show only with status archived. Nothing is deleted on Instagram or Facebook: Meta doesn't let apps delete DMs.",
     method: "PATCH",
     path: "/v1/conversations/{conversation_id}",
-    input: { properties: { conversation_id: id("conversation"), status: { type: "string", enum: ["open", "done"] } }, required: ["conversation_id", "status"] },
+    input: { properties: { conversation_id: id("conversation"), status: { type: "string", enum: ["open", "done", "archived"] } }, required: ["conversation_id", "status"] },
     strict: true,
     run: (deps, caller, input) => setConversationStatus({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, input),
   },
@@ -305,6 +305,19 @@ const automationOperations: Operation[] = [
     input: { properties: { comment_id: id("comment"), hidden: { type: "boolean", default: true } }, required: ["comment_id"] },
     strict: true,
     run: (deps, caller, input) => hideComment({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, input),
+  },
+  {
+    name: "delete_comment",
+    inbox: true,
+    title: "Delete a comment",
+    description:
+      "Deletes a comment on an Instagram or Facebook Page post for good: someone's comment, or one of the account's own replies (listed under each comment as replies). It can't be undone. Threads doesn't allow this; hide the reply instead.",
+    method: "DELETE",
+    path: "/v1/comments/{comment_id}",
+    input: { properties: { comment_id: id("comment") }, required: ["comment_id"] },
+    strict: true,
+    destructive: true,
+    run: (deps, caller, input) => deleteComment({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, input),
   },
   {
     name: "list_contacts",

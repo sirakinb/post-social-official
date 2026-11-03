@@ -26,9 +26,9 @@ function fakeSql(state: { lastInbound?: number | null; outbox?: unknown[]; comme
 }
 
 function fakeGraph() {
-  const calls: Array<{ url: string; body: unknown }> = [];
+  const calls: Array<{ url: string; method: string; body: unknown }> = [];
   const http = (async (url: string, init: RequestInit = {}) => {
-    calls.push({ url: String(url), body: init.body ? JSON.parse(String(init.body)) : null });
+    calls.push({ url: String(url), method: init.method ?? "GET", body: init.body ? JSON.parse(String(init.body)) : null });
     return new Response(JSON.stringify({ message_id: "mid9", success: true }));
   }) as typeof fetch;
   return { http, calls };
@@ -104,6 +104,15 @@ describe("inbox: sending", () => {
     const again = fakeSql({ outbox: [item({ kind: "private_reply" })], comment: { ...fresh, dm_sent_at: new Date().toISOString() } });
     expect(await runOutbox(deps(again, fakeGraph()))).toBe(0);
     expect(status(again).params[1]).toMatch(/already got a DM/);
+  });
+
+  it("deletes a comment and marks it deleted, but never on Threads", async () => {
+    const comment = { platform_comment_id: "c9", commenter_id: null, commenter_username: null, created_at: new Date().toISOString(), dm_sent_at: null };
+    const db = fakeSql({ outbox: [item({ kind: "delete_comment", text: null })], comment });
+    const graph = fakeGraph();
+    expect(await runOutbox(deps(db, graph))).toBe(1);
+    expect(graph.calls[0]).toMatchObject({ url: "https://graph.instagram.com/v25.0/c9", method: "DELETE" });
+    expect(db.writes.find((w) => w.query.includes("SET deleted_at"))!.params).toEqual(["cm1"]);
   });
 
   it("hides a comment", async () => {

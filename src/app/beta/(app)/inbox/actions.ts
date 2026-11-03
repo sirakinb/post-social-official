@@ -28,7 +28,7 @@ async function call<T>(body: Record<string, unknown>): Promise<{ ok: true; data:
 export async function sendMessage(conversationId: string, text: string) {
   return call({ action: "send_message", conversation_id: conversationId, text });
 }
-export async function setConversationStatus(conversationId: string, status: "open" | "done") {
+export async function setConversationStatus(conversationId: string, status: "open" | "done" | "archived") {
   return call({ action: "update_conversation", conversation_id: conversationId, status });
 }
 export async function replyToComment(commentId: string, text: string) {
@@ -39,6 +39,9 @@ export async function dmCommenter(commentId: string, text: string) {
 }
 export async function hideComment(commentId: string, hidden: boolean) {
   return call({ action: "hide_comment", comment_id: commentId, hidden });
+}
+export async function deleteComment(commentId: string) {
+  return call({ action: "delete_comment", comment_id: commentId });
 }
 export async function updateContact(contactId: string, input: { email?: string | null; tags?: string[]; notes?: string | null }) {
   return call({ action: "update_contact", contact_id: contactId, ...input });

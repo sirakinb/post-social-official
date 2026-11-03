@@ -2,10 +2,41 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { dmCommenter, hideComment, replyToComment } from "../actions";
+import { deleteComment, dmCommenter, hideComment, replyToComment } from "../actions";
 
-// Reply publicly, DM the commenter (one per comment, within 7 days) or hide, for one comment.
-export function CommentActions(props: { commentId: string; canDm: boolean; hidden: boolean; replied: boolean }) {
+// Delete, asking once first: it can't be undone (Instagram and Facebook only).
+export function DeleteButton(props: { commentId: string; label?: string }) {
+  const router = useRouter();
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!confirm) return <button type="button" onClick={() => setConfirm(true)} className="text-ps-failed-text hover:underline">{props.label ?? "Delete"}</button>;
+  return (
+    <span className="flex items-center gap-2">
+      <button
+        type="button"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          setError(null);
+          const result = await deleteComment(props.commentId);
+          setBusy(false);
+          if (!result.ok) return setError(result.error ?? "Something went wrong.");
+          setConfirm(false);
+          router.refresh();
+        }}
+        className="text-ps-failed-text underline disabled:opacity-60"
+      >
+        {busy ? "Deleting…" : "Delete for good"}
+      </button>
+      <button type="button" onClick={() => setConfirm(false)} className="text-ps-muted hover:text-ps-text">Keep</button>
+      {error && <span role="alert" className="text-ps-failed-text">{error}</span>}
+    </span>
+  );
+}
+
+// Reply publicly, DM the commenter (one per comment, within 7 days), hide or delete, for one comment.
+export function CommentActions(props: { commentId: string; canDm: boolean; canDelete: boolean; hidden: boolean; replied: boolean }) {
   const router = useRouter();
   const [mode, setMode] = useState<"reply" | "dm" | null>(null);
   const [text, setText] = useState("");
@@ -33,6 +64,7 @@ export function CommentActions(props: { commentId: string; canDm: boolean; hidde
           <span className="text-ps-subtle">DM not available</span>
         )}
         <button type="button" disabled={busy} onClick={() => run(() => hideComment(props.commentId, !props.hidden))} className="text-ps-muted hover:text-ps-text">{props.hidden ? "Unhide" : "Hide"}</button>
+        {props.canDelete && <DeleteButton commentId={props.commentId} />}
         {error && <span role="alert" className="text-ps-failed-text">{error}</span>}
       </div>
       {mode && (
