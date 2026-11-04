@@ -20,7 +20,7 @@ import { resendSender, runNudgeSweep } from "../../backend/lib/nudges";
 import { PLATFORMS, statsPreview, type Platform } from "../../backend/lib/connections/platforms";
 import { createTelemetry } from "../../backend/lib/telemetry";
 import { runInboxSweep, subscribeAccounts } from "./inbox/runner";
-import { fillContactProfiles, runOutbox } from "./inbox/inbox";
+import { catchUpThreadsReplies, fillContactProfiles, runOutbox } from "./inbox/inbox";
 
 function setting(name: string, fallback?: string) {
   const value = process.env[name] ?? fallback;
@@ -170,4 +170,5 @@ if (inboxOnHere && linkBase) {
   // Webhook events first, then replies people queued in the inbox.
   void every(4 * 1000, "inbox sweep", async () => (await runInboxSweep(inboxDeps)) + (await runOutbox(inboxDeps)));
   void every(60 * 1000, "inbox subscribe", async () => (await subscribeAccounts(inboxDeps)) + (await fillContactProfiles(inboxDeps)));
+  void every(6 * 3600 * 1000, "threads replies catch-up", () => catchUpThreadsReplies(inboxDeps));
 }

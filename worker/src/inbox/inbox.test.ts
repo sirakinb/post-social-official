@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Sql } from "../../../backend/lib/access";
-import { recordMessage, runOutbox } from "./inbox";
+import { catchUpThreadsReplies, recordMessage, runOutbox } from "./inbox";
 import type { InboxDeps } from "./runner";
 
 const account = { id: "acc", workspace_id: "w1", platform: "instagram", display_name: "Maker", external_account_id: "app-scoped", webhook_id: "1784" };
@@ -132,5 +132,28 @@ describe("inbox: sending", () => {
     expect(await runOutbox(deps(db, graph))).toBe(1);
     expect(graph.calls[0].url).toBe("https://graph.instagram.com/v25.0/c9?hide=true");
     expect(db.writes.find((w) => w.query.includes("SET hidden"))!.params).toEqual(["cm1", true]);
+  });
+});
+
+describe("inbox: Threads replies catch-up", () => {
+  it("reads replies on the account's latest posts and records them", async () => {
+    const threadsAccount = { ...account, platform: "threads", external_account_id: "t1", webhook_id: "t1", handle: "maker" };
+    const writes: string[] = [];
+    const sql = (async (query: string) => {
+      if (query.includes("a.platform = 'threads'")) return [threadsAccount];
+      if (query.includes("FROM public.connected_accounts a LEFT JOIN public.inbox_accounts")) return [threadsAccount];
+      if (query.includes("INSERT INTO public.contacts")) return [{ id: "ct1" }];
+      writes.push(query);
+      return [];
+    }) as Sql;
+    const calls: string[] = [];
+    const http = (async (url: string) => {
+      calls.push(String(url).split("?")[0]);
+      if (String(url).includes("/t1/threads")) return new Response(JSON.stringify({ data: [{ id: "post1" }] }));
+      return new Response(JSON.stringify({ data: [{ id: "r1", text: "GUIDE", username: "jay", root_post: { id: "post1" }, replied_to: { id: "post1" } }] }));
+    }) as typeof fetch;
+    expect(await catchUpThreadsReplies({ sql, http, setting: () => "", token: async () => "tok", linkBase: "https://x" })).toBe(1);
+    expect(calls).toEqual(["https://graph.threads.net/v1.0/t1/threads", "https://graph.threads.net/v1.0/post1/replies"]);
+    expect(writes.some((q) => q.includes("INSERT INTO public.inbox_comments"))).toBe(true);
   });
 });

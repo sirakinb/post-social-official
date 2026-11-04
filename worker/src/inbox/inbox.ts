@@ -1,7 +1,7 @@
 // The inbox side of Meta's webhooks (backend/lib/inbox/inbox.ts): stores every comment and DM
 // with the person behind it, and sends the replies people queue in Post Social (a DM, a
 // public comment reply, a DM to a commenter, hiding a comment).
-import { accountFor, fromAccount, graph, GraphError, META, PLATFORM_NAME, threadsReply, tokenFor, type Account, type CommentValue, type InboxDeps, type InboxPlatform } from "./runner";
+import { accountFor, fromAccount, graph, GraphError, META, PLATFORM_NAME, threadsComment, threadsReply, tokenFor, type Account, type CommentValue, type InboxDeps, type InboxPlatform } from "./runner";
 
 const REPLY_WINDOW_MS = 24 * 60 * 60 * 1000; // Meta: reply within 24 hours of their last message
 const PRIVATE_REPLY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // one DM per comment, within 7 days
@@ -148,6 +148,36 @@ export async function recordOutgoing(
       [account.id, comment.commentId, Boolean(comment.replied)],
     );
   }
+}
+
+// Threads replies on each account's latest posts, read through the API, so a reply whose
+// webhook never arrived still reaches the inbox. Recorded only: automations answer webhooks.
+export async function catchUpThreadsReplies(deps: InboxDeps) {
+  const accounts = await deps.sql<Account>(
+    `SELECT a.id, a.workspace_id, a.platform, a.display_name, a.external_account_id, a.handle, ia.webhook_id
+     FROM public.inbox_accounts ia JOIN public.connected_accounts a ON a.id = ia.connected_account_id
+     WHERE a.platform = 'threads' AND a.health <> 'disconnected' AND ia.subscribed_at IS NOT NULL LIMIT 20`,
+    [],
+  );
+  let found = 0;
+  for (const account of accounts) {
+    try {
+      const token = await tokenFor(deps, account);
+      const posts = await graph(deps, token, `${encodeURIComponent(account.external_account_id)}/threads?fields=id&limit=5`, { platform: "threads" });
+      for (const post of (posts.data ?? []) as Array<{ id: string }>) {
+        const replies = await graph(deps, token, `${encodeURIComponent(post.id)}/replies?fields=id,text,username,timestamp,root_post,replied_to`, { platform: "threads" });
+        for (const reply of (replies.data ?? []) as Array<Record<string, unknown>>) {
+          const comment = threadsComment(reply);
+          if (!comment) continue;
+          await recordComment(deps, account.webhook_id ?? account.external_account_id, comment, "threads");
+          found++;
+        }
+      }
+    } catch (error) {
+      deps.log?.("threads replies catch-up failed", { account: account.id, error: (error as Error).message });
+    }
+  }
+  return found;
 }
 
 // Names and handles for people who messaged first (Meta's DM events carry only an id).
