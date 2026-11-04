@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Sql } from "../../../backend/lib/access";
-import { answerComment, facebookComment, subscribeAccounts, threadsComment, type InboxDeps } from "./runner";
+import { answerComment, facebookComment, runInboxSweep, subscribeAccounts, threadsComment, type InboxDeps } from "./runner";
 
 const account = { id: "acc", workspace_id: "w1", platform: "instagram", display_name: "Maker", external_account_id: "app-scoped", webhook_id: "1784" };
 const automation = {
@@ -116,6 +116,20 @@ describe("comment-to-DM", () => {
     expect((dm.body as { message: { attachment: { payload: { text: string } } } }).message.attachment.payload.text).toBe("Hi Jay Doe, here you go");
     expect(reply.url).toBe("https://graph.facebook.com/v25.0/p1_c1/comments");
     expect(await answerComment(deps(fakeSql({ platform: "facebook" }), fakeGraph()), "page1", { ...comment, from: { id: "page1" } }, "facebook")).toBe("own comment");
+  });
+
+  it("reads a Facebook comment's text from the Page when the webhook leaves it out, then answers it", async () => {
+    const db = fakeSql({ platform: "facebook" });
+    const event = { id: 19, platform: "facebook", entry_id: "page1", field: "feed",
+      payload: { item: "comment", verb: "add", comment_id: "p1_c1", post_id: "page1_p1", parent_id: "page1_p1", from: { id: "psid9", name: "Jay Doe" } } };
+    const sql = (async (query: string, params: unknown[]) => (query.includes("claim_inbox_events") ? [event] : db.sql(query, params))) as Sql;
+    const graph = fakeGraph();
+    const http = (async (url: string, init?: RequestInit) =>
+      String(url).endsWith("p1_c1?fields=message") ? new Response(JSON.stringify({ message: "GUIDE please" })) : graph.http(url, init)) as typeof fetch;
+    expect(await runInboxSweep({ ...deps(db, graph), sql, http })).toBe(1);
+    const stored = db.writes.find((w) => w.query.includes("INSERT INTO public.inbox_comments"))!;
+    expect(stored.params[8]).toBe("GUIDE please");
+    expect(graph.calls[0].url).toBe("https://graph.facebook.com/v25.0/me/messages");
   });
 
   it("subscribes a Facebook Page to feed, message, echo and button-tap webhooks", async () => {

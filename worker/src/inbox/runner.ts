@@ -314,6 +314,15 @@ async function answerOnThreads(deps: InboxDeps, account: Account, rule: Rule, ru
   return status;
 }
 
+// Facebook sometimes sends a Page comment without its text (message): it's read from the Page.
+async function withFacebookText(deps: InboxDeps, entryId: string, comment: CommentValue): Promise<CommentValue> {
+  if (comment.text || !comment.id) return comment;
+  const account = await accountFor(deps, entryId, "facebook");
+  if (!account) return comment;
+  const found = await graph(deps, await tokenFor(deps, account), `${encodeURIComponent(comment.id)}?fields=message`, { platform: "facebook" });
+  return { ...comment, text: typeof found.message === "string" ? found.message : "" };
+}
+
 // Handles stored webhook events. Comments are answered; other events are kept for the inbox.
 export async function runInboxSweep(deps: InboxDeps) {
   const events = await deps.sql<StoredEvent>(`SELECT * FROM public.claim_inbox_events(20, 120)`, []);
@@ -321,9 +330,10 @@ export async function runInboxSweep(deps: InboxDeps) {
   for (const event of events) {
     try {
       const platform: InboxPlatform = event.platform === "facebook" ? "facebook" : event.platform === "threads" ? "threads" : "instagram";
-      const comment = platform === "instagram" && event.field === "comments" ? event.payload
+      const parsed = platform === "instagram" && event.field === "comments" ? event.payload
         : platform === "facebook" && event.field === "feed" ? facebookComment(event.payload as Record<string, unknown>)
         : platform === "threads" && event.field === "replies" ? threadsComment(event.payload as Record<string, unknown>) : null;
+      const comment = parsed && platform === "facebook" ? await withFacebookText(deps, event.entry_id, parsed as CommentValue) : parsed;
       if (comment) {
         await recordComment(deps, event.entry_id, comment, platform);
         await answerComment(deps, event.entry_id, comment, platform);

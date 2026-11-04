@@ -92,7 +92,8 @@ export async function recordComment(deps: InboxDeps, entryId: string, comment: C
   await deps.sql(
     `INSERT INTO public.inbox_comments (workspace_id, connected_account_id, contact_id, platform_comment_id, platform_post_id, parent_comment_id, commenter_id, commenter_username, text, from_account)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-     ON CONFLICT (connected_account_id, platform_comment_id) DO NOTHING`,
+     ON CONFLICT (connected_account_id, platform_comment_id) DO UPDATE SET text = EXCLUDED.text
+       WHERE coalesce(inbox_comments.text, '') = '' AND EXCLUDED.text <> ''`,
     [account.workspace_id, account.id, contactId, comment.id, comment.media?.id ?? null, comment.parent_id ?? null, comment.from?.id ?? null, comment.from?.username ?? comment.from?.name ?? null,
       (comment.text ?? "").slice(0, 2200), own],
   );
