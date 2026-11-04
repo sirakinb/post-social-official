@@ -252,7 +252,7 @@ export async function answerComment(deps: InboxDeps, entryId: string, comment: C
     `INSERT INTO public.automation_runs (workspace_id, automation_id, connected_account_id, platform_comment_id, platform_post_id, commenter_id, commenter_username, comment_text, status, reason)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'skipped', $9)
      ON CONFLICT (automation_id, platform_comment_id) DO NOTHING RETURNING id`,
-    [rule.workspace_id, rule.id, account.id, commentId, comment.media?.id ?? null, commenterId, comment.from?.username ?? null, (comment.text ?? "").slice(0, 2000),
+    [rule.workspace_id, rule.id, account.id, commentId, comment.media?.id ?? null, commenterId, comment.from?.username ?? comment.from?.name ?? null, (comment.text ?? "").slice(0, 2000),
       already ? "Already sent this person the DM" : "Sending"],
   );
   if (!run) return "already handled";

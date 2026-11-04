@@ -115,6 +115,7 @@ describe("comment-to-DM", () => {
     expect(dm.url).toBe("https://graph.facebook.com/v25.0/me/messages");
     expect((dm.body as { message: { attachment: { payload: { text: string } } } }).message.attachment.payload.text).toBe("Hi Jay Doe, here you go");
     expect(reply.url).toBe("https://graph.facebook.com/v25.0/p1_c1/comments");
+    expect(db.writes.find((w) => w.query.includes("INSERT INTO public.automation_runs"))!.params[6]).toBe("Jay Doe");
     expect(await answerComment(deps(fakeSql({ platform: "facebook" }), fakeGraph()), "page1", { ...comment, from: { id: "page1" } }, "facebook")).toBe("own comment");
   });
 

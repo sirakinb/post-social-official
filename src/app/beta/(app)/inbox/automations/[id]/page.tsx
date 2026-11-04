@@ -99,7 +99,7 @@ export default async function AutomationPage({ params, searchParams }: { params:
                     <tr key={r.id} className="border-b border-ps-line align-top last:border-0">
                       <td className="whitespace-nowrap px-4 py-3 text-ps-subtle">{when(r.created_at)}</td>
                       <td className="px-4 py-3">
-                        <span className="font-medium">{r.commenter_username ? `@${r.commenter_username}` : "Someone"}</span>{" "}
+                        <span className="font-medium">{r.commenter_username ? (a.account?.platform === "facebook" ? r.commenter_username : `@${r.commenter_username}`) : "Someone"}</span>{" "}
                         <span className="text-ps-muted">{r.comment_text}</span>
                       </td>
                       <td className="px-4 py-3">
