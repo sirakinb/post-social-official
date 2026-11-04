@@ -100,13 +100,15 @@ export function threadsComment(value: Record<string, any>): CommentValue | null 
 
 // A public reply on Threads: a text container replying to the post, then published (Threads
 // may need a moment before the container can be published).
-export async function threadsReply(deps: InboxDeps, token: string, replyTo: string, text: string) {
-  const container = await graph(deps, token, `me/threads?media_type=TEXT&reply_to_id=${encodeURIComponent(replyTo)}&text=${encodeURIComponent(text)}`, { method: "POST", platform: "threads" });
+export async function threadsReply(deps: InboxDeps, token: string, userId: string, replyTo: string, text: string) {
+  const user = encodeURIComponent(userId);
+  const container = await graph(deps, token, `${user}/threads?media_type=TEXT&reply_to_id=${encodeURIComponent(replyTo)}&text=${encodeURIComponent(text)}`, { method: "POST", platform: "threads" })
+    .catch((error: Error) => { throw new GraphError(`Threads didn't take the reply: ${error.message}`); });
   for (let attempt = 0; ; attempt++) {
     try {
-      return await graph(deps, token, `me/threads_publish?creation_id=${encodeURIComponent(String(container.id))}`, { method: "POST", platform: "threads" });
+      return await graph(deps, token, `${user}/threads_publish?creation_id=${encodeURIComponent(String(container.id))}`, { method: "POST", platform: "threads" });
     } catch (error) {
-      if (attempt >= 2) throw error;
+      if (attempt >= 2) throw new GraphError(`Threads didn't publish the reply: ${(error as Error).message}`);
       await (deps.wait ?? ((ms: number) => new Promise((r) => setTimeout(r, ms))))(3000);
     }
   }
@@ -122,7 +124,9 @@ export class GraphError extends Error {
 export async function graph(deps: InboxDeps, token: string, path: string, init: { method?: string; body?: unknown; platform?: InboxPlatform } = {}) {
   const http = deps.http ?? fetch;
   const platform = init.platform ?? "instagram";
-  const response = await http(`${META[platform].host}/${path}`, {
+  // Threads reads the token from access_token, as the publisher sends it (worker/src/publish/meta.ts).
+  const url = platform === "threads" ? `${META[platform].host}/${path}${path.includes("?") ? "&" : "?"}access_token=${encodeURIComponent(token)}` : `${META[platform].host}/${path}`;
+  const response = await http(url, {
     method: init.method ?? "GET",
     headers: { Authorization: `Bearer ${token}`, ...(init.body ? { "Content-Type": "application/json" } : {}) },
     body: init.body ? JSON.stringify(init.body) : undefined,
@@ -301,7 +305,7 @@ async function answerOnThreads(deps: InboxDeps, account: Account, rule: Rule, ru
   try {
     const reply = personalize(pickVariation(rule.comment_reply ?? "", rule.comment_reply_variations, random), username);
     if (!reply) throw new GraphError("This automation has no public reply.");
-    await threadsReply(deps, await tokenFor(deps, account), commentId, reply);
+    await threadsReply(deps, await tokenFor(deps, account), account.external_account_id, commentId, reply);
     await deps.sql(`UPDATE public.inbox_comments SET replied_at = coalesce(replied_at, now()) WHERE connected_account_id = $1 AND platform_comment_id = $2`, [account.id, commentId]);
   } catch (error) {
     status = "failed";
@@ -334,9 +338,12 @@ export async function runInboxSweep(deps: InboxDeps) {
         : platform === "facebook" && event.field === "feed" ? facebookComment(event.payload as Record<string, unknown>)
         : platform === "threads" && event.field === "replies" ? threadsComment(event.payload as Record<string, unknown>) : null;
       const comment = parsed && platform === "facebook" ? await withFacebookText(deps, event.entry_id, parsed as CommentValue) : parsed;
+      // Threads events stored before the owner was read from root_post carry the post's id.
+      const owner = (event.payload as { root_post?: { owner_id?: unknown } })?.root_post?.owner_id;
+      const entryId = platform === "threads" && owner ? String(owner) : event.entry_id;
       if (comment) {
-        await recordComment(deps, event.entry_id, comment, platform);
-        await answerComment(deps, event.entry_id, comment, platform);
+        await recordComment(deps, entryId, comment, platform);
+        await answerComment(deps, entryId, comment, platform);
       }
       if (event.field === "messages" && platform !== "threads") await recordMessage(deps, event.entry_id, event.payload as MessagingEvent, platform);
       await deps.sql(`UPDATE public.inbox_webhook_events SET processed_at = now(), error = NULL WHERE id = $1`, [event.id]);

@@ -224,7 +224,7 @@ async function sendOne(deps: InboxDeps, item: Outbox) {
   const id = encodeURIComponent(comment.platform_comment_id);
 
   if (item.kind === "comment_reply") {
-    if (platform === "threads") await threadsReply(deps, token, comment.platform_comment_id, item.text ?? "");
+    if (platform === "threads") await threadsReply(deps, token, account.external_account_id, comment.platform_comment_id, item.text ?? "");
     else await graph(deps, token, META[platform].reply(id), { method: "POST", body: { message: item.text }, platform });
     await deps.sql(`UPDATE public.inbox_comments SET replied_at = now() WHERE id = $1`, [item.comment_id]);
   } else if (item.kind === "private_reply") {

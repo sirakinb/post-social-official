@@ -148,8 +148,8 @@ describe("comment-to-DM", () => {
     const graph = fakeGraph();
     expect(await answerComment({ ...deps(db, graph), wait: async () => {} }, "t1", reply, "threads")).toBe("sent");
     expect(graph.calls.map((c) => c.url)).toEqual([
-      "https://graph.threads.net/v1.0/me/threads?media_type=TEXT&reply_to_id=r1&text=Sent%20you%20a%20DM",
-      "https://graph.threads.net/v1.0/me/threads_publish?creation_id=r1",
+      "https://graph.threads.net/v1.0/t1/threads?media_type=TEXT&reply_to_id=r1&text=Sent%20you%20a%20DM&access_token=tok",
+      "https://graph.threads.net/v1.0/t1/threads_publish?creation_id=r1&access_token=tok",
     ]);
     expect(db.writes.find((w) => w.query.includes("UPDATE public.automation_runs SET status"))!.params).toEqual(["run1", "sent", null, null, "sent"]);
     expect(await answerComment(deps(fakeSql({ platform: "threads" }), fakeGraph()), "t1", { ...reply, from: { id: "Maker", username: "Maker" } }, "threads")).toBe("own comment");

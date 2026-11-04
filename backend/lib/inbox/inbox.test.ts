@@ -85,6 +85,8 @@ describe("Meta webhooks", () => {
     expect(eventsIn({ app_id: "1", topic: "moderate", target_id: "t77", values: { field: "replies", value: { id: "r1", text: "guide" } } })).toEqual([
       { platform: "threads", entryId: "t77", field: "replies", payload: { id: "r1", text: "guide" } },
     ]);
+    const reply = { id: "r2", text: "AGENTS", root_post: { id: "post9", owner_id: "owner1" } };
+    expect(eventsIn({ app_id: "1", target_id: "post9", values: { field: "replies", value: reply } })[0].entryId).toBe("owner1");
   });
 });
 

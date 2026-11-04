@@ -36,10 +36,10 @@ function threadsEvents(body: unknown): StoredEvent[] {
   const deliveries = (Array.isArray(body) ? body : [body]) as Array<{ target_id?: unknown; values?: unknown }>;
   const events: StoredEvent[] = [];
   for (const d of deliveries.slice(0, 100)) {
-    const entryId = String(d?.target_id ?? "");
-    if (!entryId) continue;
-    for (const v of (Array.isArray(d.values) ? d.values : [d.values]) as Array<{ field?: string; value?: unknown }>) {
-      if (v?.field) events.push({ platform: "threads", entryId, field: String(v.field), payload: v.value ?? {} });
+    for (const v of (Array.isArray(d?.values) ? d.values : [d?.values]) as Array<{ field?: string; value?: { root_post?: { owner_id?: unknown } } }>) {
+      // A reply names its account by the post's owner; target_id can be the post itself.
+      const entryId = String(v?.value?.root_post?.owner_id ?? d?.target_id ?? "");
+      if (v?.field && entryId) events.push({ platform: "threads", entryId, field: String(v.field), payload: v.value ?? {} });
     }
   }
   return events;
