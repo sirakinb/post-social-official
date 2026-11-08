@@ -112,7 +112,13 @@ async function createContainer(ctx: StepContext, flavor: Flavor) {
       delete params.share_to_feed;
     }
   }
-  const container = await call(ctx, flavor, "POST", flavor.containerPath(userId), params, `Uploading to ${flavor.name}`);
+  const container = await call(ctx, flavor, "POST", flavor.containerPath(userId), params, `Uploading to ${flavor.name}`).catch((error: unknown) => {
+    // Instagram limits trial reels to accounts with enough followers and says so in the error.
+    if (params.trial_params && error instanceof PublishError && /trial reel/i.test(error.message)) {
+      throw new PublishError("trial_reel_not_eligible", "This Instagram account can't post trial reels yet: Instagram only allows them for accounts with enough followers. Post it as a normal Reel instead.");
+    }
+    throw error;
+  });
   await ctx.save({ container_id: String(container.id) });
   return true;
 }

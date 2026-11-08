@@ -13,11 +13,22 @@ describe("normalizeOptions", () => {
   it("requires a post type and defaults TikTok interactions off", () => {
     expect(normalizeOptions("instagram", {}).problems).toEqual(["Choose an Instagram post type: image, reel or carousel."]);
     expect(normalizeOptions("youtube", { title: "x" }).problems[0]).toMatch(/public, unlisted or private/);
-    const tiktok = normalizeOptions("tiktok", { privacy_level: "SELF_ONLY", unknown: 1 }).options;
+    const tiktok = normalizeOptions("tiktok", { privacy_level: "SELF_ONLY" }).options;
     expect(tiktok).toEqual({
       kind: "tiktok", delivery_mode: "direct", privacy_level: "SELF_ONLY", comments_enabled: false, duet_enabled: false,
       stitch_enabled: false, disclose_your_brand: false, disclose_branded_content: false, ai_generated: false,
     });
+  });
+});
+
+describe("unknown settings", () => {
+  it("refuses a setting the platform doesn't take instead of dropping it", () => {
+    expect(normalizeOptions("tiktok", { privacy_level: "SELF_ONLY", unknown: 1 }).problems[0]).toMatch(/^TikTok doesn't take "unknown"\. Settings it takes: delivery_mode/);
+    expect(normalizeOptions("instagram", { media_type: "reel", trial: "manual" }).problems[0]).toMatch(/^Instagram doesn't take "trial"/);
+    expect(normalizeOptions("x", { text: "hi", privacy_status: "public" }).problems[0]).toMatch(/^X doesn't take "privacy_status"/);
+  });
+  it("still accepts stored options, covers and left-out values", () => {
+    expect(normalizeOptions("instagram", { kind: "instagram", media_type: "reel", trial_reel: "auto", cover_time_ms: 0, caption: undefined }).problems).toEqual([]);
   });
 });
 

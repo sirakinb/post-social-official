@@ -74,11 +74,30 @@ function seconds(value: number) {
 }
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-// Fills defaults and drops unknown fields. Returns problems for anything unusable.
+// The settings each platform takes. Anything else is refused rather than quietly dropped, so
+// a setting a server doesn't know yet (an older deploy, a typo) never posts as something else.
+const KNOWN_OPTIONS: Record<Platform, readonly string[]> = {
+  instagram: ["media_type", "caption", "trial_reel"],
+  facebook: ["media_type", "message", "link", "title"],
+  threads: ["media_type", "text"],
+  youtube: ["title", "description", "privacy_status"],
+  tiktok: ["delivery_mode", "media_type", "title", "privacy_level", "comments_enabled", "duet_enabled", "stitch_enabled", "disclose_your_brand", "disclose_branded_content", "ai_generated"],
+  linkedin: ["media_type", "visibility", "text", "title"],
+  bluesky: ["media_type", "text", "alt_text"],
+  x: ["media_type", "text", "alt_text"],
+};
+const SHARED_OPTIONS = ["kind", "cover_media_id", "cover_time_ms"];
+
+// Fills defaults. Returns problems for anything unusable, including settings it doesn't know.
 export function normalizeOptions(platform: Platform, raw: unknown): { options?: DestinationOptions; problems: string[] } {
+  const input = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const unknown = Object.keys(input).filter((k) => input[k] !== undefined && !KNOWN_OPTIONS[platform].includes(k) && !SHARED_OPTIONS.includes(k));
+  if (unknown.length) {
+    const name = platform === "x" ? "X" : platform === "youtube" ? "YouTube" : platform === "tiktok" ? "TikTok" : platform === "linkedin" ? "LinkedIn" : platform[0].toUpperCase() + platform.slice(1);
+    return { problems: [`${name} doesn't take ${unknown.map((k) => `"${k}"`).join(", ")}. Settings it takes: ${[...KNOWN_OPTIONS[platform], "cover_media_id", "cover_time_ms"].join(", ")}.`] };
+  }
   const result = normalizeKind(platform, raw);
   if (!result.options) return result;
-  const input = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const problems = [...result.problems];
   const cover: CoverOptions = {};
   if (input.cover_media_id !== undefined && input.cover_media_id !== null) {
