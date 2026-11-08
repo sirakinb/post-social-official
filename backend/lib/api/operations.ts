@@ -51,7 +51,7 @@ const schedule: JsonSchema = {
 
 const OPTIONS_HELP = [
   "Per-platform settings. media_type is required for Instagram, Facebook and Threads.",
-  "instagram: media_type image | reel | carousel; caption (overrides the shared caption).",
+  "instagram: media_type image | reel | carousel; caption (overrides the shared caption); trial_reel manual | auto (Reels only: shown to non-followers first; manual means the person shares it with followers in the Instagram app, auto means Instagram shares it if it does well; left out, a normal Reel).",
   "facebook: media_type text | link | image | reel | video; message (overrides caption); link (for link posts); title (videos).",
   "threads: media_type text | image | video | carousel; text (overrides caption).",
   "youtube (Shorts, one vertical video up to 3 min): title (required, up to 100 characters); description; privacy_status public | unlisted | private (required).",

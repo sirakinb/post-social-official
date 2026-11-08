@@ -31,6 +31,7 @@ const PLATFORMS: Platform[] = [
       "Captions up to 2,200 characters.",
       "Reels: MP4 or MOV, 3 seconds to 15 minutes.",
       "Carousels: 2 to 10 files; videos in a carousel can be 3 to 60 seconds.",
+      "Reels can go out as trial reels: shown to non-followers first, then shared with your followers by you in the Instagram app, or by Instagram if the Reel does well.",
     ],
     connect: "Needs a Business or Creator account.",
   },
