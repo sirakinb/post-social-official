@@ -130,6 +130,9 @@ function nextStep(post: { status: string; scheduled_at: string | null }) {
     case "processing":
     case "approved":
       return "Publishing now; some accounts are still sending (a video can take a few minutes). Check get_post again shortly for their live links.";
+    case "failed":
+    case "partially_published":
+      return "Some accounts failed; each one's error_message says why. Fix what it asks, then call retry_post to send it again (it checks the platform first when the post may already be live). If it is live, call mark_post_published instead.";
     default:
       return undefined;
   }
@@ -471,6 +474,39 @@ export const operations: Operation[] = [
     input: { properties: { post_id: id("post") }, required: ["post_id"] },
     destructive: true,
     run: (deps, caller, input) => postActions.cancel({ sql: deps.sql }, caller, input),
+  },
+  {
+    name: "retry_post",
+    title: "Retry a failed post",
+    description:
+      "Sends a failed post again, to one failed account (account_id) or every failed account. Accounts that published are left alone. When an account's may_be_live is true, the earlier attempt may have reached the platform, so the retry looks there first and only posts again if the post is missing; start_over: true skips that check (use it only after checking the platform yourself, or it may post twice). Counts toward the monthly post limit.",
+    method: "POST",
+    path: "/v1/posts/{post_id}/retry",
+    input: {
+      properties: {
+        post_id: id("post"),
+        account_id: { ...id("connected account"), description: "The failed account to retry. Leave out to retry every failed account." },
+        start_over: { type: "boolean", default: false, description: "Post again without checking the platform first." },
+      },
+      required: ["post_id"],
+    },
+    run: async (deps, caller, input) => withNextStep(await postActions.retry({ sql: deps.sql }, caller, input)),
+  },
+  {
+    name: "mark_post_published",
+    title: "Mark a failed post as published",
+    description: "Records that a post shown as failed on an account is live on the platform anyway. Nothing is sent. Pass live_url if you have the post's link.",
+    method: "POST",
+    path: "/v1/posts/{post_id}/mark-published",
+    input: {
+      properties: {
+        post_id: id("post"),
+        account_id: id("connected account the post is live on"),
+        live_url: { type: "string", format: "uri", maxLength: 2000, description: "The post's https:// link on the platform." },
+      },
+      required: ["post_id", "account_id"],
+    },
+    run: async (deps, caller, input) => withNextStep(await postActions.mark_published({ sql: deps.sql }, caller, input)),
   },
   {
     name: "delete_post",

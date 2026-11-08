@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Sql } from "../../../backend/lib/access";
 import { runNextPublishJob } from "./runner";
-import type { Adapter } from "./types";
+import { PublishError, type Adapter } from "./types";
 
 // A stand-in database that answers the runner's reads and records every statement it sends.
 function fakeDatabase(startedAt = new Date().toISOString()) {
@@ -14,6 +14,7 @@ function fakeDatabase(startedAt = new Date().toISOString()) {
     if (text.includes("FROM public.destinations d JOIN public.posts p")) {
       return [{ status: "scheduled", post_status: "scheduled", platform: "facebook", options: { media_type: "text" }, caption: "Hello", account_id: "acct-1", external_account_id: "fb-1", handle: "page", display_name: "Page", scopes: [], capabilities: {}, health: "connected" }];
     }
+    if (text.includes("SET checkpoint")) return [{ id: "job-1" }];
     return [];
   }) as Sql;
   return { sql, statements };
@@ -42,5 +43,30 @@ describe("runNextPublishJob", () => {
     await runNextPublishJob({ sql: db.sql, r2: {} as never, setting: () => "", adapters: { facebook: adapter } });
     const sent = db.statements.flatMap((s) => s.params).filter((p): p is string => typeof p === "string");
     expect(sent).toContain("TikTok is still fetching the photos after 30 minutes. Check the platform before posting again.");
+  });
+
+  // A retry looks on the platform first only when the failed attempt may have reached it.
+  const failedWith = async (adapter: Adapter) => {
+    const db = fakeDatabase();
+    await runNextPublishJob({ sql: db.sql, r2: {} as never, setting: () => "", adapters: { facebook: adapter } });
+    const failed = db.statements.find((s) => s.text.includes("SET status = 'failed'"));
+    return failed?.params[4];
+  };
+
+  it("marks a failure as maybe live when the publish call started and the result is unknown", async () => {
+    expect(await failedWith(async (ctx) => {
+      await ctx.save({ publish_started_at: new Date().toISOString() });
+      throw new PublishError("unconfirmed", "The video upload was interrupted and it is not on the Page yet.");
+    })).toBe(true);
+  });
+
+  it("does not mark a refused or never-sent post as maybe live", async () => {
+    expect(await failedWith(async (ctx) => {
+      await ctx.save({ publish_started_at: new Date().toISOString() });
+      throw new PublishError("meta_100", "Facebook refused the post.");
+    })).toBe(false);
+    expect(await failedWith(async () => {
+      throw new PublishError("unconfirmed", "Could not confirm.");
+    })).toBe(false);
   });
 });
