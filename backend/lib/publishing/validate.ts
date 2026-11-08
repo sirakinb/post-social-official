@@ -3,7 +3,9 @@
 import type { Platform } from "../connections/platforms";
 import { xWeightedLength } from "../connections/x";
 
-export type InstagramOptions = { kind: "instagram"; media_type: "image" | "reel" | "carousel"; caption?: string };
+// trial_reel: share a Reel with non-followers first. "manual": you share it with followers from
+// the Instagram app; "auto": Instagram shares it if it does well with non-followers.
+export type InstagramOptions = { kind: "instagram"; media_type: "image" | "reel" | "carousel"; caption?: string; trial_reel?: "manual" | "auto" };
 export type FacebookOptions = { kind: "facebook"; media_type: "text" | "link" | "image" | "reel" | "video"; message?: string; link?: string; title?: string };
 export type ThreadsOptions = { kind: "threads"; media_type: "text" | "image" | "video" | "carousel"; text?: string };
 export type YouTubeOptions = { kind: "youtube"; title: string; description?: string; privacy_status: "public" | "unlisted" | "private" };
@@ -72,11 +74,30 @@ function seconds(value: number) {
 }
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-// Fills defaults and drops unknown fields. Returns problems for anything unusable.
+// The settings each platform takes. Anything else is refused rather than quietly dropped, so
+// a setting a server doesn't know yet (an older deploy, a typo) never posts as something else.
+const KNOWN_OPTIONS: Record<Platform, readonly string[]> = {
+  instagram: ["media_type", "caption", "trial_reel"],
+  facebook: ["media_type", "message", "link", "title"],
+  threads: ["media_type", "text"],
+  youtube: ["title", "description", "privacy_status"],
+  tiktok: ["delivery_mode", "media_type", "title", "privacy_level", "comments_enabled", "duet_enabled", "stitch_enabled", "disclose_your_brand", "disclose_branded_content", "ai_generated"],
+  linkedin: ["media_type", "visibility", "text", "title"],
+  bluesky: ["media_type", "text", "alt_text"],
+  x: ["media_type", "text", "alt_text"],
+};
+const SHARED_OPTIONS = ["kind", "cover_media_id", "cover_time_ms"];
+
+// Fills defaults. Returns problems for anything unusable, including settings it doesn't know.
 export function normalizeOptions(platform: Platform, raw: unknown): { options?: DestinationOptions; problems: string[] } {
+  const input = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const unknown = Object.keys(input).filter((k) => input[k] !== undefined && !KNOWN_OPTIONS[platform].includes(k) && !SHARED_OPTIONS.includes(k));
+  if (unknown.length) {
+    const name = platform === "x" ? "X" : platform === "youtube" ? "YouTube" : platform === "tiktok" ? "TikTok" : platform === "linkedin" ? "LinkedIn" : platform[0].toUpperCase() + platform.slice(1);
+    return { problems: [`${name} doesn't take ${unknown.map((k) => `"${k}"`).join(", ")}. Settings it takes: ${[...KNOWN_OPTIONS[platform], "cover_media_id", "cover_time_ms"].join(", ")}.`] };
+  }
   const result = normalizeKind(platform, raw);
   if (!result.options) return result;
-  const input = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const problems = [...result.problems];
   const cover: CoverOptions = {};
   if (input.cover_media_id !== undefined && input.cover_media_id !== null) {
@@ -132,7 +153,10 @@ function normalizeKind(platform: Platform, raw: unknown): { options?: Destinatio
     case "instagram": {
       const media_type = pick("media_type", ["image", "reel", "carousel"] as const);
       if (!media_type) return { problems: ["Choose an Instagram post type: image, reel or carousel."] };
-      return { options: { kind: "instagram", media_type, caption: str("caption") }, problems: [] };
+      const trial_reel = pick("trial_reel", ["manual", "auto"] as const);
+      if (input.trial_reel !== undefined && input.trial_reel !== null && !trial_reel) return { problems: ["trial_reel must be manual or auto, or left out for a normal Reel."] };
+      if (trial_reel && media_type !== "reel") return { problems: ["Trial reels apply to Instagram Reels only."] };
+      return { options: { kind: "instagram", media_type, caption: str("caption"), ...(trial_reel ? { trial_reel } : {}) }, problems: [] };
     }
     case "facebook": {
       const media_type = pick("media_type", ["text", "link", "image", "reel", "video"] as const);

@@ -16,6 +16,7 @@ const PERSON_CAN_FIX = new Set([
   "tiktok_stitch_off",
   "unaudited_client_can_only_post_to_private_accounts",
   "privacy_level_option_mismatch",
+  "trial_reel_not_eligible",
   "spam_risk_too_many_pending_share",
   "spam_risk_user_banned_from_posting",
   // A limit on the person's own account; trying later works.

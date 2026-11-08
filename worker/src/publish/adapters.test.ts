@@ -4,6 +4,7 @@ import type { DestinationOptions } from "../../../backend/lib/publishing/validat
 import { publishFacebook } from "./facebook";
 import { linkedinCommentary, publishLinkedIn } from "./linkedin";
 import { publishInstagram, publishThreads } from "./meta";
+import { failureMessage } from "./support";
 import { chunkPlan, publishTikTok } from "./tiktok";
 import { PublishError, type Bundle, type Checkpoint, type StepContext } from "./types";
 import { publishYouTube } from "./youtube";
@@ -82,6 +83,43 @@ describe("Instagram", () => {
     expect(await publishInstagram(h.ctx)).toEqual({ kind: "published", platformId: "ig-post", liveUrl: "https://instagram.com/p/x" });
     expect(h.calls.filter((c) => c.includes("media_publish"))).toHaveLength(1);
     expect(h.calls.filter((c) => c === "POST https://graph.instagram.com/v25.0/acct-1/media")).toHaveLength(1);
+  });
+
+  describe("Trial reels", () => {
+    const reelMedia = { media: [{ media_type: "video" as const, mime_type: "video/mp4", duration_seconds: 10 }] };
+    const creating = (sent: Record<string, string>[]) => (u: URL, i: RequestInit) =>
+      method(i) === "POST" && u.pathname.endsWith("/acct-1/media") ? (sent.push(Object.fromEntries(new URLSearchParams(String(i.body)))), json({ id: "c1" })) : undefined;
+    const pending = (u: URL) => (u.pathname.endsWith("/c1") ? json({ status_code: "IN_PROGRESS" }) : undefined);
+
+    it("sends trial_params and leaves out share_to_feed", async () => {
+      for (const [trial, strategy] of [["manual", "MANUAL"], ["auto", "SS_PERFORMANCE"]] as const) {
+        const sent: Record<string, string>[] = [];
+        const h = harness("instagram", { kind: "instagram", media_type: "reel", trial_reel: trial }, [creating(sent), pending], reelMedia);
+        await publishInstagram(h.ctx);
+        expect(sent[0]).toMatchObject({ media_type: "REELS" });
+        expect(JSON.parse(sent[0].trial_params)).toEqual({ graduation_strategy: strategy });
+        expect(sent[0]).not.toHaveProperty("share_to_feed");
+      }
+    });
+
+    it("says plainly when the account can't post trial reels", async () => {
+      const refuse = (u: URL, i: RequestInit) =>
+        method(i) === "POST" && u.pathname.endsWith("/acct-1/media")
+          ? new Response(JSON.stringify({ error: { code: 10, message: "The instagram account does not meet the trial reel follower requirement to create trial reels." } }), { status: 400 })
+          : undefined;
+      const h = harness("instagram", { kind: "instagram", media_type: "reel", trial_reel: "manual" }, [refuse], reelMedia);
+      const error = await publishInstagram(h.ctx).catch((e: unknown) => e);
+      expect(error).toMatchObject({ code: "trial_reel_not_eligible", retryable: false });
+      expect(failureMessage(error as PublishError)).toBe("This Instagram account can't post trial reels yet: Instagram only allows them for accounts with enough followers. Post it as a normal Reel instead.");
+    });
+
+    it("sends a normal Reel without trial_params", async () => {
+      const sent: Record<string, string>[] = [];
+      const h = harness("instagram", { kind: "instagram", media_type: "reel" }, [creating(sent), pending], reelMedia);
+      await publishInstagram(h.ctx);
+      expect(sent[0]).toMatchObject({ media_type: "REELS", share_to_feed: "true" });
+      expect(sent[0]).not.toHaveProperty("trial_params");
+    });
   });
 
   describe("Reel covers", () => {

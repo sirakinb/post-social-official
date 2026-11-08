@@ -103,8 +103,22 @@ async function createContainer(ctx: StepContext, flavor: Flavor) {
 
   const params: Record<string, string> = kind === "text" ? { media_type: "TEXT" } : await mediaParams(ctx, flavor, bundle.media[0], false);
   if (caption) params[textKey] = caption;
-  if (flavor.name === "Instagram" && kind === "reel") Object.assign(params, await reelCover(ctx));
-  const container = await call(ctx, flavor, "POST", flavor.containerPath(userId), params, `Uploading to ${flavor.name}`);
+  if (flavor.name === "Instagram" && kind === "reel") {
+    Object.assign(params, await reelCover(ctx));
+    // A trial reel goes to non-followers first, so it isn't shared to the feed.
+    const trial = bundle.options.kind === "instagram" ? bundle.options.trial_reel : undefined;
+    if (trial) {
+      params.trial_params = JSON.stringify({ graduation_strategy: trial === "auto" ? "SS_PERFORMANCE" : "MANUAL" });
+      delete params.share_to_feed;
+    }
+  }
+  const container = await call(ctx, flavor, "POST", flavor.containerPath(userId), params, `Uploading to ${flavor.name}`).catch((error: unknown) => {
+    // Instagram limits trial reels to accounts with enough followers and says so in the error.
+    if (params.trial_params && error instanceof PublishError && /trial reel/i.test(error.message)) {
+      throw new PublishError("trial_reel_not_eligible", "This Instagram account can't post trial reels yet: Instagram only allows them for accounts with enough followers. Post it as a normal Reel instead.");
+    }
+    throw error;
+  });
   await ctx.save({ container_id: String(container.id) });
   return true;
 }
