@@ -1,6 +1,6 @@
 // What the docs page and /llms.txt say about the API, built from the same operations list
 // the REST API and MCP server use, so the docs always match the server.
-import { availableOperations } from "../../backend/lib/api/operations";
+import { availableOperations, VIDEO_COVERS_HELP } from "../../backend/lib/api/operations";
 import type { Platform } from "../../backend/lib/connections/platforms";
 
 import { SITE } from "@/lib/site";
@@ -51,6 +51,9 @@ export function llmsText() {
     "3. validate_post, then create_post with scheduled_at (ISO 8601; one call per post for a series), or publish: \"now\" to send right away. Without either, create_post only saves a draft and posts nothing.",
     "4. TikTok posts go direct by default (set privacy_level to the audience the person asked for), or to the creator's TikTok inbox: per post with delivery_mode, or per account with set_tiktok_delivery.",
     "5. A post is live only when list_post_results shows published with a live_url.",
+    "",
+    "## Video covers",
+    `- ${VIDEO_COVERS_HELP}`,
     "",
     "## Pricing",
     `- Connected accounts 1 and 2 are free (no card). Then per account per month: $5 for accounts 3–10, $2.50 for 11–100, $1 for 101 and up; usage based, prorated for the days an account is connected. X posts 2¢ each, 25¢ with a link, first $1 a month free, under a monthly cap the person sets. Details: ${SITE}/docs/billing`,

@@ -49,13 +49,17 @@ const schedule: JsonSchema = {
   description: "When to publish, in ISO 8601 with a timezone, e.g. 2026-10-05T15:00:00Z. Up to a year ahead.",
 };
 
+// Shared with /llms.txt so the docs and the API say the same thing about covers.
+export const VIDEO_COVERS_HELP =
+  "Video covers (any platform's options): cover_media_id (an image from list_media) or cover_time_ms (a frame, in milliseconds from the start), not both. Instagram Reels and YouTube take either; TikTok direct posts take a frame only; LinkedIn videos take either; TikTok drafts, Facebook, Threads, Bluesky and X can't set a cover. Instagram crops the cover to a centred square in the profile grid.";
+
 const OPTIONS_HELP = [
   "Per-platform settings. media_type is required for Instagram, Facebook and Threads. A setting a platform doesn't take is refused, not ignored.",
   "instagram: media_type image | reel | carousel; caption (overrides the shared caption); trial_reel manual | auto (Reels only: shown to non-followers first; manual means the person shares it with followers in the Instagram app, auto means Instagram shares it if it does well; left out, a normal Reel).",
   "facebook: media_type text | link | image | reel | video; message (overrides caption); link (for link posts); title (videos).",
   "threads: media_type text | image | video | carousel; text (overrides caption).",
   "youtube (Shorts, one vertical video up to 3 min): title (required, up to 100 characters); description; privacy_status public | unlisted | private (required).",
-  "Video covers (any platform's options): cover_media_id (an image from list_media) or cover_time_ms (a frame, in milliseconds from the start), not both. Instagram Reels and YouTube take either; TikTok direct posts take a frame only; LinkedIn videos take either; TikTok drafts, Facebook, Threads, Bluesky and X can't set a cover. Instagram crops the cover to a centred square in the profile grid.",
+  VIDEO_COVERS_HELP,
   "tiktok: delivery_mode direct (posts straight away; needs privacy_level PUBLIC_TO_EVERYONE | MUTUAL_FOLLOW_FRIENDS | FOLLOWER_OF_CREATOR | SELF_ONLY, the audience the person asked for, never assumed) or inbox (a draft in the creator's TikTok inbox, where they finish it and tap Post); left out, it follows the account's tiktok_delivery from list_accounts (direct unless the person chose inbox; set_tiktok_delivery changes it); media_type video (one video) | photo (1 to 35 images as a swipeable carousel; JPEG, PNG or WebP, resized for TikTok automatically), left out it follows the media; title (photo posts only, up to 90 characters); comments_enabled, duet_enabled, stitch_enabled (default off; Duet and Stitch are video only); disclose_your_brand, disclose_branded_content; ai_generated.",
   "linkedin (the member's own profile): media_type text | image | video, left out it follows the media; text (overrides caption, up to 3,000 characters); title (videos); visibility PUBLIC (default) | CONNECTIONS. Images: 1 to 20 JPEG, PNG or GIF (2 or more show as a gallery). Videos: one MP4, 3 seconds to 30 minutes, up to 500 MB.",
   "bluesky: media_type text | image | video, left out it follows the media; text (overrides caption, up to 300 characters); alt_text (one description per image, in order). Images: 1 to 4 JPEG, PNG, WebP or GIF (larger than 1 MB are resized to fit). Videos: one MP4, up to 3 minutes and 100 MB. Links, @mentions and #hashtags become clickable.",
