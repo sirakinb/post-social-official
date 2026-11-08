@@ -102,6 +102,18 @@ async function videoReady(ctx: StepContext, videoId: string, reel: boolean) {
   return video === "ready";
 }
 
+// Facebook pulls the file from our link in the background, and can answer the finish call
+// with "The video was not uploaded" (error 6000) while it is still doing so; the Reel then
+// goes live anyway (2026-11-07). So that answer means "not ready yet": the ready check waits
+// for it, and fails with Facebook's own reason if the upload really failed.
+async function finishReel(ctx: StepContext, videoId: string, caption: string) {
+  try {
+    await graph(ctx, "POST", `/${ctx.bundle.account.externalId}/video_reels`, { upload_phase: "finish", video_id: videoId, video_state: "PUBLISHED", description: caption }, "Publishing the Facebook Reel");
+  } catch (error) {
+    if (!(error instanceof PublishError && error.code === "meta_6000")) throw error;
+  }
+}
+
 async function reel(ctx: StepContext, caption: string) {
   const pageId = ctx.bundle.account.externalId;
   if (!ctx.checkpoint.video_id) {
@@ -123,7 +135,7 @@ async function reel(ctx: StepContext, caption: string) {
   }
   if (!ctx.checkpoint.publish_started_at) {
     await ctx.save({ publish_started_at: new Date(ctx.now()).toISOString() });
-    await graph(ctx, "POST", `/${pageId}/video_reels`, { upload_phase: "finish", video_id: videoId, video_state: "PUBLISHED", description: caption }, "Publishing the Facebook Reel");
+    await finishReel(ctx, videoId, caption);
   } else {
     // Resuming: if the finish call never landed, the publishing phase has not started. A
     // brief "does not exist" just after publishing is left to the ready check to wait out.
@@ -132,7 +144,7 @@ async function reel(ctx: StepContext, caption: string) {
       throw error;
     });
     if (String(body.status?.publishing_phase?.status ?? "not_started") === "not_started") {
-      await graph(ctx, "POST", `/${pageId}/video_reels`, { upload_phase: "finish", video_id: videoId, video_state: "PUBLISHED", description: caption }, "Publishing the Facebook Reel");
+      await finishReel(ctx, videoId, caption);
     }
   }
   return videoId;

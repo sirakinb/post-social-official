@@ -15,11 +15,11 @@ type Row = {
   created_at: string;
   entry_point: string;
   actors: { kind: string; display_name: string } | null;
-  destinations: Array<{ platform: string; status: string; live_url: string | null; options: { delivery_mode?: string } | null; connected_accounts: { display_name: string } | null }>;
+  destinations: Array<{ platform: string; status: string; live_url: string | null; options: { delivery_mode?: string } | null; connected_account_id: string; error_message: string | null; may_be_live: boolean | null; connected_accounts: { display_name: string } | null }>;
   post_media: Array<{ position: number; media_assets: { id: string; media_type: string; status: string } | null }>;
 };
 
-const SELECT = "id, status, caption, scheduled_at, created_at, entry_point, actors(kind, display_name), destinations(platform, status, live_url, options, connected_accounts(display_name)), post_media(position, media_assets(id, media_type, status))";
+const SELECT = "id, status, caption, scheduled_at, created_at, entry_point, actors(kind, display_name), destinations(platform, status, live_url, options, connected_account_id, error_message, may_be_live, connected_accounts(display_name)), post_media(position, media_assets(id, media_type, status))";
 
 export default async function CalendarPage({ searchParams }: { searchParams: Promise<{ from?: string; view?: string }> }) {
   const params = await searchParams;
@@ -56,6 +56,9 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     destinations: r.destinations.map((d) => ({
       platform: d.platform,
       status: d.status,
+      accountId: d.connected_account_id,
+      error: d.status === "failed" ? d.error_message : null,
+      mayBeLive: Boolean(d.may_be_live),
       account: d.connected_accounts?.display_name ?? "",
       liveUrl: d.live_url,
       // TikTok inbox posts wait in the person's TikTok drafts; they aren't live yet.

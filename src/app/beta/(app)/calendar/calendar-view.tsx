@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useSyncExternalStore } from "react";
+import { FailedPostActions } from "@/components/beta/failed-post-actions";
 import { ActorMark, type ActorKind } from "@/components/beta/marks";
 import { Label, PlatformMark, Status, Thumb, type Tone } from "@/components/beta/ui";
 import { cn } from "@/lib/utils";
@@ -17,7 +18,7 @@ export type CalendarPost = {
   by: { kind: string; name: string } | null;
   via: string;
   thumb: { url: string | null; isVideo: boolean } | null;
-  destinations: Array<{ platform: string; status: string; account: string; liveUrl: string | null; drafted?: boolean }>;
+  destinations: Array<{ platform: string; status: string; account: string; liveUrl: string | null; drafted?: boolean; accountId?: string; error?: string | null; mayBeLive?: boolean }>;
 };
 
 const subscribe = () => () => {};
@@ -300,10 +301,18 @@ function PostCard({ post, canEdit, onClose }: { post: CalendarPost; canEdit: boo
       </div>
       <div className="flex flex-col gap-1.5 border-t border-ps-fg/[0.06] px-4 py-3">
         {post.destinations.map((d, i) => (
-          <div key={i} className="flex items-center gap-2 text-xs">
-            <PlatformMark platform={d.platform} size={18} />
-            <span className="min-w-0 flex-1 truncate">{d.account}</span>
-            {d.liveUrl?.startsWith("https://") ? <a href={d.liveUrl} target="_blank" rel="noreferrer" className="text-ps-plum-soft hover:text-ps-text">View live ↗</a> : <span className="text-ps-subtle">{d.drafted ? "in TikTok drafts" : d.status.replace("_", " ")}</span>}
+          <div key={i} className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-2 text-xs">
+              <PlatformMark platform={d.platform} size={18} />
+              <span className="min-w-0 flex-1 truncate">{d.account}</span>
+              {d.liveUrl?.startsWith("https://") ? <a href={d.liveUrl} target="_blank" rel="noreferrer" className="text-ps-plum-soft hover:text-ps-text">View live ↗</a> : <span className={d.status === "failed" ? "text-ps-failed-text" : "text-ps-subtle"}>{d.drafted ? "in TikTok drafts" : d.status.replace("_", " ")}</span>}
+            </div>
+            {d.status === "failed" && (
+              <div className="flex flex-col gap-1.5 pl-[26px]">
+                {d.error && <p className="m-0 line-clamp-3 text-xs text-ps-failed-text">{d.error}</p>}
+                {canEdit && d.accountId && <FailedPostActions postId={post.id} accountId={d.accountId} platform={d.platform} mayBeLive={Boolean(d.mayBeLive)} onDone={onClose} />}
+              </div>
+            )}
           </div>
         ))}
         {post.by && (

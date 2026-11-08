@@ -174,7 +174,7 @@ async function view(deps: PostsDeps, postId: string) {
   const [post] = await deps.sql<PostRow>(`SELECT * FROM public.posts WHERE id = $1`, [postId]);
   const destinations = await deps.sql<Record<string, unknown>>(
     `SELECT d.id, d.connected_account_id AS account_id, a.display_name AS account, a.handle AS account_handle, d.platform, d.status, d.options,
-            d.live_url, ${publishedAtSql("d")} AS published_at, d.error_code, d.error_message
+            d.live_url, ${publishedAtSql("d")} AS published_at, d.error_code, d.error_message, d.may_be_live
      FROM public.destinations d JOIN public.connected_accounts a ON a.id = d.connected_account_id
      WHERE d.post_id = $1 ORDER BY d.created_at`,
     [postId],
@@ -583,6 +583,91 @@ export async function deletePost(deps: PostsDeps, caller: Caller, input: Record<
   return { post_id: postId, deleted: true };
 }
 
+// The failed accounts an action applies to: the one named, or every failed one.
+function failedTargets<D extends { id: string; connected_account_id: string; status: string }>(destinations: D[], accountId: unknown, action: string) {
+  if (accountId === undefined || accountId === null) {
+    const failed = destinations.filter((d) => d.status === "failed");
+    if (!failed.length) throw new ApiError(409, `No account on this post failed, so there is nothing to ${action}.`);
+    return failed;
+  }
+  const id = requireUuid(accountId, "Account").toLowerCase();
+  const target = destinations.find((d) => d.connected_account_id.toLowerCase() === id);
+  if (!target) throw new ApiError(404, "That account is not on this post.");
+  if (target.status !== "failed") throw new ApiError(409, `Only failed posts can be ${action === "retry" ? "retried" : "marked as published"} (this one is ${target.status.replace("_", " ")}).`);
+  return [target];
+}
+
+// Rules the database enforces come back as plain sentences.
+async function plainRule<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    const rule = String((error as Error).message).match(/Only failed posts can be [^.]*\.|This post is already being sent again\./)?.[0];
+    if (rule) throw new ApiError(409, rule);
+    throw error;
+  }
+}
+
+const RETRYABLE_POSTS = ["failed", "partially_published", "processing"];
+
+// Sends a failed post again, to one failed account (account_id) or all of them. When the
+// failed attempt may already be live, the publisher looks on the platform first and only
+// posts again if it isn't there; start_over: true skips that check.
+export async function retryPost(deps: PostsDeps, caller: Caller, input: Record<string, unknown>) {
+  const postId = requireUuid(input.post_id, "Post");
+  assertMayPublish(caller);
+  const { post, member, destinations } = await loadPost(deps, caller, postId, true);
+  if (!RETRYABLE_POSTS.includes(post.status)) throw new ApiError(409, `Only failed posts can be retried (this post is ${post.status.replace("_", " ")}).`);
+  const targets = failedTargets(destinations, input.account_id, "retry");
+  try {
+    await deps.sql(`SELECT public.assert_within_limit($1, 'posts_per_month', $2)`, [post.workspace_id, targets.length]);
+  } catch (error) {
+    const plain = String((error as Error).message).match(/Your .* plan allows .*?limit\./)?.[0];
+    if (plain) throw new ApiError(402, plain);
+    throw error;
+  }
+  const accounts = await loadAccounts(deps, post.workspace_id, targets.map((d) => d.connected_account_id));
+  const names = targets.map((d) => accounts.get(d.connected_account_id)?.display_name ?? d.platform);
+  const disconnected = targets.find((d) => accounts.get(d.connected_account_id)?.health === "disconnected");
+  if (disconnected) throw new ApiError(409, `${accounts.get(disconnected.connected_account_id)!.display_name} was disconnected. Reconnect it, then retry.`);
+  const startOver = input.start_over === true;
+  let checking = false;
+  for (const d of targets) {
+    const [{ retry_destination: how }] = await plainRule(() => deps.sql<{ retry_destination: string }>(`SELECT public.retry_destination($1, $2)`, [d.id, startOver]));
+    if (how === "checking") checking = true;
+  }
+  trackEvent("post_retried", { workspace_id: post.workspace_id, source: caller.entryPoint, destinations: targets.length, checking, start_over: startOver }, await personFor(deps, caller));
+  await audit(deps, post.workspace_id, member.actor_id, caller, postId, "post.retried",
+    `Retried for ${names.join(", ")}${checking ? " (checking the platform first)" : startOver ? " (starting over)" : ""}`);
+  return view(deps, postId);
+}
+
+// Records that a failed post went live anyway (the platform has it). Nothing is sent.
+export async function markPostPublished(deps: PostsDeps, caller: Caller, input: Record<string, unknown>) {
+  const postId = requireUuid(input.post_id, "Post");
+  const { post, member, destinations } = await loadPost(deps, caller, postId, true);
+  if (!RETRYABLE_POSTS.includes(post.status)) throw new ApiError(409, `Only failed posts can be marked as published (this post is ${post.status.replace("_", " ")}).`);
+  if (input.account_id === undefined || input.account_id === null) throw new ApiError(400, "Say which account the post is live on (account_id).");
+  const [target] = failedTargets(destinations, input.account_id, "mark");
+  let link: string | null = null;
+  if (input.live_url !== undefined && input.live_url !== null && input.live_url !== "") {
+    const raw = typeof input.live_url === "string" ? input.live_url.trim() : "";
+    let parsed: URL | null = null;
+    try {
+      parsed = raw.length <= 2000 ? new URL(raw) : null;
+    } catch {
+      parsed = null;
+    }
+    if (!parsed || parsed.protocol !== "https:") throw new ApiError(400, "The live link must be a full https:// address.");
+    link = parsed.toString();
+  }
+  await plainRule(() => deps.sql(`SELECT public.mark_destination_published($1, $2)`, [target.id, link]));
+  const accounts = await loadAccounts(deps, post.workspace_id, [target.connected_account_id]);
+  await audit(deps, post.workspace_id, member.actor_id, caller, postId, "post.marked_published",
+    `Marked as published on ${accounts.get(target.connected_account_id)?.display_name ?? target.platform}`, undefined, link ? { live_url: link } : undefined);
+  return view(deps, postId);
+}
+
 export async function getPost(deps: PostsDeps, caller: Caller, input: Record<string, unknown>) {
   const postId = requireUuid(input.post_id, "Post");
   await loadPost(deps, caller, postId, false);
@@ -600,6 +685,8 @@ export const postActions = {
   reschedule: reschedulePost,
   get: getPost,
   delete: deletePost,
+  retry: retryPost,
+  mark_published: markPostPublished,
 } as const;
 
 export { captionFor };

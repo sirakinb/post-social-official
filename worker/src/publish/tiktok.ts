@@ -139,7 +139,9 @@ export const publishTikTok: Adapter = async (ctx) => {
     if (TIKTOK_MESSAGES[reason]) throw new PublishError(`tiktok_${reason}`, TIKTOK_MESSAGES[reason]);
     throw new PublishError(`tiktok_${reason || "failed"}`, `TikTok could not publish the ${kind}${reason ? ` (${reason.replace(/_/g, " ")})` : ""}.`);
   }
-  return { kind: "wait", afterMs: 10_000, message: `TikTok is processing the ${kind}.` };
+  // Saved as the job's last message, so a post that never finishes shows where TikTok stopped.
+  const message = state === "PROCESSING_DOWNLOAD" ? `TikTok is still fetching the ${kind}.` : `TikTok is processing the ${kind}.`;
+  return { kind: "wait", afterMs: 10_000, message };
 };
 
 // Photo posts: TikTok fetches each image itself, so one call hands the whole post over.

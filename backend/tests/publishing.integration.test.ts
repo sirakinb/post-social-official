@@ -31,7 +31,7 @@ describe.skipIf(!enabled)("publishing engine on the dev backend (US-027 to US-03
 
   // A stand-in platform that records every real "send".
   const sent: string[] = [];
-  let platformMode: "ok" | "flaky" | "refuse" = "ok";
+  let platformMode: "ok" | "flaky" | "refuse" | "unconfirmed" = "ok";
   const posted = new Map<string, string>(); // checkpoint marker -> platform id
   const standIn: Adapter = async (ctx) => {
     if (ctx.checkpoint.publish_started_at) {
@@ -45,6 +45,8 @@ describe.skipIf(!enabled)("publishing engine on the dev backend (US-027 to US-03
     const id = `sp-${sent.length + 1}`;
     sent.push(ctx.bundle.destinationId);
     posted.set(ctx.bundle.destinationId, id);
+    // The platform took the post but we never heard back (a false failure).
+    if (platformMode === "unconfirmed") throw new PublishError("unconfirmed", "The platform has not confirmed the post. Check the platform before posting again.");
     if (crashAfterSend) {
       crashAfterSend = false;
       // Simulate the worker dying right after the platform accepted the post: nothing else
@@ -413,5 +415,89 @@ describe.skipIf(!enabled)("publishing engine on the dev backend (US-027 to US-03
     const outsider: Caller = { userId: "00000000-0000-0000-0000-000000000000", displayName: "x", entryPoint: "ui" };
     const draft = await act(person(), "create", textPost(facebook, `Private ${suffix}`));
     await expect(act(outsider, "get", { post_id: draft.id })).rejects.toThrow("That post was not found.");
+  });
+
+  it("retries a failed account: refused before, published after", async () => {
+    const before = sent.length;
+    platformMode = "refuse";
+    const draft = await act(person(), "create", textPost(facebook, `Retry me ${suffix}`));
+    await act(person(), "submit", { post_id: draft.id });
+    await drain();
+    const failed = await act(person(), "get", { post_id: draft.id });
+    expect(failed.status).toBe("failed");
+    expect(failed.destinations[0]).toMatchObject({ status: "failed", may_be_live: false });
+
+    platformMode = "ok";
+    const retried = await act(person(), "retry", { post_id: draft.id });
+    expect(retried.status).toBe("processing");
+    expect(retried.destinations[0]).toMatchObject({ status: "queued", error_message: null });
+    await expect(act(person(), "retry", { post_id: draft.id })).rejects.toThrow(/Only failed posts can be retried|No account on this post failed/);
+    await drain();
+    const done = await act(person(), "get", { post_id: draft.id });
+    expect(done.status).toBe("published");
+    expect(sent.length).toBe(before + 1);
+    await expect(act(person(), "retry", { post_id: draft.id })).rejects.toThrow("Only failed posts can be retried (this post is published).");
+  });
+
+  it("a retry after a false failure finds the live post instead of posting twice", async () => {
+    const before = sent.length;
+    platformMode = "unconfirmed";
+    const draft = await act(person(), "create", textPost(facebook, `Maybe live ${suffix}`));
+    await act(person(), "submit", { post_id: draft.id });
+    await drain();
+    platformMode = "ok";
+    const failed = await act(person(), "get", { post_id: draft.id });
+    expect(failed.destinations[0]).toMatchObject({ status: "failed", error_code: "unconfirmed", may_be_live: true });
+    expect(sent.length).toBe(before + 1);
+
+    await act(person(), "retry", { post_id: draft.id, account_id: facebook });
+    await drain();
+    const done = await act(person(), "get", { post_id: draft.id });
+    expect(done.status).toBe("published");
+    expect(done.destinations[0]).toMatchObject({ status: "published", live_url: expect.stringMatching(/^https:\/\/example\.social\/sp-/) });
+    expect(sent.length).toBe(before + 1); // found on the platform, not sent again
+  });
+
+  it("start_over posts again without the check", async () => {
+    const before = sent.length;
+    platformMode = "unconfirmed";
+    const draft = await act(person(), "create", textPost(threads, `Start over ${suffix}`));
+    await act(person(), "submit", { post_id: draft.id });
+    await drain();
+    platformMode = "ok";
+    await act(person(), "retry", { post_id: draft.id, start_over: true });
+    await drain();
+    expect((await act(person(), "get", { post_id: draft.id })).status).toBe("published");
+    expect(sent.length).toBe(before + 2);
+  });
+
+  it("marks a failed account as published without sending, and settles the post", async () => {
+    const before = sent.length;
+    platformMode = "refuse";
+    const draft = await act(person(), "create", { ...textPost(facebook, `Live anyway ${suffix}`), destinations: [{ account_id: facebook, options: { media_type: "text" } }, { account_id: threads, options: { media_type: "text" } }] });
+    await act(person(), "submit", { post_id: draft.id });
+    await drain();
+    platformMode = "ok";
+    expect((await act(person(), "get", { post_id: draft.id })).status).toBe("failed");
+
+    await expect(act(person(), "mark_published", { post_id: draft.id, account_id: facebook, live_url: "javascript:alert(1)" })).rejects.toThrow("The live link must be a full https:// address.");
+    const partly = await act(person(), "mark_published", { post_id: draft.id, account_id: facebook, live_url: "https://facebook.com/p/1" });
+    expect(partly.status).toBe("partially_published");
+    expect(partly.destinations.find((d) => d.account_id === facebook)).toMatchObject({ status: "published", live_url: "https://facebook.com/p/1" });
+    const all = await act(person(), "mark_published", { post_id: draft.id, account_id: threads });
+    expect(all.status).toBe("published");
+    expect(sent.length).toBe(before);
+    const [log] = await sql<{ summary: string }>(`SELECT summary FROM public.audit_events WHERE entity_id = $1 AND event_type = 'post.marked_published' ORDER BY occurred_at LIMIT 1`, [draft.id]);
+    expect(log.summary).toBe("Marked as published on Test facebook");
+  });
+
+  it("test keys cannot retry", async () => {
+    platformMode = "refuse";
+    const draft = await act(person(), "create", textPost(facebook, `No retry ${suffix}`));
+    await act(person(), "submit", { post_id: draft.id });
+    await drain();
+    platformMode = "ok";
+    const testKey = { kind: "key", credentialId: owner.userId, workspaceId: owner.workspaceId, actorId: owner.userId, mode: "test", displayName: "Test key", entryPoint: "api" } as unknown as Caller;
+    await expect(act(testKey, "retry", { post_id: draft.id })).rejects.toThrow(/Test keys cannot publish/);
   });
 });
