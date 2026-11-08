@@ -74,7 +74,8 @@ export type LogRow = {
   status: LogStatus;
   // For failures: the reason given, and its code when there is one.
   error: { code: string | null; message: string } | null;
-  target: { platform: string; account: string; postId: string } | null;
+  // accountId, status and mayBeLive say whether a failed post can still be retried.
+  target: { platform: string; account: string; postId: string; accountId?: string; status?: string; mayBeLive?: boolean } | null;
   details: Record<string, unknown> | null;
 };
 
@@ -162,10 +163,10 @@ export async function loadLogs(client: Client, workspaceId: string, filters: Log
   if (destinationIds.length) {
     const { data: destinations } = await client.database
       .from("destinations")
-      .select(`id, platform, post_id, connected_accounts(display_name), actors!destinations_actor_id_fkey(${actor})`)
+      .select(`id, platform, post_id, connected_account_id, status, may_be_live, connected_accounts(display_name), actors!destinations_actor_id_fkey(${actor})`)
       .in("id", destinationIds);
-    for (const d of (destinations ?? []) as unknown as Array<{ id: string; platform: string; post_id: string; connected_accounts: { display_name: string } | null; actors: Actor | null }>) {
-      targets.set(d.id, { platform: d.platform, account: d.connected_accounts?.display_name ?? "", postId: d.post_id });
+    for (const d of (destinations ?? []) as unknown as Array<{ id: string; platform: string; post_id: string; connected_account_id: string; status: string; may_be_live: boolean | null; connected_accounts: { display_name: string } | null; actors: Actor | null }>) {
+      targets.set(d.id, { platform: d.platform, account: d.connected_accounts?.display_name ?? "", postId: d.post_id, accountId: d.connected_account_id, status: d.status, mayBeLive: Boolean(d.may_be_live) });
       if (d.actors) postedBy.set(d.id, d.actors);
     }
   }

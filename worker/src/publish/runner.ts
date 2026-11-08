@@ -75,6 +75,8 @@ export async function runNextPublishJob(deps: PublishDeps): Promise<boolean> {
     deps.sql(`UPDATE public.publish_jobs SET state = $2, last_error = $3, lease_expires_at = NULL, finished_at = now() WHERE ${fence}`, [job.id, state, error]);
 
   let bundle: Bundle | null = null;
+  // The job's saved progress, kept up to date as the adapter saves it.
+  const checkpoint: Checkpoint = { ...(job.checkpoint ?? {}) };
   try {
     bundle = await loadBundle(deps, job);
     if (!bundle) {
@@ -108,7 +110,6 @@ export async function runNextPublishJob(deps: PublishDeps): Promise<boolean> {
     await deps.sql(`SELECT public.mark_post_sending($1)`, [b.postId]);
     await deps.sql(`UPDATE public.destinations SET status = 'processing' WHERE id = $1 AND status IN ('queued', 'scheduled')`, [b.destinationId]);
 
-    const checkpoint: Checkpoint = { ...(job.checkpoint ?? {}) };
     const ctx: StepContext = {
       bundle: b,
       checkpoint,
@@ -215,13 +216,16 @@ export async function runNextPublishJob(deps: PublishDeps): Promise<boolean> {
     }
     // Crashes, and problems only we can fix (our X credits ran out), page us with the details.
     if (error.code === "unexpected" || error.code === "x_no_credits") await deps.telemetry?.captureException(cause, { job: job.id, platform: bundle?.platform ?? null, area: "publish" });
+    // The platform may already have the post: the publish call started and we could not
+    // confirm the result, or ran out of tries after it. A retry then looks there first.
+    const mayBeLive = Boolean(checkpoint.publish_started_at) && (error.code === "unconfirmed" || error.retryable);
     await deps.sql(
       `WITH d AS (
-         UPDATE public.destinations SET status = 'failed', error_code = $2, error_message = $3 WHERE id = $1 AND status <> 'published' RETURNING workspace_id
+         UPDATE public.destinations SET status = 'failed', error_code = $2, error_message = $3, may_be_live = $5 WHERE id = $1 AND status <> 'published' RETURNING workspace_id
        )
        INSERT INTO public.audit_events (workspace_id, entry_point, event_type, entity_type, entity_id, summary, after_values)
-       SELECT workspace_id, 'worker', 'destination.failed', 'destination', $1, $4, jsonb_build_object('code', $2::text, 'message', $3::text) FROM d`,
-      [job.destination_id, error.code, message, `Could not publish${bundle ? ` to ${bundle.account.displayName}` : ""}`],
+       SELECT workspace_id, 'worker', 'destination.failed', 'destination', $1, $4, jsonb_build_object('code', $2::text, 'message', $3::text, 'may_be_live', $5::boolean) FROM d`,
+      [job.destination_id, error.code, message, `Could not publish${bundle ? ` to ${bundle.account.displayName}` : ""}`, mayBeLive],
     );
     await deps.sql(`SELECT public.finalize_post($1)`, [job.post_id]);
     return true;
