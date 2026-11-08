@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { normalizeOptions } from "../../../backend/lib/publishing/validate";
 import { captionLimits, coverNotes, defaultMediaType, defaultTitle, destinationOptions, NEW_TIKTOK, tiktokLabel, tiktokProblems, type ComposerAccount, type ComposerMedia } from "./composer-model";
 
 const video: ComposerMedia = { id: "v", name: "clip.mp4", type: "video", width: 1080, height: 1920, duration: 42, url: null };
@@ -28,6 +29,30 @@ describe("composer defaults", () => {
   it("counts characters per platform", () => {
     const limits = captionLimits([account("threads", 500), account("instagram", 2200)], {}, "x".repeat(534));
     expect(limits.map((l) => [l.label, l.over])).toEqual([["Threads", true], ["IG", false]]);
+  });
+});
+
+describe("composer settings are all ones the server takes", () => {
+  it("never sends a setting the server would refuse as unknown", () => {
+    const clip = { id: "v", name: "v.mp4", type: "video" as const, width: 1080, height: 1920, duration: 10, url: null };
+    const full = { mediaType: undefined, caption: "c", link: "https://x.example", title: "t", privacy: "unlisted" as const, trialReel: "auto" as const, tiktok: { ...NEW_TIKTOK, privacyLevel: "SELF_ONLY", title: "t", comments: true, disclose: true, yourBrand: true, brandedContent: true, aiGenerated: true } };
+    for (const platform of ["instagram", "facebook", "threads", "youtube", "tiktok", "linkedin", "bluesky", "x"] as const) {
+      for (const media of [[clip], []]) {
+        const options = destinationOptions(account(platform), full, "Shared https://x.example", media, { kind: "frame", ms: 1000 });
+        const unknown = normalizeOptions(platform, options).problems.filter((p) => p.includes("doesn't take"));
+        expect(unknown, `${platform}: ${JSON.stringify(options)}`).toEqual([]);
+      }
+    }
+  });
+});
+
+describe("Instagram trial reels", () => {
+  const acct = account("instagram");
+  const clip = { id: "v", name: "v.mp4", type: "video" as const, width: 1080, height: 1920, duration: 10, url: null };
+  it("sends trial_reel only for a Reel", () => {
+    expect(destinationOptions(acct, { trialReel: "auto" }, "Hi", [clip])).toEqual({ media_type: "reel", trial_reel: "auto" });
+    expect(destinationOptions(acct, { trialReel: "manual", mediaType: "image" }, "Hi", [clip])).toEqual({ media_type: "image" });
+    expect(destinationOptions(acct, {}, "Hi", [clip])).toEqual({ media_type: "reel" });
   });
 });
 
