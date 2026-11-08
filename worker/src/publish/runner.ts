@@ -150,7 +150,7 @@ export async function runNextPublishJob(deps: PublishDeps): Promise<boolean> {
     if (result.kind === "wait") {
       const minutes = (now() - Date.parse(job.started_at)) / 60_000;
       if (minutes > MAX_POLL_MINUTES) {
-        throw new PublishError("unconfirmed", `${result.message ?? "The platform has not confirmed the post"} after ${MAX_POLL_MINUTES} minutes. Check the platform before posting again.`);
+        throw new PublishError("unconfirmed", `${(result.message ?? "The platform has not confirmed the post").replace(/\.$/, "")} after ${MAX_POLL_MINUTES} minutes. Check the platform before posting again.`);
       }
       await deps.sql(
         `UPDATE public.publish_jobs SET state = 'polling', poll_count = poll_count + 1, lease_expires_at = NULL,

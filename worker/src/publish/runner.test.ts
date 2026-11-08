@@ -4,12 +4,12 @@ import { runNextPublishJob } from "./runner";
 import type { Adapter } from "./types";
 
 // A stand-in database that answers the runner's reads and records every statement it sends.
-function fakeDatabase() {
+function fakeDatabase(startedAt = new Date().toISOString()) {
   const statements: { text: string; params: unknown[] }[] = [];
   const sql = (async (text: string, params: unknown[] = []) => {
     statements.push({ text: text.replace(/\s+/g, " ").trim(), params });
     if (text.includes("claim_publish_job")) {
-      return [{ id: "job-1", workspace_id: "ws-1", post_id: "post-1", destination_id: "dest-1", attempt_count: 1, poll_count: 0, max_attempts: 3, checkpoint: {}, started_at: new Date().toISOString() }];
+      return [{ id: "job-1", workspace_id: "ws-1", post_id: "post-1", destination_id: "dest-1", attempt_count: 1, poll_count: 0, max_attempts: 3, checkpoint: {}, started_at: startedAt }];
     }
     if (text.includes("FROM public.destinations d JOIN public.posts p")) {
       return [{ status: "scheduled", post_status: "scheduled", platform: "facebook", options: { media_type: "text" }, caption: "Hello", account_id: "acct-1", external_account_id: "fb-1", handle: "page", display_name: "Page", scopes: [], capabilities: {}, health: "connected" }];
@@ -34,5 +34,13 @@ describe("runNextPublishJob", () => {
     const finalized = order.indexOf("SELECT public.finalize_post($1)");
     expect(marked).toBeGreaterThan(-1);
     expect(finalized).toBeGreaterThan(marked);
+  });
+
+  it("gives up after 30 minutes of waiting with a readable message", async () => {
+    const db = fakeDatabase(new Date(Date.now() - 31 * 60_000).toISOString());
+    const adapter: Adapter = async () => ({ kind: "wait", afterMs: 10_000, message: "TikTok is still fetching the photos." });
+    await runNextPublishJob({ sql: db.sql, r2: {} as never, setting: () => "", adapters: { facebook: adapter } });
+    const sent = db.statements.flatMap((s) => s.params).filter((p): p is string => typeof p === "string");
+    expect(sent).toContain("TikTok is still fetching the photos after 30 minutes. Check the platform before posting again.");
   });
 });
