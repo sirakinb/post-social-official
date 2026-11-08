@@ -3,7 +3,9 @@
 import type { Platform } from "../connections/platforms";
 import { xWeightedLength } from "../connections/x";
 
-export type InstagramOptions = { kind: "instagram"; media_type: "image" | "reel" | "carousel"; caption?: string };
+// trial_reel: share a Reel with non-followers first. "manual": you share it with followers from
+// the Instagram app; "auto": Instagram shares it if it does well with non-followers.
+export type InstagramOptions = { kind: "instagram"; media_type: "image" | "reel" | "carousel"; caption?: string; trial_reel?: "manual" | "auto" };
 export type FacebookOptions = { kind: "facebook"; media_type: "text" | "link" | "image" | "reel" | "video"; message?: string; link?: string; title?: string };
 export type ThreadsOptions = { kind: "threads"; media_type: "text" | "image" | "video" | "carousel"; text?: string };
 export type YouTubeOptions = { kind: "youtube"; title: string; description?: string; privacy_status: "public" | "unlisted" | "private" };
@@ -132,7 +134,10 @@ function normalizeKind(platform: Platform, raw: unknown): { options?: Destinatio
     case "instagram": {
       const media_type = pick("media_type", ["image", "reel", "carousel"] as const);
       if (!media_type) return { problems: ["Choose an Instagram post type: image, reel or carousel."] };
-      return { options: { kind: "instagram", media_type, caption: str("caption") }, problems: [] };
+      const trial_reel = pick("trial_reel", ["manual", "auto"] as const);
+      if (input.trial_reel !== undefined && input.trial_reel !== null && !trial_reel) return { problems: ["trial_reel must be manual or auto, or left out for a normal Reel."] };
+      if (trial_reel && media_type !== "reel") return { problems: ["Trial reels apply to Instagram Reels only."] };
+      return { options: { kind: "instagram", media_type, caption: str("caption"), ...(trial_reel ? { trial_reel } : {}) }, problems: [] };
     }
     case "facebook": {
       const media_type = pick("media_type", ["text", "link", "image", "reel", "video"] as const);

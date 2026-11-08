@@ -479,6 +479,25 @@ function PlatformOptions({ account, choice, media, caption, onChange, creator, c
           </span>
         </div>
       )}
+      {account.platform === "instagram" && mediaType === "reel" && (
+        <div className="flex flex-col gap-1.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-ps-muted">Trial reel</span>
+            <span className="inline-flex rounded-[9px] border border-ps-fg/[0.08] bg-ps-ground p-[3px]" role="radiogroup" aria-label="Instagram trial reel">
+              {([["off", "Off"], ["manual", "Share manually"], ["auto", "Share if it does well"]] as const).map(([id, label]) => (
+                <button key={id} type="button" role="radio" aria-checked={(choice.trialReel ?? "off") === id} onClick={() => onChange({ trialReel: id === "off" ? undefined : id })} className={cn("h-7 rounded-md px-2.5 text-xs", (choice.trialReel ?? "off") === id ? "bg-ps-segment text-ps-text" : "text-ps-muted hover:text-ps-text")}>
+                  {label}
+                </button>
+              ))}
+            </span>
+          </div>
+          {choice.trialReel && (
+            <p className="m-0 text-xs text-ps-muted">
+              {choice.trialReel === "manual" ? "Shown to non-followers first. Share it with your followers from the Instagram app." : "Shown to non-followers first. Instagram shares it with your followers if it does well."}
+            </p>
+          )}
+        </div>
+      )}
       {account.platform === "facebook" && mediaType === "link" && (
         <label className="flex flex-col gap-1.5">
           <span className="text-xs text-ps-muted">Link</span>

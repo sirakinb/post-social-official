@@ -103,7 +103,7 @@ function choiceFromOptions(platform: Platform, o: Record<string, unknown>): Plat
   const str = (k: string) => (typeof o[k] === "string" ? (o[k] as string) : undefined);
   switch (platform) {
     case "instagram":
-      return { mediaType: str("media_type"), caption: str("caption") };
+      return { mediaType: str("media_type"), caption: str("caption"), trialReel: str("trial_reel") === "manual" || str("trial_reel") === "auto" ? (str("trial_reel") as "manual" | "auto") : undefined };
     case "facebook":
       return { mediaType: str("media_type"), caption: str("message"), link: str("link"), title: str("title") };
     case "threads":

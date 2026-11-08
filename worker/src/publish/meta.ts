@@ -103,7 +103,15 @@ async function createContainer(ctx: StepContext, flavor: Flavor) {
 
   const params: Record<string, string> = kind === "text" ? { media_type: "TEXT" } : await mediaParams(ctx, flavor, bundle.media[0], false);
   if (caption) params[textKey] = caption;
-  if (flavor.name === "Instagram" && kind === "reel") Object.assign(params, await reelCover(ctx));
+  if (flavor.name === "Instagram" && kind === "reel") {
+    Object.assign(params, await reelCover(ctx));
+    // A trial reel goes to non-followers first, so it isn't shared to the feed.
+    const trial = bundle.options.kind === "instagram" ? bundle.options.trial_reel : undefined;
+    if (trial) {
+      params.trial_params = JSON.stringify({ graduation_strategy: trial === "auto" ? "SS_PERFORMANCE" : "MANUAL" });
+      delete params.share_to_feed;
+    }
+  }
   const container = await call(ctx, flavor, "POST", flavor.containerPath(userId), params, `Uploading to ${flavor.name}`);
   await ctx.save({ container_id: String(container.id) });
   return true;

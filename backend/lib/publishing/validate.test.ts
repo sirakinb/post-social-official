@@ -21,6 +21,19 @@ describe("normalizeOptions", () => {
   });
 });
 
+describe("Instagram trial reels", () => {
+  it("keeps manual or auto on a Reel and leaves it out otherwise", () => {
+    expect(normalizeOptions("instagram", { media_type: "reel", trial_reel: "manual" }).options).toMatchObject({ kind: "instagram", media_type: "reel", trial_reel: "manual" });
+    expect(normalizeOptions("instagram", { media_type: "reel", trial_reel: "auto" }).options).toMatchObject({ trial_reel: "auto" });
+    expect(normalizeOptions("instagram", { media_type: "reel" }).options).not.toHaveProperty("trial_reel");
+  });
+  it("refuses a trial on a photo or carousel, and unknown values", () => {
+    expect(normalizeOptions("instagram", { media_type: "image", trial_reel: "manual" }).problems).toEqual(["Trial reels apply to Instagram Reels only."]);
+    expect(normalizeOptions("instagram", { media_type: "carousel", trial_reel: "auto" }).problems).toEqual(["Trial reels apply to Instagram Reels only."]);
+    expect(normalizeOptions("instagram", { media_type: "reel", trial_reel: "yes" }).problems).toEqual(["trial_reel must be manual or auto, or left out for a normal Reel."]);
+  });
+});
+
 describe("Instagram", () => {
   it("accepts a JPEG image, a Reel and a carousel", () => {
     expect(check({ kind: "instagram", media_type: "image" }, [image()])).toEqual([]);

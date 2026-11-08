@@ -84,6 +84,32 @@ describe("Instagram", () => {
     expect(h.calls.filter((c) => c === "POST https://graph.instagram.com/v25.0/acct-1/media")).toHaveLength(1);
   });
 
+  describe("Trial reels", () => {
+    const reelMedia = { media: [{ media_type: "video" as const, mime_type: "video/mp4", duration_seconds: 10 }] };
+    const creating = (sent: Record<string, string>[]) => (u: URL, i: RequestInit) =>
+      method(i) === "POST" && u.pathname.endsWith("/acct-1/media") ? (sent.push(Object.fromEntries(new URLSearchParams(String(i.body)))), json({ id: "c1" })) : undefined;
+    const pending = (u: URL) => (u.pathname.endsWith("/c1") ? json({ status_code: "IN_PROGRESS" }) : undefined);
+
+    it("sends trial_params and leaves out share_to_feed", async () => {
+      for (const [trial, strategy] of [["manual", "MANUAL"], ["auto", "SS_PERFORMANCE"]] as const) {
+        const sent: Record<string, string>[] = [];
+        const h = harness("instagram", { kind: "instagram", media_type: "reel", trial_reel: trial }, [creating(sent), pending], reelMedia);
+        await publishInstagram(h.ctx);
+        expect(sent[0]).toMatchObject({ media_type: "REELS" });
+        expect(JSON.parse(sent[0].trial_params)).toEqual({ graduation_strategy: strategy });
+        expect(sent[0]).not.toHaveProperty("share_to_feed");
+      }
+    });
+
+    it("sends a normal Reel without trial_params", async () => {
+      const sent: Record<string, string>[] = [];
+      const h = harness("instagram", { kind: "instagram", media_type: "reel" }, [creating(sent), pending], reelMedia);
+      await publishInstagram(h.ctx);
+      expect(sent[0]).toMatchObject({ media_type: "REELS", share_to_feed: "true" });
+      expect(sent[0]).not.toHaveProperty("trial_params");
+    });
+  });
+
   describe("Reel covers", () => {
     const reelMedia = { media: [{ media_type: "video" as const, mime_type: "video/mp4", duration_seconds: 10 }] };
     const creating = (sent: Record<string, string>[]) => (u: URL, i: RequestInit) =>

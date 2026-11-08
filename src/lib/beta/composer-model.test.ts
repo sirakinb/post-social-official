@@ -31,6 +31,16 @@ describe("composer defaults", () => {
   });
 });
 
+describe("Instagram trial reels", () => {
+  const acct = account("instagram");
+  const clip = { id: "v", name: "v.mp4", type: "video" as const, width: 1080, height: 1920, duration: 10, url: null };
+  it("sends trial_reel only for a Reel", () => {
+    expect(destinationOptions(acct, { trialReel: "auto" }, "Hi", [clip])).toEqual({ media_type: "reel", trial_reel: "auto" });
+    expect(destinationOptions(acct, { trialReel: "manual", mediaType: "image" }, "Hi", [clip])).toEqual({ media_type: "image" });
+    expect(destinationOptions(acct, {}, "Hi", [clip])).toEqual({ media_type: "reel" });
+  });
+});
+
 describe("TikTok guideline rules", () => {
   const info = { privacy_level_options: ["PUBLIC_TO_EVERYONE", "SELF_ONLY"], can_post: true, max_video_post_duration_sec: 60 };
 

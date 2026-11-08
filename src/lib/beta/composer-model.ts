@@ -16,6 +16,7 @@ export type PlatformChoice = {
   link?: string; // facebook link posts
   title?: string; // youtube (required), facebook and linkedin video
   privacy?: "public" | "unlisted" | "private"; // youtube
+  trialReel?: "manual" | "auto"; // instagram reels
   tiktok?: TikTokChoice;
 };
 
@@ -104,7 +105,7 @@ function baseOptions(account: ComposerAccount, choice: PlatformChoice, shared: s
   const mediaType = choice.mediaType ?? defaultMediaType(account.platform, media);
   switch (account.platform) {
     case "instagram":
-      return { media_type: mediaType, ...(choice.caption !== undefined ? { caption: choice.caption } : {}) };
+      return { media_type: mediaType, ...(choice.caption !== undefined ? { caption: choice.caption } : {}), ...(mediaType === "reel" && choice.trialReel ? { trial_reel: choice.trialReel } : {}) };
     case "facebook":
       return {
         media_type: mediaType,
