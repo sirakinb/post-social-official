@@ -114,7 +114,8 @@ Aki's steps: sign in to Meta; later, upload, "I agree" and Submit if a new reque
 
 ## 2. Google: brand verification and YouTube scopes
 
-**Status:** not started. Two decisions needed from Aki (below).
+**Status:** started 2026-11-10. Privacy page change is committed on this branch (not
+pushed). Waiting on a Google sign-in that can open project 312431664994.
 
 | | |
 |---|---|
@@ -399,3 +400,9 @@ Not part of this plan's submissions; listed so they aren't lost.
 - 2026-11-10: Meta checked (read only). `instagram_business_manage_insights`,
   `threads_manage_insights` and `read_insights` are all in the 2026-11-04 review. The
   "Post Social stats" login configuration exists. No Meta work needed until Meta replies.
+- 2026-11-10: Google started. Branch rebased onto dev. Privacy page now names
+  `youtube.readonly`, says what is read (view, like, comment counts of videos published
+  through Post Social), retention, and the Limited Use statement. Typecheck and lint pass;
+  tests pass except `worker/src/publish/bluesky.test.ts` "shrinks images over 1 MB", which
+  times out at 5s on this Mac under load and passes with a longer timeout (not related).
+  The Google account signed in to the browser pane has no access to project 312431664994.
