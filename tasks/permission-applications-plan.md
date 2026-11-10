@@ -457,3 +457,8 @@ Not part of this plan's submissions; listed so they aren't lost.
   (those are wdsfeJWuKBg, 9eW2QTZNmmk, 1P7tAGgRVTE), so Analytics can't show it. Refresh
   now was pressed once (2 left today); the three still show zeros. Needs engagement on one
   of those three instead.
+- 2026-11-10 21:03 UTC: Aki watched, liked and commented on wdsfeJWuKBg. YouTube's own
+  page shows 1 view and a like; the Short is public. Post Social still shows zeros: its
+  last read was 21:00 UTC, just before the engagement, and a post can be re-read at most
+  every 30 minutes, so the second Refresh now (21:02) did not re-read it. 1 refresh left
+  today. Re-check after 21:30 UTC.
