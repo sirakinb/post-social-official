@@ -452,3 +452,8 @@ Not part of this plan's submissions; listed so they aren't lost.
   Before recording: one test video needs a few real views, a like and a comment so the
   Analytics scene shows numbers (Aki, from another account; the video must be public or
   unlisted). Ready to record once that's done.
+- 2026-11-10: Aki watched, liked and commented on https://www.youtube.com/shorts/Dl-nyQkJht8.
+  That Short is not one of the three the Adzo workspace published through Post Social
+  (those are wdsfeJWuKBg, 9eW2QTZNmmk, 1P7tAGgRVTE), so Analytics can't show it. Refresh
+  now was pressed once (2 left today); the three still show zeros. Needs engagement on one
+  of those three instead.
