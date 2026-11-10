@@ -436,3 +436,11 @@ Not part of this plan's submissions; listed so they aren't lost.
     change; or (b) put staging on `staging.postsocial.xyz` and add its callback, which keeps
     every redirect on our verified domain. A vercel.app redirect is not an option: Google
     checks redirect domains.
+- 2026-11-10: Aki chose the local dev site for the YouTube demo. Dev settings read (not
+  changed): `GOOGLE_REDIRECT_URI` is `http://localhost:3333/oauth/youtube/callback`;
+  `ANALYTICS_PLATFORMS` is `instagram,facebook,threads,youtube,tiktok`, so every dev
+  workspace already asks for `youtube.readonly` and `video.list` (no preview settings
+  needed for YouTube or TikTok); `ANALYTICS_PREVIEW_PLATFORMS` is `facebook,threads` for
+  workspace 88f3deeb (not the Adzo workspace). Local site runs from this worktree on
+  port 3333 (`.env.local` is a symlink to the main checkout's, gitignored). Waiting for
+  Aki to sign in to Post Social there with the staging test login.
