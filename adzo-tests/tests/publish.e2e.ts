@@ -58,12 +58,18 @@ test('@quick a post publishes to Bluesky and its live link works', { session: 's
   const { liveUrl } = await publishNow('bluesky', { caption: text, options: { media_type: 'text' } });
   expect(liveUrl).toMatch(/^https:\/\/bsky\.app\/profile\/adzotest\.bsky\.social\/post\//);
   await expectLinkOpens(liveUrl);
-  // Read the post back from Bluesky itself.
+  // Read the post back from Bluesky itself. Its post lookup needs the account's DID (not the
+  // handle), and a new post can take a few seconds to show up there.
   const rkey = liveUrl.split('/').pop();
-  const uri = `at://adzotest.bsky.social/app.bsky.feed.post/${rkey}`;
-  const res = await fetch('https://public.api.bsky.app/xrpc/app.bsky.feed.getPosts?uris=' + encodeURIComponent(uri));
-  const body: any = await res.json();
-  expect(body.posts?.[0]?.record?.text).toBe(text);
+  const resolved: any = await (await fetch('https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=adzotest.bsky.social')).json();
+  const uri = `at://${resolved.did}/app.bsky.feed.post/${rkey}`;
+  let posted: string | undefined;
+  for (let i = 0; i < 10 && posted === undefined; i++) {
+    if (i) await new Promise((r) => setTimeout(r, 3000));
+    const body: any = await (await fetch('https://public.api.bsky.app/xrpc/app.bsky.feed.getPosts?uris=' + encodeURIComponent(uri))).json();
+    posted = body.posts?.[0]?.record?.text;
+  }
+  expect(posted).toBe(text);
 });
 
 // A text post to the Facebook test Page. @quick
