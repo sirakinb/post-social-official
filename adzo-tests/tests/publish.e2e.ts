@@ -1,0 +1,140 @@
+import { test } from '@e2e-dev/web';
+import { expect, credentials } from 'e2e';
+import { writeFileSync } from 'node:fs';
+import { KEY_FILE, accountFor, publishNow, expectLinkOpens, stamp, uploadMedia } from './lib/publish-helpers';
+
+// Publishing to every connected test account on staging: each test makes one post through the
+// REST API (a key the setup creates), waits for the app to show it published, and checks the
+// live link. All 8 accounts live in the staging workspace "Adzo Test's workspace".
+//   Quick set (every change):  --grep "@quick"    Bluesky, Facebook, Instagram, Threads, LinkedIn
+//   Release set (everything):  --grep "@quick|@release"  adds X (costs API credit), TikTok, YouTube
+// The app has no way to delete a sent post from the platform, so test posts stay on the test accounts.
+
+// Signs in as the "social" test login and makes an API key for the tests below. Old keys from
+// earlier runs are revoked first, so at most one stays active.
+test.setup('sign in as the social test login and make a publishing key', { sessions: ['social'] }, async ({ app, screen, session, browser }) => {
+  const user = credentials.user('social');
+  await app.open('/beta/login');
+  await screen.getByLabel('Email').fill(user.username);
+  await screen.getByLabel('Password').fill(user.password);
+  await screen.getByRole('button', 'Sign in').tap();
+  await browser.waitForURL(/\/beta\/accounts/, { timeout: 60_000 });
+  await session.save('social');
+
+  await app.open('/beta/api');
+  // Revoke leftovers from earlier runs (Revoke, then Confirm, per row).
+  for (let i = 0; i < 10; i++) {
+    const clicked = await browser.evaluate(async () => {
+      const row = [...document.querySelectorAll('div')].find((d) => d.className.includes('border-b') && /e2e-publish/.test(d.textContent ?? '') && [...d.querySelectorAll('button')].some((b) => b.textContent === 'Revoke'));
+      const revoke = row && [...row.querySelectorAll('button')].find((b) => b.textContent === 'Revoke');
+      if (!revoke) return false;
+      (revoke as HTMLButtonElement).click();
+      await new Promise((r) => setTimeout(r, 300));
+      const confirm = [...row.querySelectorAll('button')].find((b) => b.textContent === 'Confirm');
+      (confirm as HTMLButtonElement | undefined)?.click();
+      return true;
+    });
+    if (!clicked) break;
+    await new Promise((r) => setTimeout(r, 2500));
+  }
+
+  await screen.getByRole('button', 'Create key').tap();
+  await screen.getByLabel('Name').fill('e2e-publish');
+  await screen.getByRole('button', 'Create').tap();
+  // The key is shown once, right after Create.
+  let key = '';
+  for (let i = 0; i < 20 && !key; i++) {
+    key = await browser.evaluate(() => [...document.querySelectorAll('code')].map((c) => c.textContent ?? '').find((t) => t.startsWith('ps_live_')) ?? '');
+    if (!key) await new Promise((r) => setTimeout(r, 1500));
+  }
+  if (!key) throw new Error('The new API key was not shown on the page.');
+  writeFileSync(KEY_FILE, key, { mode: 0o600 });
+});
+
+// Bluesky takes text posts and its public API lets us read the post back. @quick
+test('@quick a post publishes to Bluesky and its live link works', { session: 'social', timeout: 300_000, tags: ['quick', 'publish'] }, async () => {
+  await accountFor('bluesky');
+  const text = `Post Social e2e check ${stamp()}`;
+  const { liveUrl } = await publishNow('bluesky', { caption: text, options: { media_type: 'text' } });
+  expect(liveUrl).toMatch(/^https:\/\/bsky\.app\/profile\/adzotest\.bsky\.social\/post\//);
+  await expectLinkOpens(liveUrl);
+  // Read the post back from Bluesky itself.
+  const rkey = liveUrl.split('/').pop();
+  const uri = `at://adzotest.bsky.social/app.bsky.feed.post/${rkey}`;
+  const res = await fetch('https://public.api.bsky.app/xrpc/app.bsky.feed.getPosts?uris=' + encodeURIComponent(uri));
+  const body: any = await res.json();
+  expect(body.posts?.[0]?.record?.text).toBe(text);
+});
+
+// A text post to the Facebook test Page. @quick
+test('@quick a post publishes to Facebook and its live link works', { session: 'social', timeout: 300_000, tags: ['quick', 'publish'] }, async () => {
+  await accountFor('facebook');
+  const { liveUrl } = await publishNow('facebook', { caption: `Post Social e2e check ${stamp()}`, options: { media_type: 'text' } });
+  expect(liveUrl).toMatch(/^https:\/\/(www\.)?facebook\.com\//);
+  await expectLinkOpens(liveUrl);
+});
+
+// A photo post to @adzotest (Instagram needs media). @quick
+test('@quick a photo publishes to Instagram and its live link works', { session: 'social', timeout: 420_000, tags: ['quick', 'publish'] }, async () => {
+  await accountFor('instagram');
+  const mediaId = await uploadMedia('test-image.jpg', 'image/jpeg');
+  const { liveUrl } = await publishNow('instagram', { caption: `Post Social e2e check ${stamp()}`, mediaIds: [mediaId], options: { media_type: 'image' }, timeoutMs: 360_000 });
+  expect(liveUrl).toMatch(/^https:\/\/(www\.)?instagram\.com\//);
+  await expectLinkOpens(liveUrl);
+});
+
+// A text post to the Threads test account. @quick
+test('@quick a post publishes to Threads and its live link works', { session: 'social', timeout: 300_000, tags: ['quick', 'publish'] }, async () => {
+  await accountFor('threads');
+  const { liveUrl } = await publishNow('threads', { caption: `Post Social e2e check ${stamp()}`, options: { media_type: 'text' } });
+  expect(liveUrl).toMatch(/^https:\/\/(www\.)?threads\.(net|com)\//);
+  await expectLinkOpens(liveUrl);
+});
+
+// A text post to the LinkedIn dummy profile. @quick
+test('@quick a post publishes to LinkedIn and its live link works', { session: 'social', timeout: 300_000, tags: ['quick', 'publish'] }, async () => {
+  await accountFor('linkedin');
+  const { liveUrl } = await publishNow('linkedin', { caption: `Post Social e2e check ${stamp()}`, options: { media_type: 'text' } });
+  expect(liveUrl).toMatch(/^https:\/\/(www\.)?linkedin\.com\//);
+  await expectLinkOpens(liveUrl);
+});
+
+// A text post to @adzotest. Costs X API credit (about 1.5 cents), so release set only; no link in the text so it stays at the lowest price. @release
+test('@release a post publishes to X and its live link works', { session: 'social', timeout: 300_000, tags: ['release', 'publish'] }, async () => {
+  await accountFor('x');
+  const { liveUrl } = await publishNow('x', { caption: `Post Social e2e check ${stamp()}`, options: { media_type: 'text' } });
+  expect(liveUrl).toMatch(/^https:\/\/(x|twitter)\.com\/adzotest\/status\//);
+  await expectLinkOpens(liveUrl);
+});
+
+// A photo post to the TikTok sandbox account. Sandbox posts can only be private (SELF_ONLY), so
+// this checks TikTok accepted and finished the post, not that anyone can see it. @release
+test('@release a photo is accepted by TikTok as a private post', { session: 'social', timeout: 600_000, tags: ['release', 'publish'] }, async () => {
+  await accountFor('tiktok');
+  const mediaId = await uploadMedia('test-image.jpg', 'image/jpeg');
+  const { postId, destination } = await publishNow('tiktok', {
+    caption: `Post Social e2e check ${stamp()}`,
+    mediaIds: [mediaId],
+    options: { delivery_mode: 'direct', privacy_level: 'SELF_ONLY', media_type: 'photo', title: 'Post Social e2e check' },
+    timeoutMs: 540_000,
+    requireLink: false,
+  });
+  expect(postId).toBeTruthy();
+  expect(destination.status).toBe('published');
+});
+
+// A 4-second vertical video uploaded to the "adzo test" channel as a private Short.
+// YouTube has a daily upload limit, so release set only. @release
+test('@release a video uploads to YouTube as a private Short', { session: 'social', timeout: 720_000, tags: ['release', 'publish'] }, async () => {
+  await accountFor('youtube');
+  const mediaId = await uploadMedia('test-short.mp4', 'video/mp4');
+  const { liveUrl } = await publishNow('youtube', {
+    caption: `Post Social e2e check ${stamp()}`,
+    mediaIds: [mediaId],
+    options: { title: 'Post Social e2e check', privacy_status: 'private' },
+    timeoutMs: 660_000,
+  });
+  expect(liveUrl).toMatch(/^https:\/\/(www\.)?(youtube\.com|youtu\.be)\//);
+  // A private video's page still opens (YouTube shows "private video"), it is just not public.
+  await expectLinkOpens(liveUrl);
+});
