@@ -119,7 +119,7 @@ pushed). Waiting on a Google sign-in that can open project 312431664994.
 
 | | |
 |---|---|
-| Asking for | Brand verification (name "Post Social", logo), `youtube.upload` (already used, never verified), `youtube.readonly` (stats) |
+| Asking for | Data access verification for `youtube.upload` (already used, never verified) and `youtube.readonly` (stats). Brand verification is already done (checked 2026-11-10) |
 | Why | Remove Google's "unverified app" warning and the 100-user cap, and read official YouTube numbers |
 | Portal | console.cloud.google.com → Google Auth Platform → Branding, Data Access, Verification Center |
 | Client | `312431664994-l89fsqcuhv1j4mr1pbp7e3grq3j3vekj` |
@@ -422,3 +422,17 @@ Not part of this plan's submissions; listed so they aren't lost.
     the "unverified app" screen must be visible in the video.
   - Still to read: the client's redirect URIs (is staging's callback allowed?) and the
     Verification Center status.
+- 2026-11-10: With Aki's OK, added `youtube.readonly` under Data Access and saved (first
+  save errored, second saved; confirmed after reload: `youtube.upload` and
+  `youtube.readonly` are both listed). Nothing submitted.
+  - Verification Center: **branding is already verified** and shown to users. Data access
+    is not verified. So this submission is scopes only: justification text + demo video.
+  - Client "Post Social Web" redirect URIs: `https://www.postsocial.xyz/oauth/youtube/callback`,
+    `http://localhost:3333/oauth/youtube/callback`, and the two older `/api/auth/youtube/callback`
+    ones. JavaScript origin `https://www.postsocial.xyz`. **No staging address.** The
+    website's callback route finishes the sign-in on the same site it lands on, so YouTube
+    can be connected on prod or on localhost:3333 (dev backend), not on the staging site.
+  - Where to record the YouTube demo (open): (a) localhost:3333 against dev, no portal
+    change; or (b) put staging on `staging.postsocial.xyz` and add its callback, which keeps
+    every redirect on our verified domain. A vercel.app redirect is not an option: Google
+    checks redirect domains.
