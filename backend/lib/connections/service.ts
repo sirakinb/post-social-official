@@ -213,20 +213,28 @@ export async function completeConnection(deps: ConnectionDeps, platform: Platfor
   }
 
   const externalIdOf = (identity: (typeof identities)[number]) => identity.externalAccountId || `workspace:${session.workspace_id}`;
-  // One social account belongs to one workspace. Check every account first, so a
-  // Facebook sign-in that returns several Pages connects all of them or none.
+  // One social account belongs to one workspace. A Facebook sign-in returns every Page the
+  // person ever shared with Post Social, so Pages already connected in another workspace are
+  // skipped and the rest connect; it fails only when nothing is left.
+  const available: typeof identities = [];
+  const skipped: string[] = [];
   for (const identity of identities) {
     const [elsewhere] = await deps.sql<{ id: string }>(
       `SELECT id FROM public.connected_accounts
        WHERE platform = $1 AND external_account_id = $2 AND workspace_id <> $3 AND health <> 'disconnected'`,
       [platform, externalIdOf(identity), session.workspace_id],
     );
-    if (elsewhere) return fail(`${identity.displayName} is already connected to another workspace. Disconnect it there first.`);
+    if (elsewhere) skipped.push(identity.displayName);
+    else available.push(identity);
   }
+  if (!available.length) {
+    return fail(`${skipped.join(", ")} ${skipped.length > 1 ? "are" : "is"} already connected to another workspace. Disconnect ${skipped.length > 1 ? "them" : "it"} there first.`);
+  }
+  const skippedNote = skipped.length ? ` Skipped ${skipped.join(", ")}: already connected to another workspace.` : "";
 
   const key = await importKey(deps.setting("CREDENTIAL_ENCRYPTION_KEY"));
   const connected: string[] = [];
-  for (const identity of identities) {
+  for (const identity of available) {
     const externalId = externalIdOf(identity);
     const sealed = await seal(identity.tokens, key);
     // Reconnecting updates the same row instead of creating a duplicate.
@@ -286,7 +294,7 @@ export async function completeConnection(deps: ConnectionDeps, platform: Platfor
     connected.push(identity.displayName);
   }
   await deps.afterAccountsChanged?.(session.workspace_id).catch(() => null);
-  return { returnTo: session.return_to, ok: true, platform, message: `Connected ${connected.join(", ")}.` };
+  return { returnTo: session.return_to, ok: true, platform, message: `Connected ${connected.join(", ")}.${skippedNote}` };
 }
 
 type AccountRow = { id: string; workspace_id: string; platform: Platform; display_name: string; health: string };

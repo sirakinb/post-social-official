@@ -3,7 +3,8 @@ import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { importKey, open, seal, sha256Hex } from "./crypto";
 import { SCOPES, authorizeUrl, exchangeCode, refreshTokens, revokeTokens, type Platform } from "./platforms";
-import { callbackUrl, originAllowedFor } from "./service";
+import type { Sql } from "../access";
+import { callbackUrl, completeConnection, originAllowedFor } from "./service";
 
 const settings: Record<string, string> = {
   TIKTOK_CLIENT_KEY: "tk",
@@ -201,5 +202,45 @@ describe("refresh and revoke", () => {
       throw new Error("offline");
     }) as unknown as typeof fetch;
     expect(await revokeTokens("tiktok", { accessToken: "a" }, setting, down)).toBe("platform_unreachable");
+  });
+});
+
+describe("finishing a Facebook connection", () => {
+  // Two Pages come back; p2 is already connected in another workspace.
+  async function finish(elsewhere: string[]) {
+    const { http } = fakeHttp([
+      [/redirect_uri/, { access_token: "short" }],
+      [/fb_exchange_token/, { access_token: "user-long" }],
+      [/\/me\?fields=id/, { id: "u" }],
+      [/me\/accounts/, { data: [
+        { id: "p1", name: "Test Page", access_token: "t1" },
+        { id: "p2", name: "Real Page", access_token: "t2" },
+      ] }],
+    ]);
+    const inserted: string[] = [];
+    const sql = (async (query: string, params: unknown[] = []) => {
+      if (query.includes("UPDATE public.oauth_states")) return [{ workspace_id: "w1", user_id: "user-1", return_to: "/beta/accounts", code_verifier_encrypted: null, profile_id: null }];
+      if (query.includes("FROM public.workspace_members")) return [{ role: "owner", actor_id: "a1" }];
+      if (query.includes("workspace_id <> $3")) return elsewhere.includes(String(params[1])) ? [{ id: "other" }] : [];
+      if (query.includes("INSERT INTO public.connected_accounts")) { inserted.push(String(params[2])); return [{ event_type: "account.reconnected" }]; }
+      return [];
+    }) as unknown as Sql;
+    const withKey = (name: string) => (name === "CREDENTIAL_ENCRYPTION_KEY" ? randomBytes(32).toString("base64") : setting(name));
+    const result = await completeConnection({ sql, setting: withKey, allowedReturnOrigins: [], http }, "facebook", new URLSearchParams({ state: "s", code: "c" }), "user-1");
+    return { result, inserted };
+  }
+
+  it("skips Pages connected in another workspace and connects the rest", async () => {
+    const { result, inserted } = await finish(["p2"]);
+    expect(inserted).toEqual(["p1"]);
+    expect(result.ok).toBe(true);
+    expect(result.message).toBe("Connected Test Page. Skipped Real Page: already connected to another workspace.");
+  });
+
+  it("fails when every Page is connected elsewhere", async () => {
+    const { result, inserted } = await finish(["p1", "p2"]);
+    expect(inserted).toEqual([]);
+    expect(result.ok).toBe(false);
+    expect(result.message).toBe("Test Page, Real Page are already connected to another workspace. Disconnect them there first.");
   });
 });
