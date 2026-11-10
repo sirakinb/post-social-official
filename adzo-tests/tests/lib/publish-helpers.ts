@@ -113,3 +113,35 @@ export async function expectLinkOpens(url: string): Promise<number> {
 }
 
 export const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+
+// Each test account's public page, opened after its post so the recording shows it there.
+export const PROFILE_URLS: Record<string, string> = {
+  bluesky: 'https://bsky.app/profile/adzotest.bsky.social',
+  facebook: 'https://www.facebook.com/447432005112464',
+  instagram: 'https://www.instagram.com/adzotest/',
+  threads: 'https://www.threads.net/@adzotest',
+  x: 'https://x.com/adzotest',
+  tiktok: 'https://www.tiktok.com/@adzotest',
+  youtube: 'https://www.youtube.com/@AdzoTest/shorts',
+};
+
+const hold = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// For the recording: the post on the app's Calendar, then the live post, then the account's
+// page. Platform pages are best effort (some ask to sign in or block automated browsers); the
+// API checks above are what pass or fail the test.
+export async function showOnCamera(
+  { app, browser, screen }: { app: any; browser: any; screen: any },
+  { platform, caption, liveUrl }: { platform: string; caption: string; liveUrl?: string },
+) {
+  await app.open('/beta/calendar');
+  await hold(4000);
+  for (const url of [liveUrl, PROFILE_URLS[platform]].filter(Boolean) as string[]) {
+    try {
+      await browser.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+      await hold(6000);
+    } catch {
+      // A platform page that won't load in the test browser doesn't fail the test.
+    }
+  }
+}
