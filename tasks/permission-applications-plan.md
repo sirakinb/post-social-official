@@ -444,3 +444,11 @@ Not part of this plan's submissions; listed so they aren't lost.
   workspace 88f3deeb (not the Adzo workspace). Local site runs from this worktree on
   port 3333 (`.env.local` is a symlink to the main checkout's, gitignored). Waiting for
   Aki to sign in to Post Social there with the staging test login.
+- 2026-11-10: YouTube rehearsal on localhost:3333 (Aki signed in to Post Social). The Adzo
+  workspace shows all 8 accounts connected. Analytics → Posts → YouTube lists 3 videos
+  marked "Official", each with 0 views, 0 likes, 0 comments (e2e check uploads from today).
+  Connect YouTube sends Google both scopes (`youtube.upload youtube.readonly`) with the
+  localhost callback; stopped at Google's account chooser, nothing granted or changed.
+  Before recording: one test video needs a few real views, a like and a comment so the
+  Analytics scene shows numbers (Aki, from another account; the video must be public or
+  unlisted). Ready to record once that's done.
