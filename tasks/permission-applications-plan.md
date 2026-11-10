@@ -406,3 +406,19 @@ Not part of this plan's submissions; listed so they aren't lost.
   tests pass except `worker/src/publish/bluesky.test.ts` "shrinks images over 1 MB", which
   times out at 5s on this Mac under load and passes with a longer timeout (not related).
   The Google account signed in to the browser pane has no access to project 312431664994.
+- 2026-11-10: Google Cloud read (read only), as aki.b@pentridgemedia.com. In the browser
+  pane that account is the second Google sign-in: always open console links with
+  `?authuser=1&project=clippost-app` and confirm the account before reading. Never use the
+  Questus account. Project "Post Social", id `clippost-app`, number 312431664994, under
+  pentridgemedia.com.
+  - Branding: already filled. Name "Post Social", a logo is uploaded, home
+    https://www.postsocial.xyz/, privacy /privacy, terms /terms, authorized domain
+    postsocial.xyz, support and developer email aki.b@pentridgemedia.com.
+  - Audience: External, In production, 2 of 100 users used.
+  - Data Access: only `youtube.upload` is listed (sensitive, approval required). The
+    justification box and the demo video link are empty. `youtube.readonly` is not added.
+  - Clients: one, "Post Social Web" (web application, created 2026-05-03).
+  - Google's note on that page: record the demo on staging, not on production traffic, and
+    the "unverified app" screen must be visible in the video.
+  - Still to read: the client's redirect URIs (is staging's callback allowed?) and the
+    Verification Center status.
