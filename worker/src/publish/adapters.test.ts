@@ -4,6 +4,7 @@ import type { DestinationOptions } from "../../../backend/lib/publishing/validat
 import { publishFacebook } from "./facebook";
 import { linkedinCommentary, publishLinkedIn } from "./linkedin";
 import { publishInstagram, publishThreads } from "./meta";
+import { failureMessage } from "./support";
 import { chunkPlan, publishTikTok } from "./tiktok";
 import { PublishError, type Bundle, type Checkpoint, type StepContext } from "./types";
 import { publishYouTube } from "./youtube";
@@ -82,6 +83,43 @@ describe("Instagram", () => {
     expect(await publishInstagram(h.ctx)).toEqual({ kind: "published", platformId: "ig-post", liveUrl: "https://instagram.com/p/x" });
     expect(h.calls.filter((c) => c.includes("media_publish"))).toHaveLength(1);
     expect(h.calls.filter((c) => c === "POST https://graph.instagram.com/v25.0/acct-1/media")).toHaveLength(1);
+  });
+
+  describe("Trial reels", () => {
+    const reelMedia = { media: [{ media_type: "video" as const, mime_type: "video/mp4", duration_seconds: 10 }] };
+    const creating = (sent: Record<string, string>[]) => (u: URL, i: RequestInit) =>
+      method(i) === "POST" && u.pathname.endsWith("/acct-1/media") ? (sent.push(Object.fromEntries(new URLSearchParams(String(i.body)))), json({ id: "c1" })) : undefined;
+    const pending = (u: URL) => (u.pathname.endsWith("/c1") ? json({ status_code: "IN_PROGRESS" }) : undefined);
+
+    it("sends trial_params and leaves out share_to_feed", async () => {
+      for (const [trial, strategy] of [["manual", "MANUAL"], ["auto", "SS_PERFORMANCE"]] as const) {
+        const sent: Record<string, string>[] = [];
+        const h = harness("instagram", { kind: "instagram", media_type: "reel", trial_reel: trial }, [creating(sent), pending], reelMedia);
+        await publishInstagram(h.ctx);
+        expect(sent[0]).toMatchObject({ media_type: "REELS" });
+        expect(JSON.parse(sent[0].trial_params)).toEqual({ graduation_strategy: strategy });
+        expect(sent[0]).not.toHaveProperty("share_to_feed");
+      }
+    });
+
+    it("says plainly when the account can't post trial reels", async () => {
+      const refuse = (u: URL, i: RequestInit) =>
+        method(i) === "POST" && u.pathname.endsWith("/acct-1/media")
+          ? new Response(JSON.stringify({ error: { code: 10, message: "The instagram account does not meet the trial reel follower requirement to create trial reels." } }), { status: 400 })
+          : undefined;
+      const h = harness("instagram", { kind: "instagram", media_type: "reel", trial_reel: "manual" }, [refuse], reelMedia);
+      const error = await publishInstagram(h.ctx).catch((e: unknown) => e);
+      expect(error).toMatchObject({ code: "trial_reel_not_eligible", retryable: false });
+      expect(failureMessage(error as PublishError)).toBe("This Instagram account can't post trial reels yet: Instagram only allows them for accounts with enough followers. Post it as a normal Reel instead.");
+    });
+
+    it("sends a normal Reel without trial_params", async () => {
+      const sent: Record<string, string>[] = [];
+      const h = harness("instagram", { kind: "instagram", media_type: "reel" }, [creating(sent), pending], reelMedia);
+      await publishInstagram(h.ctx);
+      expect(sent[0]).toMatchObject({ media_type: "REELS", share_to_feed: "true" });
+      expect(sent[0]).not.toHaveProperty("trial_params");
+    });
   });
 
   describe("Reel covers", () => {
@@ -223,6 +261,38 @@ describe("Facebook", () => {
     expect(h.calls.filter((c) => c.includes("video_reels"))).toHaveLength(2);
     found = true;
     expect(await publishFacebook(h.ctx)).toEqual({ kind: "published", platformId: "v2", liveUrl: "https://www.facebook.com/reel/v2" });
+  });
+
+  it("waits when Facebook says a Reel 'was not uploaded' while it is still fetching the file", async () => {
+    let video = "upload_in_progress";
+    const h = harness("facebook", { kind: "facebook", media_type: "reel" }, [
+      (u, i) => {
+        if (method(i) !== "POST" || !u.pathname.endsWith("/acct-1/video_reels")) return undefined;
+        return new URLSearchParams(String(i.body)).get("upload_phase") === "start"
+          ? json({ video_id: "v4" })
+          : json({ error: { code: 6000, message: "The video was not uploaded." } }, 400);
+      },
+      (u, i) => (u.host === "rupload.facebook.com" && (i.headers as Record<string, string>).file_url ? json({ success: true }) : undefined),
+      (u) => (u.pathname.endsWith("/v4")
+        ? json({ status: { video_status: video, publishing_phase: { status: video === "ready" ? "complete" : "in_progress" } } })
+        : undefined),
+    ], { media: [{ media_type: "video", mime_type: "video/mp4" }] });
+    expect(await publishFacebook(h.ctx)).toMatchObject({ kind: "wait" });
+    expect(await publishFacebook(h.ctx)).toMatchObject({ kind: "wait" });
+    video = "ready";
+    expect(await publishFacebook(h.ctx)).toEqual({ kind: "published", platformId: "v4", liveUrl: "https://www.facebook.com/reel/v4" });
+    expect(h.calls.filter((c) => c.includes("video_reels"))).toHaveLength(2); // the finish call isn't repeated once publishing started
+  });
+
+  it("fails with Facebook's reason if the Reel upload really failed", async () => {
+    const h = harness("facebook", { kind: "facebook", media_type: "reel" }, [
+      (u, i) => (method(i) === "POST" && u.pathname.endsWith("/acct-1/video_reels") ? json({ error: { code: 6000, message: "The video was not uploaded." } }, 400) : undefined),
+      (u) => (u.pathname.endsWith("/v5")
+        ? json({ status: { video_status: "error", uploading_phase: { status: "error", errors: [{ message: "The file could not be downloaded" }] } } })
+        : undefined),
+    ], { media: [{ media_type: "video", mime_type: "video/mp4" }], checkpoint: { video_id: "v5", uploaded: true } });
+    const error = (await publishFacebook(h.ctx).catch((e) => e)) as PublishError;
+    expect(error).toMatchObject({ code: "video_processing_failed", message: "Facebook could not process the video: The file could not be downloaded." });
   });
 
   it("still fails if Facebook can't find the Reel ten minutes after publishing", async () => {
@@ -397,6 +467,10 @@ describe("TikTok", () => {
         media_type: "PHOTO",
       });
       expect(h.checkpoint).toMatchObject({ publish_id: "pub-p", uploaded: true });
+      // While TikTok is still downloading, the message says so (it becomes the job's last message).
+      expect(await publishTikTok(h.ctx)).toMatchObject({ kind: "wait", message: "TikTok is still fetching the photos." });
+      status = "PROCESSING_UPLOAD";
+      expect(await publishTikTok(h.ctx)).toMatchObject({ kind: "wait", message: "TikTok is processing the photos." });
       status = "PUBLISH_COMPLETE";
       expect(await publishTikTok(h.ctx)).toMatchObject({ kind: "published", platformId: "888", liveUrl: "https://www.tiktok.com/@aki/photo/888" });
       expect(h.calls.filter((c) => c.includes("/content/init/"))).toHaveLength(1);

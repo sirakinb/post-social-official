@@ -39,9 +39,10 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
     return `/beta/analytics?${q}`;
   };
 
-  // Customers on production don't get where numbers came from at all, not just a hidden column.
+  // Customers on production only learn that numbers came from the platform itself ("From
+  // Facebook"); public-page numbers aren't labelled, not even in a hidden column.
   const showSources = canSeeSources(viewer.email);
-  const strip = <T extends { source: unknown }>(item: T): T => (showSources ? item : { ...item, source: null });
+  const strip = <T extends { source: unknown }>(item: T): T => (showSources ? item : { ...item, source: item.source === "public" ? null : item.source });
   const posts = (list: AnalyticsData["posts"]) => list.map(strip);
 
   return (

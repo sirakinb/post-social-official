@@ -78,11 +78,16 @@ async function facebook(ctx: FetchContext): Promise<MetricsResult> {
   if (video) {
     const basic = await getJson(ctx, withToken(`${base}/${ctx.platformId}?fields=likes.summary(true).limit(0),comments.summary(true).limit(0)`, token));
     const result: MetricsResult = { likes: num(basic.likes?.summary?.total_count), comments: num(basic.comments?.summary?.total_count), extra: {}, unavailable: [] };
-    // Plays need read_insights.
-    const metric = ctx.mediaType === "reel" ? "blue_reels_play_count" : "total_video_views";
-    const insights = await tryOr(() => getJson(ctx, withToken(`${base}/${ctx.platformId}/video_insights?metric=${metric}`, token)));
-    if (!insights) return { ...result, unavailable: ["views"] };
-    return { ...result, views: insightValues(insights)[metric] };
+    // Plays and reach need read_insights; each has its own name for Reels and for videos.
+    const reel = ctx.mediaType === "reel";
+    const videoInsight = async (metric: string) => {
+      const insights = await tryOr(() => getJson(ctx, withToken(`${base}/${ctx.platformId}/video_insights?metric=${metric}`, token)));
+      return insights ? insightValues(insights)[metric] : undefined;
+    };
+    const views = await videoInsight(reel ? "blue_reels_play_count" : "total_video_views");
+    if (views === undefined) return { ...result, unavailable: ["views"] };
+    const reach = await videoInsight(reel ? "post_impressions_unique" : "total_video_impressions_unique");
+    return { ...result, views, extra: reach === undefined ? {} : { reach } };
   }
   const basic = await getJson(ctx, withToken(`${base}/${ctx.platformId}?fields=reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0),shares`, token));
   const result: MetricsResult = {
@@ -92,13 +97,20 @@ async function facebook(ctx: FetchContext): Promise<MetricsResult> {
     extra: {},
     unavailable: [],
   };
-  // Views need read_insights. Meta has been renaming this metric, so try both names.
-  for (const metric of ["post_media_view", "post_impressions"]) {
-    const insights = await tryOr(() => getJson(ctx, withToken(`${base}/${ctx.platformId}/insights?metric=${metric}`, token)));
-    const value = insights ? insightValues(insights)[metric] : undefined;
-    if (value !== undefined) return { ...result, views: value };
-  }
-  return { ...result, unavailable: ["views"] };
+  // Views and reach need read_insights. Meta has been renaming these metrics, so try the
+  // new name first, then the old one.
+  const insight = async (metrics: string[]) => {
+    for (const metric of metrics) {
+      const insights = await tryOr(() => getJson(ctx, withToken(`${base}/${ctx.platformId}/insights?metric=${metric}`, token)));
+      const value = insights ? insightValues(insights)[metric] : undefined;
+      if (value !== undefined) return value;
+    }
+    return undefined;
+  };
+  const views = await insight(["post_media_view", "post_impressions"]);
+  if (views === undefined) return { ...result, unavailable: ["views"] };
+  const reach = await insight(["post_total_media_view_unique", "post_impressions_unique"]);
+  return { ...result, views, extra: reach === undefined ? {} : { reach } };
 }
 
 async function threads(ctx: FetchContext): Promise<MetricsResult> {

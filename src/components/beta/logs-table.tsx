@@ -5,6 +5,7 @@ import type { LogRow } from "@/lib/beta/logs";
 import { SOURCES } from "@/lib/beta/logs";
 import { cn } from "@/lib/utils";
 import { LocalTime } from "./local-time";
+import { FailedPostActions } from "./failed-post-actions";
 import { ActorMark } from "./marks";
 import { PlatformMark, Status } from "./ui";
 
@@ -15,7 +16,7 @@ const LEVEL = {
 } as const;
 
 // One line per event; open a line for the reason a failure gave and the raw details.
-export function LogsTable({ rows }: { rows: LogRow[] }) {
+export function LogsTable({ rows, canEdit = false }: { rows: LogRow[]; canEdit?: boolean }) {
   const [open, setOpen] = useState<string | null>(null);
   if (rows.length === 0) return <p className="m-0 px-4 py-10 text-center text-ps-muted">Nothing matches these filters.</p>;
   return (
@@ -80,6 +81,9 @@ export function LogsTable({ rows }: { rows: LogRow[] }) {
                   <dt className="text-ps-subtle">Log id</dt>
                   <dd className="m-0 select-all font-mono text-ps-subtle">{r.id}</dd>
                 </dl>
+                {canEdit && r.eventType === "destination.failed" && r.target?.status === "failed" && r.target.accountId && (
+                  <FailedPostActions postId={r.target.postId} accountId={r.target.accountId} platform={r.target.platform} mayBeLive={Boolean(r.target.mayBeLive)} />
+                )}
                 {r.details && <pre className="m-0 max-h-64 overflow-auto rounded-lg border border-ps-fg/[0.06] bg-ps-ground p-3 font-mono text-[11px] leading-relaxed text-ps-muted">{JSON.stringify(r.details, null, 2)}</pre>}
               </div>
             )}

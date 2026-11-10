@@ -70,8 +70,14 @@ connecting accounts stay with a person). Environments and promotion: `environmen
    `ANALYTICS_PUBLIC_PLATFORMS`. Both fill the same rows (`post_metrics.source` says which);
    where both are on, official numbers win, gaps are filled from the public page, and a
    failed official read falls back to it. Follower counts are saved once a day per account
-   (`account_follower_days`). Production shows where numbers came from only to the emails in
-   the website's `ADMIN_EMAILS`. Once a day (and 10 minutes after each worker start) a stats
+   (`account_follower_days`). Before a platform approves, a few listed workspaces (the
+   owner's, to rehearse a review demo, and each reviewer's test login) get its official
+   stats: `ANALYTICS_PREVIEW_PLATFORMS` names the platforms and `ANALYTICS_PREVIEW_WORKSPACES`
+   the workspace ids (worker, `api` and `connections` functions). Only they are asked for the
+   stats permissions when connecting, and Facebook gives them a second Meta login
+   configuration with `read_insights` (`META_STATS_LOGIN_CONFIG_ID`). Official numbers are
+   labelled "From Facebook" (and so on) for everyone; production shows the rest of where
+   numbers came from only to the emails in the website's `ADMIN_EMAILS`. Once a day (and 10 minutes after each worker start) a stats
    health check (`worker/src/analytics/health.ts`) reads one well-known public profile per
    switched-on platform, looks for a platform where many of every user's recent posts can't
    be read, and warns when ScrapeCreators credits drop below `ALERT_CREDITS_BELOW` (default

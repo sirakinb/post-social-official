@@ -38,6 +38,10 @@ trap 'rm -f "$env_file"' EXIT
   # Platforms whose stats come from their public pages (ScrapeCreators) until they approve
   # Post Social; optional, and off without the ScrapeCreators key.
   echo "ANALYTICS_PUBLIC_PLATFORMS=$(secret ANALYTICS_PUBLIC_PLATFORMS 2>/dev/null || true)"
+  # Official stats for a few listed workspaces before a platform approves (the owner's and
+  # each reviewer's test login): the platforms, and the workspace ids. Both optional.
+  echo "ANALYTICS_PREVIEW_PLATFORMS=$(secret ANALYTICS_PREVIEW_PLATFORMS 2>/dev/null || true)"
+  echo "ANALYTICS_PREVIEW_WORKSPACES=$(secret ANALYTICS_PREVIEW_WORKSPACES 2>/dev/null || true)"
   echo "SCRAPECREATORS_API_KEY=$(secret SCRAPECREATORS_API_KEY 2>/dev/null || true)"
   # Daily stats health check alerts, for the admin only: the address, the Resend key to
   # email it, and the ScrapeCreators credit level to warn below. All optional.
@@ -60,12 +64,34 @@ trap 'rm -f "$env_file"' EXIT
 
 # A secret that can't be read lands empty and quietly switches stats off, so say what's on.
 setting_of() { grep "^$1=" "$env_file" | cut -d= -f2-; }
-echo "Analytics: official=[$(setting_of ANALYTICS_PLATFORMS)] public=[$(setting_of ANALYTICS_PUBLIC_PLATFORMS)] ScrapeCreators key: $([[ -n "$(setting_of SCRAPECREATORS_API_KEY)" ]] && echo set || echo MISSING)"
+# The required ones stop the deploy instead: the CLI sometimes fails a read, and a worker
+# started with an empty key can't publish.
+required=(INSFORGE_BASE_URL INSFORGE_API_KEY R2_ACCOUNT_ID R2_BUCKET R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY CREDENTIAL_ENCRYPTION_KEY)
+[[ "$target" == "dev" ]] && required+=(PUBLISH_ALLOWLIST)
+for name in "${required[@]}"; do
+  [[ -n "$(setting_of "$name")" ]] || { echo "Couldn't read $name from $target's secrets, so nothing was deployed. Try again." >&2; exit 1; }
+done
+echo "Analytics: official=[$(setting_of ANALYTICS_PLATFORMS)] preview=[$(setting_of ANALYTICS_PREVIEW_PLATFORMS)] public=[$(setting_of ANALYTICS_PUBLIC_PLATFORMS)] ScrapeCreators key: $([[ -n "$(setting_of SCRAPECREATORS_API_KEY)" ]] && echo set || echo MISSING)"
 if [[ "$target" == "prod" && ( -z "$(setting_of ANALYTICS_PUBLIC_PLATFORMS)" || -z "$(setting_of SCRAPECREATORS_API_KEY)" ) ]]; then
   echo "Post stats would be off on prod: a secret above could not be read. Try again." >&2
   exit 1
 fi
 
+deploy_log="$(mktemp)"
+trap 'rm -f "$env_file" "$deploy_log"' EXIT
 scripts/insforge-env.sh "$target" compute deploy worker --name post-social-worker \
   --port 8080 --cpu shared-1x --memory 1024 --region iad --env-file "$env_file" \
-  --always-on  # it polls for jobs and gets no web traffic to wake it
+  --always-on | tee "$deploy_log"  # it polls for jobs and gets no web traffic to wake it
+
+# InsForge can stop the new machine seconds after launching it, even when always-on (seen
+# on dev 2026-11-02: launched, then stopped 15s later, and no jobs ran until a request woke
+# it). A request to it starts it again, so wait out that window, then wake it and check it.
+endpoint="$(grep -oE 'https://[^ ]+\.fly\.dev' "$deploy_log" | head -1)"
+[[ -n "$endpoint" ]] || { echo "Deployed, but couldn't find the worker's address to check it's running." >&2; exit 1; }
+sleep 30
+for _ in $(seq 1 12); do
+  if curl -fsS -m 10 "$endpoint/health" >/dev/null 2>&1; then echo "Worker is running."; exit 0; fi
+  sleep 5
+done
+echo "The worker isn't answering at $endpoint/health, so jobs may not run. Check it in the InsForge dashboard." >&2
+exit 1

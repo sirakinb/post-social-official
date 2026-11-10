@@ -49,13 +49,17 @@ const schedule: JsonSchema = {
   description: "When to publish, in ISO 8601 with a timezone, e.g. 2026-10-05T15:00:00Z. Up to a year ahead.",
 };
 
+// Shared with /llms.txt so the docs and the API say the same thing about covers.
+export const VIDEO_COVERS_HELP =
+  "Video covers (any platform's options): cover_media_id (an image from list_media) or cover_time_ms (a frame, in milliseconds from the start), not both. Instagram Reels and YouTube take either; TikTok direct posts take a frame only; LinkedIn videos take either; TikTok drafts, Facebook, Threads, Bluesky and X can't set a cover. Instagram crops the cover to a centred square in the profile grid.";
+
 const OPTIONS_HELP = [
-  "Per-platform settings. media_type is required for Instagram, Facebook and Threads.",
-  "instagram: media_type image | reel | carousel; caption (overrides the shared caption).",
+  "Per-platform settings. media_type is required for Instagram, Facebook and Threads. A setting a platform doesn't take is refused, not ignored.",
+  "instagram: media_type image | reel | carousel; caption (overrides the shared caption); trial_reel manual | auto (Reels only: shown to non-followers first; manual means the person shares it with followers in the Instagram app, auto means Instagram shares it if it does well; left out, a normal Reel).",
   "facebook: media_type text | link | image | reel | video; message (overrides caption); link (for link posts); title (videos).",
   "threads: media_type text | image | video | carousel; text (overrides caption).",
   "youtube (Shorts, one vertical video up to 3 min): title (required, up to 100 characters); description; privacy_status public | unlisted | private (required).",
-  "Video covers (any platform's options): cover_media_id (an image from list_media) or cover_time_ms (a frame, in milliseconds from the start), not both. Instagram Reels and YouTube take either; TikTok direct posts take a frame only; LinkedIn videos take either; TikTok drafts, Facebook, Threads, Bluesky and X can't set a cover. Instagram crops the cover to a centred square in the profile grid.",
+  VIDEO_COVERS_HELP,
   "tiktok: delivery_mode direct (posts straight away; needs privacy_level PUBLIC_TO_EVERYONE | MUTUAL_FOLLOW_FRIENDS | FOLLOWER_OF_CREATOR | SELF_ONLY, the audience the person asked for, never assumed) or inbox (a draft in the creator's TikTok inbox, where they finish it and tap Post); left out, it follows the account's tiktok_delivery from list_accounts (direct unless the person chose inbox; set_tiktok_delivery changes it); media_type video (one video) | photo (1 to 35 images as a swipeable carousel; JPEG, PNG or WebP, resized for TikTok automatically), left out it follows the media; title (photo posts only, up to 90 characters); comments_enabled, duet_enabled, stitch_enabled (default off; Duet and Stitch are video only); disclose_your_brand, disclose_branded_content; ai_generated.",
   "linkedin (the member's own profile): media_type text | image | video, left out it follows the media; text (overrides caption, up to 3,000 characters); title (videos); visibility PUBLIC (default) | CONNECTIONS. Images: 1 to 20 JPEG, PNG or GIF (2 or more show as a gallery). Videos: one MP4, 3 seconds to 30 minutes, up to 500 MB.",
   "bluesky: media_type text | image | video, left out it follows the media; text (overrides caption, up to 300 characters); alt_text (one description per image, in order). Images: 1 to 4 JPEG, PNG, WebP or GIF (larger than 1 MB are resized to fit). Videos: one MP4, up to 3 minutes and 100 MB. Links, @mentions and #hashtags become clickable.",
@@ -126,6 +130,9 @@ function nextStep(post: { status: string; scheduled_at: string | null }) {
     case "processing":
     case "approved":
       return "Publishing now; some accounts are still sending (a video can take a few minutes). Check get_post again shortly for their live links.";
+    case "failed":
+    case "partially_published":
+      return "Some accounts failed; each one's error_message says why. Fix what it asks, then call retry_post to send it again (it checks the platform first when the post may already be live). If it is live, call mark_post_published instead.";
     default:
       return undefined;
   }
@@ -467,6 +474,39 @@ export const operations: Operation[] = [
     input: { properties: { post_id: id("post") }, required: ["post_id"] },
     destructive: true,
     run: (deps, caller, input) => postActions.cancel({ sql: deps.sql }, caller, input),
+  },
+  {
+    name: "retry_post",
+    title: "Retry a failed post",
+    description:
+      "Sends a failed post again, to one failed account (account_id) or every failed account. Accounts that published are left alone. When an account's may_be_live is true, the earlier attempt may have reached the platform, so the retry looks there first and only posts again if the post is missing; start_over: true skips that check (use it only after checking the platform yourself, or it may post twice). Counts toward the monthly post limit.",
+    method: "POST",
+    path: "/v1/posts/{post_id}/retry",
+    input: {
+      properties: {
+        post_id: id("post"),
+        account_id: { ...id("connected account"), description: "The failed account to retry. Leave out to retry every failed account." },
+        start_over: { type: "boolean", default: false, description: "Post again without checking the platform first." },
+      },
+      required: ["post_id"],
+    },
+    run: async (deps, caller, input) => withNextStep(await postActions.retry({ sql: deps.sql }, caller, input)),
+  },
+  {
+    name: "mark_post_published",
+    title: "Mark a failed post as published",
+    description: "Records that a post shown as failed on an account is live on the platform anyway. Nothing is sent. Pass live_url if you have the post's link.",
+    method: "POST",
+    path: "/v1/posts/{post_id}/mark-published",
+    input: {
+      properties: {
+        post_id: id("post"),
+        account_id: id("connected account the post is live on"),
+        live_url: { type: "string", format: "uri", maxLength: 2000, description: "The post's https:// link on the platform." },
+      },
+      required: ["post_id", "account_id"],
+    },
+    run: async (deps, caller, input) => withNextStep(await postActions.mark_published({ sql: deps.sql }, caller, input)),
   },
   {
     name: "delete_post",

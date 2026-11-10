@@ -50,12 +50,42 @@ describe("Facebook stats", () => {
     expect(await FETCHERS.facebook(c)).toEqual({ likes: 20, comments: 5, shares: 2, views: 400, extra: {}, unavailable: [] });
   });
 
+  it("reads reach (people who saw the post) alongside views", async () => {
+    const c = ctx("p_1", [
+      (u) => (u.pathname === "/v25.0/p_1" ? json({ reactions: { summary: { total_count: 3 } }, comments: { summary: { total_count: 0 } } }) : undefined),
+      (u) => (u.pathname === "/v25.0/p_1/insights" && u.searchParams.get("metric") === "post_media_view" ? json({ data: [{ name: "post_media_view", values: [{ value: 90 }] }] }) : undefined),
+      (u) => (u.pathname === "/v25.0/p_1/insights" && u.searchParams.get("metric") === "post_total_media_view_unique" ? json({ data: [{ name: "post_total_media_view_unique", values: [{ value: 60 }] }] }) : undefined),
+    ]);
+    expect(await FETCHERS.facebook(c)).toEqual({ likes: 3, comments: 0, shares: 0, views: 90, extra: { reach: 60 }, unavailable: [] });
+  });
+
   it("reads Reel plays from video insights", async () => {
     const c = ctx("v9", [
       (u) => (u.pathname === "/v25.0/v9" ? json({ likes: { summary: { total_count: 8 } }, comments: { summary: { total_count: 1 } } }) : undefined),
       (u) => (u.pathname === "/v25.0/v9/video_insights" ? json({ data: [{ name: "blue_reels_play_count", values: [{ value: 1500 }] }] }) : undefined),
     ], "reel");
     expect(await FETCHERS.facebook(c)).toMatchObject({ likes: 8, comments: 1, views: 1500, unavailable: [] });
+  });
+
+  it("reads reach for Reels and for videos, each by its own metric name", async () => {
+    const insights = (id: string, values: Record<string, number>) => (u: URL) =>
+      u.pathname === `/v25.0/${id}/video_insights` && u.searchParams.get("metric")! in values
+        ? json({ data: [{ name: u.searchParams.get("metric"), values: [{ value: values[u.searchParams.get("metric")!] }] }] })
+        : undefined;
+    const basic = (id: string) => (u: URL) => (u.pathname === `/v25.0/${id}` ? json({ likes: { summary: { total_count: 2 } }, comments: { summary: { total_count: 0 } } }) : undefined);
+    const reel = ctx("r1", [basic("r1"), insights("r1", { blue_reels_play_count: 300, post_impressions_unique: 250 })], "reel");
+    expect(await FETCHERS.facebook(reel)).toEqual({ likes: 2, comments: 0, views: 300, extra: { reach: 250 }, unavailable: [] });
+    const video = ctx("v1", [basic("v1"), insights("v1", { total_video_views: 90, total_video_impressions_unique: 70 })], "video");
+    expect(await FETCHERS.facebook(video)).toEqual({ likes: 2, comments: 0, views: 90, extra: { reach: 70 }, unavailable: [] });
+  });
+
+  it("keeps a video's views when its reach can't be read", async () => {
+    const c = ctx("v2", [
+      (u) => (u.pathname === "/v25.0/v2" ? json({ likes: { summary: { total_count: 1 } }, comments: { summary: { total_count: 0 } } }) : undefined),
+      (u) => (u.pathname === "/v25.0/v2/video_insights" && u.searchParams.get("metric") === "total_video_views" ? json({ data: [{ name: "total_video_views", values: [{ value: 40 }] }] }) : undefined),
+      (u) => (u.pathname === "/v25.0/v2/video_insights" ? denied() : undefined),
+    ], "video");
+    expect(await FETCHERS.facebook(c)).toEqual({ likes: 1, comments: 0, views: 40, extra: {}, unavailable: [] });
   });
 });
 

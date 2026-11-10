@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("./actions", () => ({ cancel: vi.fn(), reschedule: vi.fn() }));
+vi.mock("./actions", () => ({ cancel: vi.fn(), reschedule: vi.fn(), retry: vi.fn(), markPublished: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 
 const { monthRange } = await import("./calendar-view");
