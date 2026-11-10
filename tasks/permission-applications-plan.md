@@ -137,13 +137,23 @@ and a scope with no feature can hold up the whole submission.
 **Decision B: Google sign-in.** Its callback is on `syydd6ck.us-east.insforge.app`, a
 domain we can't verify.
 
-- Recommended: keep sign-in out of this submission. Sign-in asks only for email and
-  profile, which need no scope review, and brand verification covers the whole Google
-  project. Once the brand is verified, add a sign-in client and flip `GOOGLE_SIGNIN`.
-- Before that, Claude checks two ways to get the callback onto our domain: an InsForge
-  custom domain for auth (for example `auth.postsocial.xyz`), or a pass-through route on
-  postsocial.xyz. If neither works with InsForge, the client keeps InsForge's callback and
-  we test whether Google accepts it after brand verification.
+**Decided 2026-11-10 (Aki):** sign-in stays out of this submission and gets its own step
+afterwards. The consent screen must say Post Social.
+
+- Google's brand verification checks the domain of every redirect URI on the project's web
+  clients, and each must be verified in Search Console
+  (developers.google.com/identity/protocols/oauth2/production-readiness/brand-verification).
+  So no client with the InsForge callback is created in this Google project.
+- Separate work, own feature branch: a callback route on postsocial.xyz (for example
+  `/oauth/google/callback`) that forwards to InsForge's Google callback, the same way the
+  YouTube callback already works. Untested risk: InsForge's callback may check state or
+  cookies tied to its own host. Test on dev first. Estimate: half a day to a day, plus one
+  to two days if that check gets in the way.
+- Once the route works and the brand is verified: create the sign-in client with the
+  postsocial.xyz redirect, Aki puts its id and secret in InsForge Auth → Google, flip
+  `GOOGLE_SIGNIN`, deploy on his word.
+- To check during the submission: one forum report says the consent screen showed the
+  domain instead of the app name and verification failed on the mismatch (unconfirmed).
 
 Code and config changes (feature branch, tests, Aki's OK before pushing):
 
@@ -363,7 +373,8 @@ Not part of this plan's submissions; listed so they aren't lost.
 
 1. Google decision A: submit without `youtube.force-ssl` now (recommended), or build
    YouTube comments first?
-2. Google decision B: keep Google sign-in out of this submission (recommended)?
+2. ~~Google decision B~~ Decided: sign-in is separate, after the submission, through a
+   postsocial.xyz callback route.
 3. Video folder: `~/Documents/Post Social reviews/` fine?
 
 ## Log
@@ -372,3 +383,5 @@ Not part of this plan's submissions; listed so they aren't lost.
   analytics scopes for Instagram, Threads, TikTok and YouTube are built; no YouTube
   comments code on any branch; the privacy page names only `youtube.upload`. Nothing
   submitted, no portal opened yet.
+- 2026-11-10: Aki agreed the approach. Google sign-in is its own step after the Google
+  submission, with its callback on postsocial.xyz, because Google verifies redirect domains.
