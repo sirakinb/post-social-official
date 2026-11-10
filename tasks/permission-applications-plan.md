@@ -41,9 +41,20 @@ granted, (b) the Post Social screen that uses the data.
 
 ## 1. Meta: insights (Instagram, Threads, Facebook)
 
-**Status:** in review since 2026-11-04 with the Inbox permissions (Meta says up to 20 days,
-so by about 2026-11-24). Not yet confirmed which insights permissions are inside that
-review. First action after Aki's OK: check both dashboards.
+**Status (checked 2026-11-10 in both dashboards):** all three insights permissions are in
+the review submitted 2026-11-04. Both apps show "Review in progress". Nothing to add;
+wait for Meta (about 2026-11-24).
+
+| App | New requests in the review |
+|---|---|
+| Post Social `1322708666515720` | `read_insights`, `threads_manage_insights`, `threads_manage_replies`, `threads_read_replies`, `pages_messaging`, `pages_manage_metadata`, `pages_manage_engagement`, `pages_read_user_content`, Business Asset User Profile Access |
+| Post Social-IG `2155585218350381` | `instagram_business_manage_insights`, `instagram_business_manage_comments`, `instagram_business_manage_messages` |
+
+Facebook Login for Business configurations on app 1322708666515720: "Post Social"
+`1323998036481160`, "Post Social stats" `4508952842697740` (the one for
+`META_STATS_LOGIN_CONFIG_ID`), "Post Social inbox" `2361362058011639`.
+
+The steps and demo script below are kept only in case Meta rejects one of the three.
 
 | | |
 |---|---|
@@ -385,3 +396,6 @@ Not part of this plan's submissions; listed so they aren't lost.
   submitted, no portal opened yet.
 - 2026-11-10: Aki agreed the approach. Google sign-in is its own step after the Google
   submission, with its callback on postsocial.xyz, because Google verifies redirect domains.
+- 2026-11-10: Meta checked (read only). `instagram_business_manage_insights`,
+  `threads_manage_insights` and `read_insights` are all in the 2026-11-04 review. The
+  "Post Social stats" login configuration exists. No Meta work needed until Meta replies.
