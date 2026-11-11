@@ -494,3 +494,17 @@ Not part of this plan's submissions; listed so they aren't lost.
     account had granted them before. If Google wants the permissions listed, re-record
     that one screen after removing Post Social at myaccount.google.com/permissions for
     adzotest1@gmail.com.
+- 2026-11-11 ~05:25 UTC: Retake of the connect step, done by Claude at Aki's request.
+  Removed Post Social under adzotest1@gmail.com → myaccount.google.com/connections
+  (twice: the first screen recording was lost because stopping `screencapture` early
+  discards the file; let `-V <seconds>` run out instead). Recorded with
+  `screencapture -x -v -V 80` (captures the whole screen; Claude window in front, pane
+  maximised; crop `3024:1701:0:160`). Aki clicked through Google's screens.
+  - Google's consent screen now lists both permissions with checkboxes ticked ("Manage
+    your YouTube videos", "View your YouTube account"), and the chooser shows only Adzo
+    Test, so no blur is needed.
+  - Video rebuilt (v2, 81 s): new opening from the retake, the rest from recording 2.
+    The consent frame with both boxes ticked is held for 5 s so it can be read (it was
+    on screen about 1.5 s live).
+  - After the retake: YouTube is connected in the Adzo workspace, the 4 posts and their
+    official numbers are intact.
