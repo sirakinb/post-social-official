@@ -103,7 +103,11 @@ cannot give. Use `prod` instead of `dev` for prod (asks you to type `prod`). The
   prod's own address, prod sets `TIKTOK_REDIRECT_URI` to that Convex address and Convex
   (`TIKTOK_FORWARD_URL`) forwards every TikTok sign-in it didn't start to
   `https://syydd6ck.function2.insforge.app/connections/oauth/tiktok/callback`. Once TikTok
-  approves prod's address, delete `TIKTOK_REDIRECT_URI` on prod. This is the last thing
+  approves prod's address, delete `TIKTOK_REDIRECT_URI` on prod. **Update (2026-11-11):**
+  the address submitted to TikTok is our own page, `https://www.postsocial.xyz/oauth/tiktok/callback`
+  (`src/app/oauth/tiktok/callback/route.ts`), which hands the sign-in to `/beta/connect/finish`
+  like YouTube's. Once TikTok approves it, set prod `TIKTOK_REDIRECT_URI` to that address
+  (instead of deleting it), so TikTok never has to approve a backend address. This is the last thing
   the Convex deployment does: its code has left this repo, but keep the deployment running
   until `TIKTOK_REDIRECT_URI` is gone from prod, or TikTok sign-in breaks.
 - **Photo posts.** TikTok fetches photos itself, only from a verified domain and without
