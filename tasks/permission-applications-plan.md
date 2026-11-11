@@ -202,9 +202,9 @@ Submission text (draft):
 > with the title, description and privacy setting they chose. Nothing is uploaded without
 > the user's action or schedule.
 >
-> youtube.readonly: reads the connected channel's name and subscriber count, and view, like
-> and comment counts for the videos the user published, to show them on the user's
-> Analytics page. A narrower scope can't do this: youtube.upload cannot read statistics,
+> youtube.readonly: reads the view, like and comment counts of the videos the user
+> published through Post Social (videos.list, part=statistics), to show them on the user's
+> Analytics page. We do not read watch history, playlists, subscriptions or other videos. A narrower scope can't do this: youtube.upload cannot read statistics,
 > and no smaller YouTube scope returns per-video statistics for the user's own channel.
 >
 > Google user data is shown only to the user's own workspace, is not sold, not used for
