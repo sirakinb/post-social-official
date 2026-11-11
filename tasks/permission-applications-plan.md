@@ -467,3 +467,17 @@ Not part of this plan's submissions; listed so they aren't lost.
   up; last updated 04:47 UTC). The other two Shorts show zeros. Ready to record the demo.
   Note: the browser pane loses the Post Social sign-in whenever the app or session
   restarts, so sign in, record and finish in one sitting.
+- 2026-11-11 ~05:00 UTC: YouTube demo take recorded by Aki (QuickTime) on localhost:3333.
+  Scenes captured, in order: Accounts → Connect YouTube → Google account chooser,
+  unverified-app warning and permission screen (Aki, as adzotest1@gmail.com) → Accounts
+  with "Connected YouTube channel." → Analytics overview and Posts for YouTube (6 views,
+  1 like, 1 comment, Official) → Create: caption, test-short.mp4 from the library, Publish
+  now → Logs showing "Published to YouTube channel · Live" → the channel's Shorts page with
+  the new Short → Analytics Posts with 4 YouTube posts.
+  - Reconnecting while connected kept the three earlier videos and their numbers.
+  - Published one new public Short to @AdzoTest: "Post Social demo: a short published
+    from Post Social to YouTube".
+  - Not recorded: the Disconnect scene. Skipped on purpose so the test workspace keeps
+    YouTube (the e2e publish tests use it). Can be a short add-on clip if Google asks.
+  - To edit: the Google chooser lists Aki's other Google accounts by email; crop or blur
+    that screen. Trim waits. Scale to 1080p, burn in captions.
