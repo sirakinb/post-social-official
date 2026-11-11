@@ -508,3 +508,69 @@ Not part of this plan's submissions; listed so they aren't lost.
     on screen about 1.5 s live).
   - After the retake: YouTube is connected in the Adzo workspace, the 4 posts and their
     official numbers are intact.
+- 2026-11-11 ~08:30 UTC: Aki asked Claude to finish the three remaining Google steps.
+  - Privacy page: PR 181 → dev (squash), PR 182 dev → staging, PR 183 staging → main, then
+    a production site deploy from main `7a9b60db` (Vercel API). Checks before pushing:
+    typecheck, lint, tests (786 passed), build. The 30-day claim matches
+    `worker/src/analytics/runner.ts`; disconnect revokes at Google
+    (`backend/lib/connections/platforms.ts`).
+  - Note: dev was ahead of main, so the release also put Adzo's e2e publish tests and the
+    Facebook connect fix (`backend/lib/connections/service.ts`, commit 36d34bed) on main.
+    The website does not import that file, so the site deploy changes only the privacy
+    page. The prod `connections` function was NOT redeployed; that fix is on main but not
+    live until Aki deploys the function.
+  - Scope justification corrected: the code only calls `videos?part=statistics`; it does
+    not read the channel name or subscriber count through Google.
+  - Demo video upload: not done. Post Social only publishes vertical or square Shorts
+    (the demo is 1920x1080), the built-in browser cannot hand a file to YouTube Studio,
+    and Chrome was not connected. YouTube Studio's upload dialog is open in the browser
+    pane as Adzo Test; Aki drags the file in, Claude finishes (unlisted, link).
+    The file also sits in the Adzo workspace's media library on dev (harmless).
+  - Google Cloud form: not done. The browser pane is signed in to Google only as Adzo
+    Test now; Aki has to add aki.b@pentridgemedia.com again.
+- 2026-11-11 ~08:50 UTC: Demo video uploaded to the @AdzoTest channel through YouTube
+  Studio (Aki dragged the file in; Claude set title, "not made for kids" and Unlisted):
+  https://youtu.be/Rw2bjpH-4E0 ("Post Social: YouTube API Services scope demonstration",
+  1:22). A private draft "testing3" (a different clip, uploaded by mistake) is also on
+  the channel; left in place. Still to do: paste the link and the justification in
+  Google Cloud → Data Access once aki.b@pentridgemedia.com is signed in in the pane.
+- 2026-11-11 ~09:00 UTC: Google Cloud → Data Access filled in and saved as
+  aki.b@pentridgemedia.com: justification (995 of 1000 characters, the corrected text
+  above, shortened) and demo link https://youtu.be/Rw2bjpH-4E0. Confirmed after reload.
+  The project has one OAuth client ("Post Social Web"), the one named in the video.
+  Verification Center: branding verified, data access "not verified", button "Prepare
+  for verification". Not submitted: Aki presses that and the final Submit.
+- 2026-11-11 ~12:00 UTC: **Google scope verification submitted by Aki.** Verification
+  Center now reads "Your app's data access is under review" (branding already verified).
+  Questionnaire answers: personal use only No, internal only No, dev/testing only No,
+  WordPress Gmail SMTP plugin No. Aki ticked the two acknowledgements and pressed Submit
+  (Claude is blocked from ticking consent boxes for him). The browser pane closed before
+  the submit, so the "Additional info" note Claude typed (demo recorded on localhost with
+  a test account; prod only asks for youtube.upload until youtube.readonly is verified;
+  one project, one client) may not have been included. Use it in the reply if Google
+  asks. Next: Google replies by email to aki.b@pentridgemedia.com; Claude drafts answers.
+  Then TikTok `video.list` (section 3).
+- 2026-11-11: YouTube quota (checked on Google's quota page): the limits are per app per
+  day, not per user. 100 video uploads a day (separate limit), 10,000 units for everything
+  else (stats read 1 unit, custom thumbnail 50). No billing account needed. File the free
+  quota increase request when YouTube uploads near ~50 a day; Google is slow to answer.
+- 2026-11-11 ~12:00 UTC: TikTok `video.list` started. Dev's @adzotest connection already
+  has `video.list` (scopes: video.upload, user.info.basic, video.list, video.publish).
+  Blocker found: the sandbox (unaudited) app can only post privately, and the worker skips
+  stats for private posts (`worker/src/analytics/runner.ts:115`, "Posted privately on
+  TikTok, so it has no public stats"), so the Nov 10 test posts show nothing on Analytics.
+  Workaround: sent a test video to @adzotest's TikTok inbox from Post Social on
+  localhost:3333 ("Sent to your TikTok drafts", request `v_inbox_file~v2.7706881773678364685`).
+  Aki posts it publicly from the TikTok app as @adzotest; the worker then resolves the
+  public video id (`publicaly_available_post_id`) and reads its numbers with `video.list`.
+- 2026-11-11 ~12:08 UTC: Aki posted the draft publicly from the TikTok app. After a manual
+  refresh the worker resolved it to video 7706883973368024334
+  (https://www.tiktok.com/@adzotest/video/7706883973368024334) and read 1 view, 1 like,
+  1 comment, 0 shares through `video.list`; Analytics shows it as "Official".
+  - Portal (signed in as aki.b@pentridgemedia.com): live app has Login Kit + Content
+    Posting API, scopes user.info.basic, video.publish, video.upload; one web redirect URI
+    (the Convex one). Adding `video.list` and prod's callback needs "Create Revision".
+    TikTok's guidelines: every scope in the revision must be shown in the video.
+  - Reconnecting TikTok while already authorized skips TikTok's permission screen. For
+    the take: Disconnect TikTok first (revokes at TikTok, keeps the row and its stats),
+    then Connect, so the screen listing the permissions shows.
