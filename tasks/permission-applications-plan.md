@@ -481,3 +481,16 @@ Not part of this plan's submissions; listed so they aren't lost.
     YouTube (the e2e publish tests use it). Can be a short add-on clip if Google asks.
   - To edit: the Google chooser lists Aki's other Google accounts by email; crop or blur
     that screen. Trim waits. Scale to 1080p, burn in captions.
+- 2026-11-11: YouTube demo edited from Aki's two recordings (Desktop: "video 1 -
+  youtube.mov", "youtube - video 2.mov"). Output:
+  `~/Documents/Post Social reviews/youtube/post-social-youtube-scopes-demo.mp4`
+  (87 s, 1920x1080, 30 fps, no audio, captions burned in, title card naming both scopes
+  and the OAuth client id). Cut: every part with the Claude panel on screen, the passkey
+  and password screens, the waits, Calendar. Aki's other Google accounts on the chooser
+  are blurred; the address bar with `client_id` stays readable. Not yet reviewed by Aki,
+  not uploaded.
+  - Weak spot: Google's consent screen in this take says "Post Social already has some
+    access. See the 2 services" and does not list the two permissions, because the test
+    account had granted them before. If Google wants the permissions listed, re-record
+    that one screen after removing Post Social at myaccount.google.com/permissions for
+    adzotest1@gmail.com.
