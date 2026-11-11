@@ -462,3 +462,8 @@ Not part of this plan's submissions; listed so they aren't lost.
   last read was 21:00 UTC, just before the engagement, and a post can be re-read at most
   every 30 minutes, so the second Refresh now (21:02) did not re-read it. 1 refresh left
   today. Re-check after 21:30 UTC.
+- 2026-11-11 04:48 UTC: Official YouTube read confirmed on localhost. wdsfeJWuKBg shows
+  6 views, 1 like, 1 comment, marked "Official" (the app's own scheduled refresh picked it
+  up; last updated 04:47 UTC). The other two Shorts show zeros. Ready to record the demo.
+  Note: the browser pane loses the Post Social sign-in whenever the app or session
+  restarts, so sign in, record and finish in one sitting.
