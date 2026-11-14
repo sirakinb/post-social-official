@@ -158,6 +158,34 @@ describe.skipIf(!enabled)("post stats on the dev backend (US-068)", () => {
     await expect(analyticsDashboard(sql, person(), ["facebook"], { workspace_id: owner.workspaceId, period: "forever" })).rejects.toThrow(/period/);
   });
 
+  it("refresh now skips X posts older than 30 days (X charges for every read)", async () => {
+    const [x] = await sql<{ id: string }>(
+      `INSERT INTO public.connected_accounts (workspace_id, platform, external_account_id, handle, display_name, capabilities)
+       VALUES ($1, 'x', $2, $2, 'Test x', '{}') RETURNING id`,
+      [owner.workspaceId, `x-stats-${suffix}`],
+    );
+    const xPost = async (daysOld: number) => {
+      const [row] = await sql<{ post_id: string }>(
+        `WITH p AS (
+           INSERT INTO public.posts (workspace_id, entry_point, caption, effective_approval_policy, status) VALUES ($1, 'mcp', 'X post', 'autonomous', 'published') RETURNING id
+         ), d AS (
+           INSERT INTO public.destinations (workspace_id, post_id, connected_account_id, platform, effective_approval_policy, status, options, platform_request_id)
+           SELECT $1, p.id, $2, 'x', 'autonomous', 'published', '{"media_type":"text"}', $3 FROM p RETURNING id, post_id
+         )
+         INSERT INTO public.post_metrics (destination_id, workspace_id, post_id, connected_account_id, platform, published_at, fetched_at, next_fetch_at)
+         SELECT d.id, $1, d.post_id, $2, 'x', now() - make_interval(days => $4), now() - interval '2 hours', NULL FROM d RETURNING post_id`,
+        [owner.workspaceId, x.id, `x-${daysOld}-${suffix}`, daysOld],
+      );
+      return row.post_id;
+    };
+    const recent = await xPost(10);
+    const old = await xPost(45);
+    expect((await refreshAnalytics(sql, person(), ["x"], { workspace_id: owner.workspaceId, post_id: old })).queued).toBe(0);
+    expect((await refreshAnalytics(sql, person(), ["x"], { workspace_id: owner.workspaceId, post_id: recent })).queued).toBe(1);
+    const [stale] = await sql<{ next_fetch_at: string | null }>(`SELECT next_fetch_at FROM public.post_metrics WHERE post_id = $1`, [old]);
+    expect(stale.next_fetch_at).toBeNull();
+  });
+
   it("allows 3 hand refreshes a day per workspace", async () => {
     await sql(`DELETE FROM public.analytics_refreshes WHERE workspace_id = $1`, [owner.workspaceId]);
     for (let i = 0; i < 3; i++) {
