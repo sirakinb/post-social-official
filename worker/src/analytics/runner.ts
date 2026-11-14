@@ -29,9 +29,18 @@ const HOUR = 3600_000;
 const DAY = 24 * HOUR;
 
 // When to look again, by the post's age. null: stop checking. Public reads cost a credit
-// each, so they run less often and stop after 30 days.
-export function nextFetchAt(publishedAt: number, now: number, source: "official" | "public" = "official"): Date | null {
+// each, so they run less often and stop after 30 days. "lean" is for X's official reads,
+// which cost money per post per day: hourly on day one (X charges once that day), then
+// daily for a week, then weekly to 30 days, about 11 paid reads per post.
+export type FetchSchedule = "official" | "public" | "lean";
+export function nextFetchAt(publishedAt: number, now: number, source: FetchSchedule = "official"): Date | null {
   const age = now - publishedAt;
+  if (source === "lean") {
+    if (age < DAY) return new Date(now + HOUR);
+    if (age < 7 * DAY) return new Date(now + DAY);
+    if (age < 30 * DAY) return new Date(now + 7 * DAY);
+    return null;
+  }
   if (source === "public") {
     if (age < DAY) return new Date(now + 3 * HOUR);
     if (age < 7 * DAY) return new Date(now + DAY);
@@ -226,7 +235,7 @@ async function fetchOne(deps: MetricsDeps, row: Claimed, now: () => number) {
          shares = EXCLUDED.shares, saves = EXCLUDED.saves, reposts = EXCLUDED.reposts, quotes = EXCLUDED.quotes
      )
      UPDATE public.destinations SET platform_request_id = coalesce($13, platform_request_id) WHERE id = $1 AND $13::text IS NOT NULL`,
-    [row.destination_id, ...values, JSON.stringify(result.extra), result.unavailable, nextFetchAt(published, now(), source === "public" ? "public" : "official")?.toISOString() ?? null, row.workspace_id, result.resolvedId ?? null, source],
+    [row.destination_id, ...values, JSON.stringify(result.extra), result.unavailable, nextFetchAt(published, now(), source === "public" ? "public" : row.platform === "x" ? "lean" : "official")?.toISOString() ?? null, row.workspace_id, result.resolvedId ?? null, source],
   );
   // A YouTube account connected with upload permission only is saved with the placeholder
   // handle "youtube"; its post's page names the channel, so its counts can be looked up.
