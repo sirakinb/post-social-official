@@ -64,7 +64,7 @@ describe("stats sweep sources", () => {
     expect(learned.query).toContain("IN ('', 'youtube')");
   });
 
-  it("reads X officially on the lean schedule (one read before the price change), not the 6-hourly one", async () => {
+  it("reads X officially on the lean schedule (weekly after day one), not the 6-hourly one", async () => {
     const db = fakeSql("x", { platform_request_id: "185", live_url: "https://x.com/maker/status/185" });
     const threeDaysOld = (async (query: string, params: unknown[]) =>
       query.includes("claim_metrics_to_fetch") ? [{ ...row("x"), published_at: new Date(NOW - 3 * 24 * 3600_000).toISOString() }] : db.sql(query, params)) as Sql;
@@ -75,16 +75,7 @@ describe("stats sweep sources", () => {
     const w = saved(db.writes)!;
     expect(w.params[1]).toBe(500);
     expect(w.params.at(-1)).toBe("official");
-    expect(w.params[10]).toBeNull();
-  });
-
-  it("doesn't pay for an X read on publishing before the price change: the one read is a day later", async () => {
-    const db = fakeSql("x", { platform_request_id: "186", live_url: "https://x.com/maker/status/186" });
-    let read = false;
-    await runMetricsSweep(deps(db, { platforms: ["x"], fetchers: { x: async () => ((read = true), officialResult({ views: 1 })) } }));
-    expect(read).toBe(false);
-    const later = db.writes.find((w) => w.query.includes("SET next_fetch_at = $2"))!;
-    expect(later.params[1]).toBe(new Date(NOW - 2 * 3600_000 + 24 * 3600_000).toISOString());
+    expect(w.params[10]).toBe(new Date(NOW + 7 * 24 * 3600_000).toISOString());
   });
 
   it("without the ScrapeCreators key, public platforms aren't claimed at all", async () => {

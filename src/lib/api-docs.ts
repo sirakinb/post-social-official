@@ -3,7 +3,7 @@
 import { availableOperations, VIDEO_COVERS_HELP } from "../../backend/lib/api/operations";
 import type { Platform } from "../../backend/lib/connections/platforms";
 
-import { xFreeText, xPriceText } from "@/lib/pricing";
+import { xPriceText } from "@/lib/pricing";
 import { SITE } from "@/lib/site";
 
 export { SITE };
@@ -57,7 +57,7 @@ export function llmsText() {
     `- ${VIDEO_COVERS_HELP}`,
     "",
     "## Pricing",
-    `- Connected accounts 1 and 2 are free (no card). Then per account per month: $5 for accounts 3–10, $2.50 for 11–100, $1 for 101 and up; usage based, prorated for the days an account is connected. X posts ${xPriceText()}${xFreeText() ? ` (${xFreeText()!.replace(/^The/, "the")})` : ""}, under a monthly cap the person sets. Details: ${SITE}/docs/billing`,
+    `- Connected accounts 1 and 2 are free (no card). Then per account per month: $5 for accounts 3–10, $2.50 for 11–100, $1 for 101 and up; usage based, prorated for the days an account is connected. X posts ${xPriceText()} (a card is needed), under a monthly cap the person sets. Details: ${SITE}/docs/billing`,
     "",
     "## Tools (MCP name = REST operationId; CLI command uses hyphens)",
     ...ops.map((op) => `- ${op.name} (${op.method} ${op.path}): ${op.description}`),

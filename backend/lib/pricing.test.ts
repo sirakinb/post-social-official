@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MONTHLY_CREDIT, monthlyBill, unitsFromAccountDays, xFreeText, xFullStats, xPrices, xPriceText } from "./pricing";
+import { MONTHLY_CREDIT, X_PRICES, monthlyBill, unitsFromAccountDays, xPriceText } from "./pricing";
 
 describe("monthlyBill", () => {
   it("keeps the first 2 accounts free", () => {
@@ -32,31 +32,13 @@ describe("monthlyBill", () => {
 });
 
 describe("X prices", () => {
-  const before = Date.parse("2026-12-15T23:59:59Z");
-  const after = Date.parse("2026-12-16T00:00:00Z");
-  it("plain X posts are 2 cents until December 16, 2026, then 5 cents; links stay 25 cents", () => {
-    expect(xPrices(before)).toMatchObject({ post: 0.02, postWithLink: 0.25, freeMonthly: 1 });
-    expect(xPrices(after)).toMatchObject({ post: 0.05, postWithLink: 0.25, freeMonthly: 1 });
+  it("are 5 cents a post, 25 cents with a link, with no free monthly allowance", () => {
+    expect(X_PRICES).toMatchObject({ post: 0.05, postWithLink: 0.25, freeMonthly: 0 });
+    expect(xPriceText()).toBe("5 cents each, 25 cents with a link");
   });
-  it("says the coming price until the change, and only the new one after", () => {
-    expect(xPriceText(before)).toBe("2 cents each (5 cents from December 16, 2026), 25 cents with a link");
-    expect(xPriceText(after)).toBe("5 cents each, 25 cents with a link");
-  });
-  it("reads X stats once until the change, then on the full schedule", () => {
-    expect(xFullStats(before)).toBe(false);
-    expect(xFullStats(after)).toBe(true);
-  });
-  it("keeps the free $1 a month through December 2026, then none", () => {
-    expect(xPrices(Date.parse("2026-12-31T23:59:59Z")).freeMonthly).toBe(1);
-    expect(xPrices(Date.parse("2027-01-01T00:00:00Z")).freeMonthly).toBe(0);
-    expect(xFreeText(before)).toBe("The first $1 of X posts each month is free through December 2026");
-    expect(xFreeText(Date.parse("2027-01-01T00:00:00Z"))).toBeNull();
-  });
-  it("never costs more than it brings in: posting plus stats reads at $0.005 each", () => {
-    const cost = { post: 0.015, link: 0.2, read: 0.005 };
-    // Before the change: one read. From it: six reads over 30 days.
-    expect(xPrices(before).post).toBeGreaterThanOrEqual(cost.post + 1 * cost.read - 1e-9);
-    expect(xPrices(after).post).toBeGreaterThanOrEqual(cost.post + 6 * cost.read - 1e-9);
-    expect(xPrices(after).postWithLink).toBeGreaterThanOrEqual(cost.link + 6 * cost.read - 1e-9);
+  it("never cost more than they bring in: posting plus 6 stats reads at $0.005", () => {
+    const read = 0.005 * 6;
+    expect(X_PRICES.post).toBeGreaterThanOrEqual(0.015 + read - 1e-9);
+    expect(X_PRICES.postWithLink).toBeGreaterThanOrEqual(0.2 + read - 1e-9);
   });
 });

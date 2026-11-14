@@ -7,7 +7,7 @@
 // Every post is billed to Post Social's X developer account (about 1.5 cents, or 20 cents
 // when the text has a link).
 import { captionFor, linkedinMediaType, type LinkedInOptions, type XOptions } from "../../../backend/lib/publishing/validate";
-import { xPrices } from "../../../backend/lib/pricing";
+import { X_PRICES } from "../../../backend/lib/pricing";
 import type { Sql } from "../../../backend/lib/access";
 import { PublishError, type Adapter, type Bundle, type PublishMedia, type StepContext } from "./types";
 
@@ -31,7 +31,7 @@ const toCents = (dollars: number) => Math.round(dollars * 100);
 export function xCharges(sql: Sql, bundle: Bundle): NonNullable<StepContext["chargeX"]> {
   return {
     async reserve(withLink) {
-      const prices = xPrices();
+      const prices = X_PRICES;
       const cents = toCents(withLink ? prices.postWithLink : prices.post);
       const [row] = await sql<{ reserve_x_charge: string }>(`SELECT public.reserve_x_charge($1, $2, $3, $4, $5)`, [bundle.destinationId, bundle.workspaceId, cents, withLink, toCents(prices.freeMonthly)]);
       if (row?.reserve_x_charge === "over_cap") {

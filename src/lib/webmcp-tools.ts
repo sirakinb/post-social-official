@@ -1,6 +1,6 @@
 import { SITE } from "@/lib/site";
 import { DOCS_PAGES, searchDocs } from "@/lib/docs-nav";
-import { FREE_ACCOUNTS, monthlyBill, xFreeText, xPriceText } from "@/lib/pricing";
+import { FREE_ACCOUNTS, monthlyBill, xPriceText } from "@/lib/pricing";
 
 // The site's own actions for AI agents browsing it (WebMCP, registered by
 // src/components/webmcp-tools.tsx): search the docs, estimate a monthly price, open a page.
@@ -39,7 +39,7 @@ export function priceEstimate(accounts: number) {
     notes: [
       `The first ${FREE_ACCOUNTS} connected accounts are free, with no card needed.`,
       "The 3rd account is charged when it is added; accounts added later are charged for the days left in the billing month.",
-      `X posts are extra: ${xPriceText()}.${xFreeText() ? ` ${xFreeText()}.` : ""}`,
+      `X posts are extra: ${xPriceText()}, and need a card.`,
     ],
     details: `${SITE}/pricing`,
   };
