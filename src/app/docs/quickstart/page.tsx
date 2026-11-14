@@ -157,7 +157,7 @@ export default function QuickstartPage() {
             <li><span className="text-ink">The post was saved as a draft.</span> Either no time was given, or the post has a problem such as a caption that is too long or media that doesn&apos;t fit the platform. Your AI gets the exact problems back; ask it to fix them and send the post again.</li>
             <li><span className="text-ink">&ldquo;Test keys cannot publish.&rdquo;</span> A test API key can do everything except publish. Create a live key on the Connect your AI page instead.</li>
             <li><span className="text-ink">A TikTok account refuses a direct post.</span> The account is set to Inbox first. Ask for an inbox post, or change the setting on the Accounts page.</li>
-            <li><span className="text-ink">X posts stopped.</span> You have reached your monthly X cap. See <Link href="/docs/billing#x" className="text-accent hover:underline">X posts in billing</Link>.</li>
+            <li><span className="text-ink">X posts stopped.</span> Posting to X needs a card, and X posts pause at your monthly X cap. See <Link href="/docs/billing#x" className="text-accent hover:underline">X posts in billing</Link>.</li>
             <li><span className="text-ink">Too many requests.</span> You have hit a rate limit. Wait a little while and try again.</li>
           </ul>
           <p>If the reason says it isn&apos;t something you can fix, it will point you to <a href="mailto:support@postsocial.xyz" className="text-accent hover:underline">support@postsocial.xyz</a>.</p>
