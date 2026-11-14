@@ -140,6 +140,44 @@ describe("Bluesky stats", () => {
   });
 });
 
+describe("X stats", () => {
+  it("reads views, likes, replies, reposts, quotes and bookmarks with the account's own access", async () => {
+    let auth = "";
+    const c = ctx("1850000000000000001", [
+      (url, init) => {
+        if (url.pathname !== "/2/tweets/1850000000000000001") return undefined;
+        auth = String((init.headers as Record<string, string>).Authorization);
+        expect(url.searchParams.get("tweet.fields")).toBe("public_metrics");
+        return json({ data: { id: "1850000000000000001", public_metrics: { impression_count: 1200, like_count: 40, reply_count: 5, retweet_count: 7, quote_count: 2, bookmark_count: 3 } } });
+      },
+    ]);
+    expect(await FETCHERS.x(c)).toMatchObject({ views: 1200, likes: 40, comments: 5, reposts: 7, quotes: 2, saves: 3, unavailable: [] });
+    expect(auth).toBe("Bearer tok");
+    expect(c.calls).toEqual(["GET /2/tweets/1850000000000000001"]);
+  });
+
+  it("a deleted post (200 with errors and no data) reads as not found", async () => {
+    const c = ctx("1", [(url) => (url.pathname === "/2/tweets/1" ? json({ errors: [{ detail: "Could not find tweet with id: [1]." }] }) : undefined)]);
+    await expect(FETCHERS.x(c)).rejects.toThrow(/not found/);
+  });
+
+  it("expired access is flagged so the account is asked to reconnect", async () => {
+    const c = ctx("1", [(url) => (url.pathname === "/2/tweets/1" ? json({ title: "Unauthorized", status: 401 }, 401) : undefined)]);
+    await expect(FETCHERS.x(c)).rejects.toMatchObject({ expired: true });
+  });
+});
+
+describe("X refresh schedule (lean)", () => {
+  it("reads hourly on day one, daily for a week, weekly to 30 days, then stops", () => {
+    const now = Date.parse("2026-11-14T12:00:00Z");
+    const h = 3600_000;
+    expect(nextFetchAt(now - 2 * h, now, "lean")!.getTime()).toBe(now + h);
+    expect(nextFetchAt(now - 3 * 24 * h, now, "lean")!.getTime()).toBe(now + 24 * h);
+    expect(nextFetchAt(now - 10 * 24 * h, now, "lean")!.getTime()).toBe(now + 7 * 24 * h);
+    expect(nextFetchAt(now - 31 * 24 * h, now, "lean")).toBeNull();
+  });
+});
+
 describe("public refresh schedule", () => {
   it("reads public pages every 3 hours on day one, then daily, then weekly, and stops at 30 days", () => {
     const now = Date.parse("2026-10-16T12:00:00Z");
