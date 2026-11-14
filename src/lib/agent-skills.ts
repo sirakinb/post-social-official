@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { API_URL, MCP_URL, SITE } from "@/lib/api-docs";
-import { xPriceText } from "@/lib/pricing";
+import { xFreeText, xPriceText } from "@/lib/pricing";
 
 // Agent Skills (Agent Skills Discovery RFC v0.2.0): instructions an AI agent can load to use
 // Post Social well. Each is served at /.well-known/agent-skills/<name>/SKILL.md and listed, with
@@ -67,7 +67,7 @@ Use this once you are connected (see the connect-post-social skill). Tool names 
 - To change a scheduled post (for example, swap an image), edit it with update_post instead of creating a second post.
 - TikTok goes out directly by default. Set privacy_level to the audience the person asked for, or send it to their TikTok inbox with delivery_mode.
 - Some accounts are set to ask the person first: the post waits for their approval, and you can't approve it.
-- X posts cost ${xPriceText()}, after the first $1 each month; at the person's monthly cap, X posts pause.
+- X posts cost ${xPriceText()}${xFreeText() ? ` (${xFreeText()!.replace(/^The/, "the")})` : ""}; at the person's monthly cap, X posts pause.
 
 More: ${SITE}/docs/quickstart and ${SITE}/llms.txt
 `;

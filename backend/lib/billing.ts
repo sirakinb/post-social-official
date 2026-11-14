@@ -7,7 +7,7 @@
 // without one it stays on Free (2 accounts). Cards, invoices and cancelling happen on
 // Stripe's own pages (Checkout and the customer portal); we never see card details.
 import { ApiError, isAgentCaller, membership, requireUuid, type Caller, type Sql } from "./access";
-import { FREE_ACCOUNTS, X_PRICES, monthlyBill, xPrices } from "./pricing";
+import { FREE_ACCOUNTS, monthlyBill, xPrices } from "./pricing";
 import { originAllowedFor } from "./connections/service";
 import { trackEvent } from "./telemetry";
 
@@ -166,7 +166,7 @@ export async function billingStatus(deps: BillingDeps, caller: Caller, input: Pa
   // Without a working card, X stops at the free $1 (comped plans aren't capped).
   const billable = state.plan_id === "paid" && PAID_STATUSES.has(state.subscription_status ?? "");
   const setCap = (state.x_monthly_cap_cents ?? 1000) / 100;
-  const effectiveCap = comped ? null : billable ? setCap : Math.min(setCap, X_PRICES.freeMonthly);
+  const effectiveCap = comped ? null : billable ? setCap : Math.min(setCap, xPrices().freeMonthly);
   const xSpend = await xSpendThisMonth(deps.sql, workspaceId);
   return {
     plan: { id: state.plan_id, name: state.plan_name, comped },
@@ -174,7 +174,7 @@ export async function billingStatus(deps: BillingDeps, caller: Caller, input: Pa
     free_accounts: FREE_ACCOUNTS,
     subscription: state.stripe_subscription_id ? { status: state.subscription_status } : null,
     estimate: comped ? null : { monthly_total: bill.total, credit: bill.credit, bands: bill.bands.filter((b) => b.units > 0) },
-    x: { ...xSpend, monthly_cap: effectiveCap, set_cap: (state.x_monthly_cap_cents ?? 1000) / 100, price_per_post: xPrices().post, price_per_link_post: xPrices().postWithLink, free_monthly: X_PRICES.freeMonthly },
+    x: { ...xSpend, monthly_cap: effectiveCap, set_cap: (state.x_monthly_cap_cents ?? 1000) / 100, price_per_post: xPrices().post, price_per_link_post: xPrices().postWithLink, free_monthly: xPrices().freeMonthly },
     can_manage: member.role === "owner" || member.role === "admin",
     available: Boolean(deps.stripe),
     ...(await stripeDetails(deps, state, bill.total, xSpend.spent, comped)),
@@ -195,7 +195,7 @@ const monthStart = () => {
 // part is best effort, so the page still loads if Stripe is slow or down.
 async function stripeDetails(deps: BillingDeps, state: Awaited<ReturnType<typeof workspaceState>>, estimate: number, xSpent: number, comped: boolean) {
   const xLine = (amount: number) => ({ label: "X posts", detail: "This month so far", amount });
-  const xBillable = Math.max(0, Math.round((xSpent - X_PRICES.freeMonthly) * 100) / 100);
+  const xBillable = Math.max(0, Math.round((xSpent - xPrices().freeMonthly) * 100) / 100);
   const fallbackEnd = new Date(Date.UTC(monthStart().getUTCFullYear(), monthStart().getUTCMonth() + 1, 0));
   const ourUpcoming = {
     total: Math.round((estimate + xBillable) * 100) / 100,
@@ -398,7 +398,7 @@ type StripeEvent = { type: string; data: { object: Record<string, unknown> } };
 const MONTH_NAME = (month: string) => new Date(`${month}T00:00:00Z`).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
 
 // A renewal invoice is a draft for about an hour before Stripe charges it: add the X posts
-// not billed yet, month by month, each month's first $1 free.
+// not billed yet, month by month, less that month's free allowance (none from 2027).
 export async function addXUsageToInvoice(deps: BillingDeps, invoice: { id: string; customer: string; status?: string; billing_reason?: string }) {
   if (invoice.status !== "draft" || invoice.billing_reason !== "subscription_cycle") return { added: 0 };
   const stripe = requireStripe(deps);
@@ -412,10 +412,10 @@ export async function addXUsageToInvoice(deps: BillingDeps, invoice: { id: strin
      GROUP BY 1, 2 ORDER BY 2`,
     [invoice.customer],
   );
-  const free = Math.round(X_PRICES.freeMonthly * 100);
   let added = 0;
   for (const m of months) {
-    const cents = Math.max(0, m.total_cents - free) - m.billed_cents;
+    const freeDollars = xPrices(Date.parse(`${m.month}T00:00:00Z`)).freeMonthly;
+    const cents = Math.max(0, m.total_cents - Math.round(freeDollars * 100)) - m.billed_cents;
     if (cents <= 0) continue;
     // Saved first, so a repeated webhook can't add the same line twice.
     const [saved] = await deps.sql(
@@ -430,7 +430,7 @@ export async function addXUsageToInvoice(deps: BillingDeps, invoice: { id: strin
         invoice: invoice.id,
         currency: "usd",
         amount: cents,
-        description: `X posts, ${MONTH_NAME(m.month)}: ${m.posts} post${m.posts === 1 ? "" : "s"}${m.link_posts ? ` (${m.link_posts} with a link)` : ""}, first $${X_PRICES.freeMonthly} free`,
+        description: `X posts, ${MONTH_NAME(m.month)}: ${m.posts} post${m.posts === 1 ? "" : "s"}${m.link_posts ? ` (${m.link_posts} with a link)` : ""}${freeDollars > 0 ? `, first $${freeDollars} free` : ""}`,
         metadata: { workspace_id: m.workspace_id, month: m.month },
       });
     } catch (error) {

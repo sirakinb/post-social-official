@@ -169,11 +169,10 @@ describe("X stats", () => {
 
 describe("X refresh schedule (lean)", () => {
   const h = 3600_000;
-  it("until the price change: reads when published, a day later and at day 7, then stops", () => {
+  it("until the price change: one read a day after posting, then stops", () => {
     const now = Date.parse("2026-11-14T12:00:00Z");
     expect(nextFetchAt(now - 2 * h, now, "lean")!.getTime()).toBe(now + 22 * h);
-    expect(nextFetchAt(now - 25 * h, now, "lean")!.getTime()).toBe(now - 25 * h + 7 * 24 * h);
-    expect(nextFetchAt(now - 7 * 24 * h - h, now, "lean")).toBeNull();
+    expect(nextFetchAt(now - 25 * h, now, "lean")).toBeNull();
   });
   it("after the price change: a day later, then every 7 days to 30 days, then stops", () => {
     const now = Date.parse("2026-12-20T12:00:00Z");

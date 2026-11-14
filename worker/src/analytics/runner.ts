@@ -3,7 +3,7 @@
 import { parseJson } from "../json";
 import type { Sql } from "../../../backend/lib/access";
 import { DISPLAY_NAMES as PLATFORM_NAMES, officialPlatformsFor, type Platform, type Settings, type StatsPreview } from "../../../backend/lib/connections/platforms";
-import { xStatsDays } from "../../../backend/lib/pricing";
+import { xFullStats } from "../../../backend/lib/pricing";
 import { accountToken } from "../credentials";
 import { FETCHERS, type Counters, type FetchContext, type MetricsResult } from "./platforms";
 import { PUBLIC_POST_FIELDS, PUBLIC_POST_READERS, realHandle, type PublicContext, type PublicPostResult } from "./public";
@@ -31,15 +31,15 @@ const DAY = 24 * HOUR;
 
 // When to look again, by the post's age. null: stop checking. Public reads cost a credit
 // each, so they run less often and stop after 30 days. "lean" is for X's official reads,
-// which cost $0.005 per post per UTC day: once when published and once a day later, then
-// once at day 7 until X's price change (3 reads, ~$0.015 a post), and every 7 days to day 30
-// after it (about 6 reads, ~$0.03), when the 5-cent price covers them (xStatsDays).
+// which cost $0.005 per post per UTC day. Until X's price change, once, a day after posting
+// (the read on publishing is skipped, see fetchOne), so a 2-cent post breaks even. From it,
+// at 5 cents: on publishing, a day later, then every 7 days to day 30 (6 reads, ~$0.03).
 export type FetchSchedule = "official" | "public" | "lean";
 export function nextFetchAt(publishedAt: number, now: number, source: FetchSchedule = "official"): Date | null {
   const age = now - publishedAt;
   if (source === "lean") {
     if (age < DAY) return new Date(publishedAt + DAY);
-    if (xStatsDays(now) <= 7) return age < 7 * DAY ? new Date(publishedAt + 7 * DAY) : null;
+    if (!xFullStats(now)) return null;
     if (age < 30 * DAY) return new Date(now + 7 * DAY);
     return null;
   }
@@ -143,6 +143,10 @@ async function fetchOne(deps: MetricsDeps, row: Claimed, now: () => number) {
   }
 
   const official = officialPlatformsFor(deps.platforms, deps.preview ?? { platforms: [], workspaces: [] }, row.workspace_id).includes(row.platform);
+  // X before its price change: no paid read on publishing, only the one a day later.
+  if (official && row.platform === "x" && !xFullStats(now()) && now() - published < DAY - 5 * 60_000) {
+    return later(new Date(published + DAY), null);
+  }
   const reader = deps.publicReaders?.[row.platform] ?? PUBLIC_POST_READERS[row.platform];
   const canReadPublic = publicOn(deps).includes(row.platform) && Boolean(reader) && Boolean(target?.live_url);
   // A preview platform with no public reads here: other workspaces' posts wait, so they're

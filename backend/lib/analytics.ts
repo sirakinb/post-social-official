@@ -5,7 +5,6 @@ import { ApiError, membership, requireUuid, type Caller, type Sql } from "./acce
 import { DISPLAY_NAMES, type Platform } from "./connections/platforms";
 import { page } from "./api/reads";
 import { REFRESHES_PER_DAY } from "./analytics-dashboard";
-import { xStatsDays } from "./pricing";
 
 const COUNTERS = ["views", "likes", "comments", "shares", "saves", "reposts", "quotes"] as const;
 export const ANALYTICS_PERIODS = ["last_7_days", "last_30_days", "last_90_days", "all"] as const;
@@ -142,9 +141,9 @@ export async function refreshAnalytics(sql: Sql, caller: Caller, platforms: Plat
        SELECT destination_id, fetched_at FROM public.post_metrics
        WHERE workspace_id = $1 AND platform = ANY($2::text[]) AND ($3::uuid IS NULL OR post_id = $3)
          AND published_at > now() - interval '90 days'
-         -- X charges for every read, and its automatic reads stop after xStatsDays, so
-         -- older X posts keep their final numbers instead of being read again by hand.
-         AND (platform <> 'x' OR published_at > now() - make_interval(days => $5))
+         -- X charges for every read, so X posts are only read on their schedule (runner.ts),
+         -- never again by hand: each X post's reads stay within what it's billed.
+         AND platform <> 'x'
      ), queued AS (
        UPDATE public.post_metrics SET next_fetch_at = now(), refresh_requested_at = now()
        WHERE destination_id IN (
@@ -155,7 +154,7 @@ export async function refreshAnalytics(sql: Sql, caller: Caller, platforms: Plat
      )
      SELECT (SELECT count(*) FROM queued) AS queued,
             (SELECT count(*) FROM candidates WHERE fetched_at >= now() - make_interval(mins => $4)) AS cooling`,
-    [input.workspace_id, enabledOrEmpty(platforms), postId, REFRESH_COOLDOWN_MINUTES, xStatsDays()],
+    [input.workspace_id, enabledOrEmpty(platforms), postId, REFRESH_COOLDOWN_MINUTES],
   );
   const queued = Number(result.queued);
   const cooling = Number(result.cooling);

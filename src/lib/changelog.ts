@@ -17,7 +17,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     at: "2026-11-14T14:30:00-05:00",
     kind: "New",
     title: "Official X stats, and a new X post price from December 16",
-    body: "Your X posts' views, likes, replies, reposts, quotes and bookmarks, and your X follower count, now come straight from X. To cover them, X posts without a link go from 2 cents to 5 cents on December 16, 2026. Posts with a link stay 25 cents, your first $1 of X posts each month is still free, and your monthly X limit still applies.",
+    body: "Your X posts' views, likes, replies, reposts, quotes and bookmarks now come straight from X. To cover them, X posts without a link go from 2 cents to 5 cents on December 16, 2026, and the free $1 of X posts each month ends after December 2026. Posts with a link stay 25 cents, and your monthly X limit still applies.",
   },
   {
     at: "2026-10-26T12:00:00-04:00",

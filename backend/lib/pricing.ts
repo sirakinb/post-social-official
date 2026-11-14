@@ -20,9 +20,22 @@ export const X_PRICES = { post: 0.02, postWithLink: 0.25, defaultMonthlyCap: 10,
 // Plain X posts go to 5 cents on this date, so they cover their own stats reads. Customers
 // get 30 days' notice first, as the terms promise. Posts with a link stay 25 cents.
 export const X_PRICE_CHANGE = { on: "2026-12-16T00:00:00Z", label: "December 16, 2026", post: 0.05 } as const;
+// The free monthly X allowance ends with December 2026 (whole months, so a month's
+// allowance never changes partway through): from January every X post is paid, so none
+// costs Post Social more than it brings in.
+export const X_FREE_ENDS = { on: "2027-01-01T00:00:00Z", lastMonth: "December 2026" } as const;
 
+// Prices at a time. freeMonthly is the allowance of the calendar month (UTC) that time is in.
 export function xPrices(now: number = Date.now()) {
-  return now >= Date.parse(X_PRICE_CHANGE.on) ? { ...X_PRICES, post: X_PRICE_CHANGE.post } : X_PRICES;
+  const post = now >= Date.parse(X_PRICE_CHANGE.on) ? X_PRICE_CHANGE.post : X_PRICES.post;
+  const freeMonthly = now >= Date.parse(X_FREE_ENDS.on) ? 0 : X_PRICES.freeMonthly;
+  return { ...X_PRICES, post, freeMonthly };
+}
+
+// "The first $1 of X posts each month is free through December 2026", or null once it ends.
+export function xFreeText(now: number = Date.now()) {
+  const free = xPrices(now).freeMonthly;
+  return free > 0 ? `The first $${free} of X posts each month is free through ${X_FREE_ENDS.lastMonth}` : null;
 }
 
 const centsText = (dollars: number) => `${Math.round(dollars * 100)} cents`;
@@ -35,9 +48,10 @@ export function xPriceText(now: number = Date.now()) {
   return `${centsText(p.post)} each${upcoming}, ${centsText(p.postWithLink)} with a link`;
 }
 
-// How long X posts' stats are read (automatically and by hand): a week until the price
-// change, then 30 days, because X charges for each read.
-export const xStatsDays = (now: number = Date.now()) => (now >= Date.parse(X_PRICE_CHANGE.on) ? 30 : 7);
+// Until the price change, an X post's stats are read once (a day after it's published): at 2
+// cents a post that's exactly what posting plus one read costs. From the change, at 5 cents,
+// six reads over 30 days still leave a little over (see nextFetchAt "lean").
+export const xFullStats = (now: number = Date.now()) => now >= Date.parse(X_PRICE_CHANGE.on);
 
 export type BandCharge = { from: number; to: number; perAccount: number; units: number; amount: number };
 
