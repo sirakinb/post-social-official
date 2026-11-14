@@ -30,14 +30,13 @@ const DAY = 24 * HOUR;
 
 // When to look again, by the post's age. null: stop checking. Public reads cost a credit
 // each, so they run less often and stop after 30 days. "lean" is for X's official reads,
-// which cost money per post per day: hourly on day one (X charges once that day), then
-// daily for a week, then weekly to 30 days, about 11 paid reads per post.
+// which cost $0.005 per post per UTC day: once when published, once a day later, then every
+// 7 days to 30 days, about 6 paid reads (~$0.03) per post.
 export type FetchSchedule = "official" | "public" | "lean";
 export function nextFetchAt(publishedAt: number, now: number, source: FetchSchedule = "official"): Date | null {
   const age = now - publishedAt;
   if (source === "lean") {
-    if (age < DAY) return new Date(now + HOUR);
-    if (age < 7 * DAY) return new Date(now + DAY);
+    if (age < DAY) return new Date(publishedAt + DAY);
     if (age < 30 * DAY) return new Date(now + 7 * DAY);
     return null;
   }
