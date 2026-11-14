@@ -37,7 +37,7 @@ export function xCharges(sql: Sql, bundle: Bundle): NonNullable<StepContext["cha
       if (row?.reserve_x_charge === "over_cap") {
         throw new PublishError(
           "x_cap_reached",
-          "This workspace reached its monthly X limit, so this post didn't go out. Raise the X cap on the Billing page (or add a card), then post it again. Other platforms are not affected.",
+          "This post didn't go out on X: posting to X needs a card, or this workspace reached its monthly X limit. Add a card or raise the X limit on the Billing page, then post it again. Other platforms are not affected.",
           false,
         );
       }
