@@ -12,8 +12,32 @@ export const PRICE_BANDS = [
 export const FREE_ACCOUNTS = 2;
 export const MONTHLY_CREDIT = FREE_ACCOUNTS * PRICE_BANDS[0].perAccount; // $10
 
-// X's own API charges, passed on with a small markup (we pay $0.015 and $0.20).
+// X's own API charges, passed on with a small markup (we pay $0.015 and $0.20 to post, and
+// $0.005 per post per day to read its stats). These are today's prices; use xPrices() for
+// what a post costs at a given time.
 export const X_PRICES = { post: 0.02, postWithLink: 0.25, defaultMonthlyCap: 10, freeMonthly: 1 } as const;
+
+// Plain X posts go to 5 cents on this date, so they cover their own stats reads. Customers
+// get 30 days' notice first, as the terms promise. Posts with a link stay 25 cents.
+export const X_PRICE_CHANGE = { on: "2026-12-16T00:00:00Z", label: "December 16, 2026", post: 0.05 } as const;
+
+export function xPrices(now: number = Date.now()) {
+  return now >= Date.parse(X_PRICE_CHANGE.on) ? { ...X_PRICES, post: X_PRICE_CHANGE.post } : X_PRICES;
+}
+
+const centsText = (dollars: number) => `${Math.round(dollars * 100)} cents`;
+
+// "2 cents each (5 cents from December 16, 2026), 25 cents with a link" until the change,
+// then "5 cents each, 25 cents with a link".
+export function xPriceText(now: number = Date.now()) {
+  const p = xPrices(now);
+  const upcoming = p.post === X_PRICE_CHANGE.post ? "" : ` (${centsText(X_PRICE_CHANGE.post)} from ${X_PRICE_CHANGE.label})`;
+  return `${centsText(p.post)} each${upcoming}, ${centsText(p.postWithLink)} with a link`;
+}
+
+// How long X posts' stats are read (automatically and by hand): a week until the price
+// change, then 30 days, because X charges for each read.
+export const xStatsDays = (now: number = Date.now()) => (now >= Date.parse(X_PRICE_CHANGE.on) ? 30 : 7);
 
 export type BandCharge = { from: number; to: number; perAccount: number; units: number; amount: number };
 

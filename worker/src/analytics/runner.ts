@@ -3,6 +3,7 @@
 import { parseJson } from "../json";
 import type { Sql } from "../../../backend/lib/access";
 import { DISPLAY_NAMES as PLATFORM_NAMES, officialPlatformsFor, type Platform, type Settings, type StatsPreview } from "../../../backend/lib/connections/platforms";
+import { xStatsDays } from "../../../backend/lib/pricing";
 import { accountToken } from "../credentials";
 import { FETCHERS, type Counters, type FetchContext, type MetricsResult } from "./platforms";
 import { PUBLIC_POST_FIELDS, PUBLIC_POST_READERS, realHandle, type PublicContext, type PublicPostResult } from "./public";
@@ -30,13 +31,15 @@ const DAY = 24 * HOUR;
 
 // When to look again, by the post's age. null: stop checking. Public reads cost a credit
 // each, so they run less often and stop after 30 days. "lean" is for X's official reads,
-// which cost $0.005 per post per UTC day: once when published, once a day later, then every
-// 7 days to 30 days, about 6 paid reads (~$0.03) per post.
+// which cost $0.005 per post per UTC day: once when published and once a day later, then
+// once at day 7 until X's price change (3 reads, ~$0.015 a post), and every 7 days to day 30
+// after it (about 6 reads, ~$0.03), when the 5-cent price covers them (xStatsDays).
 export type FetchSchedule = "official" | "public" | "lean";
 export function nextFetchAt(publishedAt: number, now: number, source: FetchSchedule = "official"): Date | null {
   const age = now - publishedAt;
   if (source === "lean") {
     if (age < DAY) return new Date(publishedAt + DAY);
+    if (xStatsDays(now) <= 7) return age < 7 * DAY ? new Date(publishedAt + 7 * DAY) : null;
     if (age < 30 * DAY) return new Date(now + 7 * DAY);
     return null;
   }

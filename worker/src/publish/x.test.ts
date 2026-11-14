@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { xPrices } from "../../../backend/lib/pricing";
 import { describe, expect, it } from "vitest";
 import type { XOptions } from "../../../backend/lib/publishing/validate";
 import { hasLink, publishX, xCharges } from "./x";
@@ -133,7 +134,7 @@ describe("X charges", () => {
     const charges = xCharges(sql, { destinationId: "d1", workspaceId: "w1" } as never);
     await charges.reserve(false);
     await charges.reserve(true);
-    expect(calls).toEqual([["d1", "w1", 2, false, 100], ["d1", "w1", 25, true, 100]]);
+    expect(calls).toEqual([["d1", "w1", Math.round(xPrices().post * 100), false, 100], ["d1", "w1", 25, true, 100]]);
     answer = "over_cap";
     await expect(charges.reserve(false)).rejects.toThrow(/monthly X limit/);
   });

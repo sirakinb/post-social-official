@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MONTHLY_CREDIT, monthlyBill, unitsFromAccountDays } from "./pricing";
+import { MONTHLY_CREDIT, monthlyBill, unitsFromAccountDays, xPrices, xPriceText, xStatsDays } from "./pricing";
 
 describe("monthlyBill", () => {
   it("keeps the first 2 accounts free", () => {
@@ -28,5 +28,22 @@ describe("monthlyBill", () => {
   it("ignores nonsense input", () => {
     expect(monthlyBill(-5).total).toBe(0);
     expect(monthlyBill(Number.NaN).total).toBe(0);
+  });
+});
+
+describe("X prices", () => {
+  const before = Date.parse("2026-12-15T23:59:59Z");
+  const after = Date.parse("2026-12-16T00:00:00Z");
+  it("plain X posts are 2 cents until December 16, 2026, then 5 cents; links stay 25 cents", () => {
+    expect(xPrices(before)).toMatchObject({ post: 0.02, postWithLink: 0.25, freeMonthly: 1 });
+    expect(xPrices(after)).toMatchObject({ post: 0.05, postWithLink: 0.25, freeMonthly: 1 });
+  });
+  it("says the coming price until the change, and only the new one after", () => {
+    expect(xPriceText(before)).toBe("2 cents each (5 cents from December 16, 2026), 25 cents with a link");
+    expect(xPriceText(after)).toBe("5 cents each, 25 cents with a link");
+  });
+  it("reads X stats for a week until the change, then 30 days", () => {
+    expect(xStatsDays(before)).toBe(7);
+    expect(xStatsDays(after)).toBe(30);
   });
 });

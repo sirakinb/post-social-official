@@ -158,7 +158,7 @@ describe.skipIf(!enabled)("post stats on the dev backend (US-068)", () => {
     await expect(analyticsDashboard(sql, person(), ["facebook"], { workspace_id: owner.workspaceId, period: "forever" })).rejects.toThrow(/period/);
   });
 
-  it("refresh now skips X posts older than 30 days (X charges for every read)", async () => {
+  it("refresh now skips X posts past their stats window (X charges for every read)", async () => {
     const [x] = await sql<{ id: string }>(
       `INSERT INTO public.connected_accounts (workspace_id, platform, external_account_id, handle, display_name, capabilities)
        VALUES ($1, 'x', $2, $2, 'Test x', '{}') RETURNING id`,
@@ -178,7 +178,7 @@ describe.skipIf(!enabled)("post stats on the dev backend (US-068)", () => {
       );
       return row.post_id;
     };
-    const recent = await xPost(10);
+    const recent = await xPost(3);
     const old = await xPost(45);
     expect((await refreshAnalytics(sql, person(), ["x"], { workspace_id: owner.workspaceId, post_id: old })).queued).toBe(0);
     expect((await refreshAnalytics(sql, person(), ["x"], { workspace_id: owner.workspaceId, post_id: recent })).queued).toBe(1);

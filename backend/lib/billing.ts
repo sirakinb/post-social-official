@@ -7,7 +7,7 @@
 // without one it stays on Free (2 accounts). Cards, invoices and cancelling happen on
 // Stripe's own pages (Checkout and the customer portal); we never see card details.
 import { ApiError, isAgentCaller, membership, requireUuid, type Caller, type Sql } from "./access";
-import { FREE_ACCOUNTS, X_PRICES, monthlyBill } from "./pricing";
+import { FREE_ACCOUNTS, X_PRICES, monthlyBill, xPrices } from "./pricing";
 import { originAllowedFor } from "./connections/service";
 import { trackEvent } from "./telemetry";
 
@@ -174,7 +174,7 @@ export async function billingStatus(deps: BillingDeps, caller: Caller, input: Pa
     free_accounts: FREE_ACCOUNTS,
     subscription: state.stripe_subscription_id ? { status: state.subscription_status } : null,
     estimate: comped ? null : { monthly_total: bill.total, credit: bill.credit, bands: bill.bands.filter((b) => b.units > 0) },
-    x: { ...xSpend, monthly_cap: effectiveCap, set_cap: (state.x_monthly_cap_cents ?? 1000) / 100, price_per_post: X_PRICES.post, price_per_link_post: X_PRICES.postWithLink, free_monthly: X_PRICES.freeMonthly },
+    x: { ...xSpend, monthly_cap: effectiveCap, set_cap: (state.x_monthly_cap_cents ?? 1000) / 100, price_per_post: xPrices().post, price_per_link_post: xPrices().postWithLink, free_monthly: X_PRICES.freeMonthly },
     can_manage: member.role === "owner" || member.role === "admin",
     available: Boolean(deps.stripe),
     ...(await stripeDetails(deps, state, bill.total, xSpend.spent, comped)),
