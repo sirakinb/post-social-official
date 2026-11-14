@@ -278,6 +278,19 @@ describe.skipIf(!enabled)("core schema on the dev backend", () => {
       ]);
     });
 
+    it("the audit log accepts automation changes", async () => {
+      const event = await insert("audit_events", {
+        workspace_id: workspaceA.id,
+        actor_id: apiKeyActor.id,
+        entry_point: "api",
+        event_type: "automation.created",
+        entity_type: "automation",
+        entity_id: crypto.randomUUID(),
+        summary: "Created the automation GUIDE",
+      });
+      expect(event.id).toBeTruthy();
+    });
+
     it("the audit log is append-only, even for the server", async () => {
       const edit = await admin("PATCH", records("audit_events", `?entity_id=eq.${postA.id}`), { summary: "rewritten" });
       expect(edit.status).toBeGreaterThanOrEqual(400);

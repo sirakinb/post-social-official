@@ -27,5 +27,6 @@ export default withReporting("connections", (name) => Deno.env.get(name), create
   webAppHome: setting("WEB_APP_HOME"),
   metaAppSecrets: ["META_APP_SECRET", "INSTAGRAM_APP_SECRET", "THREADS_APP_SECRET"].map((n) => Deno.env.get(n)).filter((v): v is string => Boolean(v)),
   selfBaseUrl: setting("CONNECTIONS_BASE_URL"),
+  metaWebhookVerifyToken: Deno.env.get("META_WEBHOOK_VERIFY_TOKEN") ?? null,
   afterAccountsChanged: (workspaceId) => syncAccountQuantity(billing, workspaceId),
 }));

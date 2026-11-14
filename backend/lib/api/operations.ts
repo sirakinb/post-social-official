@@ -12,6 +12,7 @@ import { listAccounts, listMedia, listPosts, listResults } from "./reads";
 import { createProfile, deleteProfile, listProfiles, moveAccount, setTiktokDelivery, updateProfile } from "../connections/profiles";
 import { PERIODS, usageReport } from "../usage";
 import { X_PRICES } from "../pricing";
+import { LIMITS, MATCH_MODES, createAutomation, deleteAutomation, getAutomation, listAutomations, updateAutomation, type InboxSwitch } from "../inbox/automations";
 
 export type ApiDeps = {
   sql: Sql;
@@ -19,6 +20,7 @@ export type ApiDeps = {
   newId: () => string;
   webAppUrl: string;
   analyticsPlatforms: Platform[]; // platforms whose stats are switched on here (none: no stats tools)
+  inbox?: InboxSwitch; // where comment-to-DM automations are switched on (none: no automation tools)
   pause?: (ms: number) => Promise<void>; // how status checks wait between reads (tests skip the wait)
 };
 
@@ -35,6 +37,7 @@ export type Operation = {
   creates?: boolean; // REST answers 201 Created
   strict?: boolean; // unknown input fields are refused (400) instead of ignored
   analytics?: boolean; // only offered where stats are switched on
+  inbox?: boolean; // only offered where automations are switched on
   run: (deps: ApiDeps, caller: AgentCaller, input: Record<string, unknown>) => Promise<unknown>;
 };
 
@@ -97,6 +100,115 @@ const createPostInput = {
   },
   draft: { type: "boolean", default: false, description: "Only save a draft; do not send or schedule." },
 };
+
+// Comment-to-DM automations (backend/lib/inbox/automations.ts).
+const automationFields = {
+  name: { type: "string", maxLength: LIMITS.name, description: "A label, e.g. \"Free guide\"." },
+  platform_post_id: {
+    type: "string",
+    description: "The Instagram post (media id) it answers comments on, e.g. a post's platform id from get_post. Leave out to answer comments on every post.",
+  },
+  keywords: {
+    type: "array",
+    maxItems: LIMITS.keywords,
+    items: { type: "string", maxLength: LIMITS.keyword },
+    description: "Words that trigger it, e.g. [\"guide\"]. Case doesn't matter. Empty: any comment triggers it.",
+  },
+  match_mode: {
+    type: "string",
+    enum: MATCH_MODES,
+    default: "word",
+    description: "word: the keyword as a whole word (\"guide\" fires on \"send the guide\", not \"guidebook\"); contains: anywhere, even inside a word; exact: the whole comment.",
+  },
+  exclude_keywords: { type: "array", maxItems: LIMITS.keywords, items: { type: "string", maxLength: LIMITS.keyword }, description: "Comments with any of these never trigger it." },
+  dm_message: {
+    type: "string",
+    maxLength: LIMITS.dm,
+    description: "The DM sent to the commenter (Instagram allows one DM per comment, within 7 days). {username} becomes their @handle.",
+  },
+  dm_variations: { type: "array", maxItems: LIMITS.variations, items: { type: "string", maxLength: LIMITS.dm }, description: "Other versions of the DM, picked at random so repeat DMs aren't identical." },
+  dm_buttons: {
+    type: "array",
+    maxItems: LIMITS.buttons,
+    items: {
+      type: "object",
+      required: ["label", "url"],
+      properties: { label: { type: "string", maxLength: LIMITS.buttonLabel }, url: { type: "string", description: "A web address." } },
+    },
+    description: "Up to 3 link buttons on the DM. Clicks are counted.",
+  },
+  comment_reply: { type: "string", maxLength: LIMITS.reply, description: "An optional public reply to the comment, posted after the DM." },
+  comment_reply_variations: { type: "array", maxItems: LIMITS.variations, items: { type: "string", maxLength: LIMITS.reply }, description: "Other versions of the public reply, picked at random." },
+  repeat_mode: {
+    type: "string",
+    enum: ["once", "every_comment"],
+    default: "once",
+    description: "once: each person gets the DM once, however often they comment; every_comment: every matching comment gets one.",
+  },
+  is_active: { type: "boolean", default: true, description: "false saves it paused." },
+};
+const AUTOMATION_STATS =
+  "Each automation comes with its stats: triggered (comments it matched), sent, failed, skipped (e.g. the person already got the DM), clicks and people_clicked (on its link buttons).";
+const INBOX_OFF: InboxSwitch = { all: false, workspaces: [] };
+const automationOperations: Operation[] = [
+  {
+    name: "list_automations",
+    inbox: true,
+    title: "Comment-to-DM automations",
+    description: `Lists the workspace's comment-to-DM automations: when someone comments a keyword on an Instagram post, they get a DM. ${AUTOMATION_STATS}`,
+    method: "GET",
+    path: "/v1/automations",
+    input: { properties: { account_id: id("connected Instagram account") } },
+    readOnly: true,
+    run: (deps, caller, input) => listAutomations({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, { ...input, workspace_id: caller.workspaceId }),
+  },
+  {
+    name: "get_automation",
+    inbox: true,
+    title: "One automation and its activity",
+    description: `Shows one automation, its stats and its recent activity: each comment it matched (who, what they wrote), whether the DM went out (or why not), the public reply, and link clicks. ${AUTOMATION_STATS}`,
+    method: "GET",
+    path: "/v1/automations/{automation_id}",
+    input: { properties: { automation_id: id("automation"), limit: { type: "integer", minimum: 1, maximum: 100, default: 50, description: "How much recent activity to return." } }, required: ["automation_id"] },
+    readOnly: true,
+    run: (deps, caller, input) => getAutomation({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, input),
+  },
+  {
+    name: "create_automation",
+    inbox: true,
+    title: "Set up comment-to-DM",
+    description:
+      "Creates an automation on an Instagram account: when someone comments one of the keywords (on one post, or every post), Post Social DMs them, with optional link buttons and an optional public reply. Only use it when the person asked for it; it messages real people.",
+    method: "POST",
+    path: "/v1/automations",
+    input: { properties: { account_id: id("connected Instagram account"), ...automationFields }, required: ["account_id", "name", "dm_message"] },
+    creates: true,
+    strict: true,
+    run: (deps, caller, input) => createAutomation({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, { ...input, workspace_id: caller.workspaceId }),
+  },
+  {
+    name: "update_automation",
+    inbox: true,
+    title: "Change or pause an automation",
+    description: "Changes an automation. Send only the fields to change; is_active false pauses it, true turns it back on.",
+    method: "PATCH",
+    path: "/v1/automations/{automation_id}",
+    input: { properties: { automation_id: id("automation"), ...automationFields }, required: ["automation_id"] },
+    strict: true,
+    run: (deps, caller, input) => updateAutomation({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, input),
+  },
+  {
+    name: "delete_automation",
+    inbox: true,
+    title: "Delete an automation",
+    description: "Permanently deletes an automation and its activity. To stop it but keep its history, pause it with update_automation instead.",
+    method: "DELETE",
+    path: "/v1/automations/{automation_id}",
+    input: { properties: { automation_id: id("automation") }, required: ["automation_id"] },
+    destructive: true,
+    run: (deps, caller, input) => deleteAutomation({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, input),
+  },
+];
 
 const normalized = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "");
 
@@ -584,9 +696,12 @@ export const operations: Operation[] = [
       return postId ? settled(deps, caller, read, (r) => r.results.some((d) => sending(String(d.status)))) : read();
     },
   },
+  ...automationOperations,
 ];
 
-// The operations offered in an environment: stats tools only where stats are switched on.
-export function availableOperations(deps: Pick<ApiDeps, "analyticsPlatforms">) {
-  return operations.filter((op) => !op.analytics || deps.analyticsPlatforms.length > 0);
+// The operations offered in an environment: stats tools only where stats are switched on,
+// automation tools only where automations are.
+export function availableOperations(deps: Pick<ApiDeps, "analyticsPlatforms"> & { inbox?: InboxSwitch }) {
+  const inboxHere = Boolean(deps.inbox && (deps.inbox.all || deps.inbox.workspaces.length));
+  return operations.filter((op) => (!op.analytics || deps.analyticsPlatforms.length > 0) && (!op.inbox || inboxHere));
 }
