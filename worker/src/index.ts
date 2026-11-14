@@ -127,7 +127,7 @@ const preview = statsPreview((name) => process.env[name] ?? "");
 log("analytics", { official: analyticsPlatforms, public: publicApiKey ? publicPlatforms : [], publicKey: Boolean(publicApiKey), preview: { platforms: preview.platforms, workspaces: preview.workspaces.length } });
 if (analyticsPlatforms.length || preview.platforms.length || (publicApiKey && publicPlatforms.length)) {
   void every(2 * 60 * 1000, "stats sweep", () => runMetricsSweep({ sql, setting: (name) => setting(name), platforms: analyticsPlatforms, preview, publicPlatforms, publicApiKey, log }));
-  void every(10 * 60 * 1000, "follower sweep", () => runFollowerSweep({ sql, platforms: analyticsPlatforms, publicPlatforms, publicApiKey, log }));
+  void every(10 * 60 * 1000, "follower sweep", () => runFollowerSweep({ sql, setting: (name) => setting(name), platforms: analyticsPlatforms, publicPlatforms, publicApiKey, log }));
 }
 // Daily stats health check for every switched-on platform, alerting only the admin
 // (ALERT_EMAIL, plus PostHog). First run 10 minutes after start, so a deploy is checked.

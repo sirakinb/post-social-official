@@ -2,20 +2,24 @@ import { describe, expect, it } from "vitest";
 import type { Sql } from "../../../backend/lib/access";
 import { runFollowerSweep } from "./followers";
 
-type Account = { id: string; workspace_id: string; platform: string; handle: string | null; external_account_id: string };
+type Account = { id: string; workspace_id: string; platform: string; handle: string | null; external_account_id: string; display_name?: string };
 
 function fakeSql(accounts: Account[]) {
   const saved: unknown[][] = [];
   let asked: unknown[] = [];
+  let lastQuery = "";
+  let lastParams: unknown[] = [];
   const sql = (async (query: string, params: unknown[]) => {
     if (query.includes("FROM public.connected_accounts")) {
       asked = params[0] as unknown[];
+      lastQuery = query;
+      lastParams = params;
       return accounts;
     }
     saved.push(params);
     return [];
   }) as Sql;
-  return { sql, saved, asked: () => asked };
+  return { sql, saved, asked: () => asked, query: () => lastQuery, params: () => lastParams };
 }
 
 describe("daily follower counts", () => {
@@ -39,6 +43,31 @@ describe("daily follower counts", () => {
     expect(n).toBe(2);
     expect(db.asked()).toEqual(["tiktok", "bluesky"]);
     expect(db.saved).toEqual([["b", "w", 321, "official"], ["t", "w", 4500, "public"]]);
+  });
+
+  it("reads X from X's API with the account's own access when X is switched on", async () => {
+    const db = fakeSql([{ id: "x1", workspace_id: "w", platform: "x", handle: "maker", external_account_id: "42", display_name: "Maker" }]);
+    const http = (async (url: string, init: RequestInit) => {
+      expect(String(url)).toBe("https://api.x.com/2/users/me?user.fields=public_metrics");
+      expect((init.headers as Record<string, string>).Authorization).toBe("Bearer xtok");
+      return new Response(JSON.stringify({ data: { id: "42", public_metrics: { followers_count: 777 } } }));
+    }) as unknown as typeof fetch;
+    const n = await runFollowerSweep({
+      sql: db.sql,
+      platforms: ["x"],
+      publicPlatforms: ["x"],
+      publicApiKey: "k",
+      http,
+      token: async (id) => (id === "x1" ? "xtok" : "nope"),
+      readPublic: async () => {
+        throw new Error("public read should not be used for X when X is official");
+      },
+    });
+    expect(n).toBe(1);
+    expect(db.saved).toEqual([["x1", "w", 777, "official"]]);
+    // Only for workspaces that pay (Paid with a working card, or comped).
+    expect(db.query()).toContain("pl.plan NOT IN ('free', 'paid')");
+    expect(db.params()[2]).toBe(true);
   });
 
   it("does nothing without a source switched on", async () => {
