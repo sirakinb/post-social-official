@@ -64,7 +64,7 @@ describe("stats sweep sources", () => {
     expect(learned.query).toContain("IN ('', 'youtube')");
   });
 
-  it("reads X officially on the lean schedule (every 7 days after day one), not the 6-hourly one", async () => {
+  it("reads X officially on the lean schedule (weekly after day one), not the 6-hourly one", async () => {
     const db = fakeSql("x", { platform_request_id: "185", live_url: "https://x.com/maker/status/185" });
     const threeDaysOld = (async (query: string, params: unknown[]) =>
       query.includes("claim_metrics_to_fetch") ? [{ ...row("x"), published_at: new Date(NOW - 3 * 24 * 3600_000).toISOString() }] : db.sql(query, params)) as Sql;

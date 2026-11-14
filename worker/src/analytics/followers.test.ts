@@ -7,15 +7,19 @@ type Account = { id: string; workspace_id: string; platform: string; handle: str
 function fakeSql(accounts: Account[]) {
   const saved: unknown[][] = [];
   let asked: unknown[] = [];
+  let lastQuery = "";
+  let lastParams: unknown[] = [];
   const sql = (async (query: string, params: unknown[]) => {
     if (query.includes("FROM public.connected_accounts")) {
       asked = params[0] as unknown[];
+      lastQuery = query;
+      lastParams = params;
       return accounts;
     }
     saved.push(params);
     return [];
   }) as Sql;
-  return { sql, saved, asked: () => asked };
+  return { sql, saved, asked: () => asked, query: () => lastQuery, params: () => lastParams };
 }
 
 describe("daily follower counts", () => {
@@ -61,6 +65,9 @@ describe("daily follower counts", () => {
     });
     expect(n).toBe(1);
     expect(db.saved).toEqual([["x1", "w", 777, "official"]]);
+    // Only for workspaces that pay (Paid with a working card, or comped).
+    expect(db.query()).toContain("pl.plan NOT IN ('free', 'paid')");
+    expect(db.params()[2]).toBe(true);
   });
 
   it("does nothing without a source switched on", async () => {

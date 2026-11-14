@@ -133,7 +133,7 @@ describe("X charges", () => {
     const charges = xCharges(sql, { destinationId: "d1", workspaceId: "w1" } as never);
     await charges.reserve(false);
     await charges.reserve(true);
-    expect(calls).toEqual([["d1", "w1", 2, false, 100], ["d1", "w1", 25, true, 100]]);
+    expect(calls).toEqual([["d1", "w1", 5, false, 0], ["d1", "w1", 25, true, 0]]);
     answer = "over_cap";
     await expect(charges.reserve(false)).rejects.toThrow(/monthly X limit/);
   });

@@ -31,8 +31,9 @@ const toCents = (dollars: number) => Math.round(dollars * 100);
 export function xCharges(sql: Sql, bundle: Bundle): NonNullable<StepContext["chargeX"]> {
   return {
     async reserve(withLink) {
-      const cents = toCents(withLink ? X_PRICES.postWithLink : X_PRICES.post);
-      const [row] = await sql<{ reserve_x_charge: string }>(`SELECT public.reserve_x_charge($1, $2, $3, $4, $5)`, [bundle.destinationId, bundle.workspaceId, cents, withLink, toCents(X_PRICES.freeMonthly)]);
+      const prices = X_PRICES;
+      const cents = toCents(withLink ? prices.postWithLink : prices.post);
+      const [row] = await sql<{ reserve_x_charge: string }>(`SELECT public.reserve_x_charge($1, $2, $3, $4, $5)`, [bundle.destinationId, bundle.workspaceId, cents, withLink, toCents(prices.freeMonthly)]);
       if (row?.reserve_x_charge === "over_cap") {
         throw new PublishError(
           "x_cap_reached",
