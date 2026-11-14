@@ -25,7 +25,7 @@ export default function PrivacyPage() {
           <h1 className="font-display text-3xl font-semibold text-ink">
             Privacy Policy
           </h1>
-          <p className="mt-2 text-sm text-ink-subtle">Effective July 21, 2026 · Updated October 26, 2026</p>
+          <p className="mt-2 text-sm text-ink-subtle">Effective July 21, 2026 · Updated November 10, 2026</p>
 
           <div className="mt-8 space-y-6 text-ink-muted">
             <section>
@@ -93,16 +93,45 @@ export default function PrivacyPage() {
               </h2>
               <p className="mt-2 text-sm leading-relaxed">
                 Post Social uses YouTube API Services to publish videos to your
-                YouTube channel. When you connect YouTube, we request a single
-                Google permission (the youtube.upload scope), which allows
-                uploading videos you compose to your own channel. We do not read
-                your channel, subscriber, or viewing data. The only Google user
-                data we store are your OAuth access and refresh tokens, encrypted
-                at rest (AES-256-GCM) on the server and never exposed to the
-                browser, plus the video ID and public watch link of posts you
-                publish. Google user data is shared only with YouTube itself to
-                perform the upload you requested; it is never sold, used for
-                advertising, or shared with other third parties.
+                YouTube channel and to show you how those videos performed.
+                When you connect YouTube, we request two Google permissions:
+              </p>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-relaxed">
+                <li>
+                  <strong className="text-ink">youtube.upload:</strong> uploads
+                  videos you compose in Post Social to your own channel.
+                </li>
+                <li>
+                  <strong className="text-ink">youtube.readonly:</strong> reads
+                  the view, like and comment counts of videos you published
+                  through Post Social, to show them on your Analytics page. We
+                  do not read your watch history, playlists, subscriptions, or
+                  videos you did not publish through Post Social.
+                </li>
+              </ul>
+              <p className="mt-2 text-sm leading-relaxed">
+                The Google user data we store are your OAuth access and refresh
+                tokens, encrypted at rest (AES-256-GCM) on the server and never
+                exposed to the browser, the video ID and public watch link of
+                posts you publish, and those videos&apos; view, like and comment
+                counts. The counts are refreshed for 30 days after a video is
+                published and are shown only to members of your workspace.
+                Everything is deleted when you delete your workspace, and the
+                tokens are deleted as soon as you disconnect YouTube. Google
+                user data is shared only with YouTube itself to perform the
+                action you requested; it is never sold, used for advertising,
+                used to train AI models, or shared with other third parties.
+              </p>
+              <p className="mt-2 text-sm leading-relaxed">
+                Post Social&apos;s use and transfer of information received from
+                Google APIs adheres to the{" "}
+                <a
+                  href="https://developers.google.com/terms/api-services-user-data-policy"
+                  className="text-accent hover:text-accent-hover underline"
+                >
+                  Google API Services User Data Policy
+                </a>
+                , including the Limited Use requirements.
               </p>
               <p className="mt-2 text-sm leading-relaxed">
                 By using the YouTube connection you also agree to the{" "}

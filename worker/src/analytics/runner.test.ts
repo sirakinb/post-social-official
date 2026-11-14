@@ -64,6 +64,20 @@ describe("stats sweep sources", () => {
     expect(learned.query).toContain("IN ('', 'youtube')");
   });
 
+  it("reads X officially on the lean schedule (daily after day one), not the 6-hourly one", async () => {
+    const db = fakeSql("x", { platform_request_id: "185", live_url: "https://x.com/maker/status/185" });
+    const threeDaysOld = (async (query: string, params: unknown[]) =>
+      query.includes("claim_metrics_to_fetch") ? [{ ...row("x"), published_at: new Date(NOW - 3 * 24 * 3600_000).toISOString() }] : db.sql(query, params)) as Sql;
+    await runMetricsSweep(deps({ ...db, sql: threeDaysOld }, {
+      platforms: ["x"],
+      fetchers: { x: async (c) => (c.platformId === "185" ? officialResult({ views: 500, likes: 12 }) : officialResult({})) },
+    }));
+    const w = saved(db.writes)!;
+    expect(w.params[1]).toBe(500);
+    expect(w.params.at(-1)).toBe("official");
+    expect(w.params[10]).toBe(new Date(NOW + 24 * 3600_000).toISOString());
+  });
+
   it("without the ScrapeCreators key, public platforms aren't claimed at all", async () => {
     const db = fakeSql("instagram", { platform_request_id: "ig1", live_url: "u" });
     const n = await runMetricsSweep(deps(db, { publicPlatforms: ["instagram"], publicApiKey: null }));

@@ -1,11 +1,13 @@
 // Saves each account's follower count once a day, from the day it's first seen; the Growth
 // tab and engagement rates are built from these. Bluesky's count comes from its own free
-// public API; other platforms' from their public profile page through ScrapeCreators, where
-// that's switched on. LinkedIn members have no public profile address, so their count is
+// public API and X's from X's API with the account's own access (a paid user read, $0.01 a
+// day per account), where they're switched on in ANALYTICS_PLATFORMS; other platforms' from
+// their public profile page through ScrapeCreators, where that's switched on. LinkedIn members have no public profile address, so their count is
 // saved from their posts' pages instead (see runner.ts).
 import type { Sql } from "../../../backend/lib/access";
-import type { Platform } from "../../../backend/lib/connections/platforms";
-import { BLUESKY_APPVIEW } from "./platforms";
+import type { Platform, Settings } from "../../../backend/lib/connections/platforms";
+import { accountToken } from "../credentials";
+import { BLUESKY_APPVIEW, X_API } from "./platforms";
 import { publicFollowers, type FollowerTarget, type PublicContext } from "./public";
 
 export type FollowerDeps = {
@@ -13,6 +15,8 @@ export type FollowerDeps = {
   platforms: Platform[]; // read through the platform's own API (ANALYTICS_PLATFORMS)
   publicPlatforms: Platform[]; // read from public pages (ANALYTICS_PUBLIC_PLATFORMS)
   publicApiKey?: string | null;
+  setting?: Settings; // for the account's saved access (X)
+  token?: (accountId: string) => Promise<string>; // tests; otherwise the account's saved access
   http?: typeof fetch;
   onlyWorkspace?: string;
   readPublic?: (ctx: PublicContext, target: FollowerTarget) => Promise<number | null>;
@@ -20,7 +24,10 @@ export type FollowerDeps = {
   log?: (message: string, details?: Record<string, unknown>) => void;
 };
 
-type Account = { id: string; workspace_id: string; platform: Platform; handle: string | null; external_account_id: string };
+type Account = { id: string; workspace_id: string; platform: Platform; handle: string | null; external_account_id: string; display_name: string };
+
+// Platforms whose follower count is read through their own API when switched on there.
+const OFFICIAL_FOLLOWERS: Platform[] = ["bluesky", "x"];
 
 const HOUR = 3600_000;
 // Accounts whose profile read failed are left alone for a while, so a broken profile
@@ -30,10 +37,11 @@ const lastFailure = new Map<string, number>();
 export async function runFollowerSweep(deps: FollowerDeps): Promise<number> {
   const now = deps.now ?? Date.now;
   const publicOn = deps.publicApiKey ? deps.publicPlatforms : [];
-  const platforms = [...new Set([...publicOn, ...(deps.platforms.includes("bluesky") ? ["bluesky" as const] : [])])];
+  const officialOn = OFFICIAL_FOLLOWERS.filter((p) => deps.platforms.includes(p));
+  const platforms = [...new Set([...publicOn, ...officialOn])];
   if (!platforms.length) return 0;
   const accounts = await deps.sql<Account>(
-    `SELECT a.id, a.workspace_id, a.platform, nullif(a.handle, '') AS handle, a.external_account_id
+    `SELECT a.id, a.workspace_id, a.platform, nullif(a.handle, '') AS handle, a.external_account_id, a.display_name
      FROM public.connected_accounts a JOIN public.workspaces w ON w.id = a.workspace_id
      WHERE a.platform = ANY($1::text[]) AND a.health <> 'disconnected'
        AND (CASE WHEN $2::uuid IS NULL THEN NOT w.publishing_paused ELSE a.workspace_id = $2 END)
@@ -45,10 +53,12 @@ export async function runFollowerSweep(deps: FollowerDeps): Promise<number> {
   for (const account of accounts) {
     if (now() - (lastFailure.get(account.id) ?? -Infinity) < 6 * HOUR) continue;
     try {
-      const official = account.platform === "bluesky" && deps.platforms.includes("bluesky");
-      const followers = official
-        ? await blueskyFollowers(deps.http ?? fetch, account.external_account_id)
-        : await (deps.readPublic ?? publicFollowers)({ apiKey: deps.publicApiKey!, http: deps.http ?? fetch }, { platform: account.platform, handle: account.handle, externalId: account.external_account_id });
+      const official = officialOn.includes(account.platform);
+      const followers = !official
+        ? await (deps.readPublic ?? publicFollowers)({ apiKey: deps.publicApiKey!, http: deps.http ?? fetch }, { platform: account.platform, handle: account.handle, externalId: account.external_account_id })
+        : account.platform === "bluesky"
+          ? await blueskyFollowers(deps.http ?? fetch, account.external_account_id)
+          : await xFollowers(deps.http ?? fetch, await tokenFor(deps, account));
       // Can't be looked up yet (nothing was read): try again on the next sweep, since what's
       // missing (such as a YouTube channel's handle) can be learned at any time.
       if (followers === null) continue;
@@ -74,4 +84,19 @@ export async function blueskyFollowers(http: typeof fetch, did: string): Promise
   const body = (await response.json()) as { followersCount?: unknown };
   const n = Number(body.followersCount);
   return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+// X: the connected account's own profile, with its access (tweet.read, users.read).
+export async function xFollowers(http: typeof fetch, token: string): Promise<number | null> {
+  const response = await http(`${X_API}/users/me?user.fields=public_metrics`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!response.ok) throw new Error(`X profile: HTTP ${response.status}`);
+  const body = (await response.json()) as { data?: { public_metrics?: { followers_count?: unknown } } };
+  const n = Number(body.data?.public_metrics?.followers_count);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+function tokenFor(deps: FollowerDeps, account: Account) {
+  if (deps.token) return deps.token(account.id);
+  if (!deps.setting) throw new Error("No settings to open the account's saved access.");
+  return accountToken({ sql: deps.sql, setting: deps.setting }, { id: account.id, platform: account.platform, displayName: account.display_name });
 }

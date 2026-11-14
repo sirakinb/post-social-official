@@ -170,9 +170,27 @@ async function bluesky(ctx: FetchContext): Promise<MetricsResult> {
   return { likes: num(post.likeCount), comments: num(post.replyCount), reposts: num(post.repostCount), quotes: num(post.quoteCount), saves: num(post.bookmarkCount), extra: {}, unavailable: [] };
 }
 
-// X charges for every read, so post stats aren't fetched.
-async function x(): Promise<MetricsResult> {
-  return { extra: {}, unavailable: ["views", "likes", "comments", "shares"] };
+// X's API with the account's own access (tweet.read): views (impressions), likes, replies,
+// reposts, quotes and bookmarks. X charges $0.005 per post read, counted once per post per
+// UTC day however often it's read, so X posts are read on their own lean schedule
+// (nextFetchAt "lean").
+export const X_API = "https://api.x.com/2";
+async function x(ctx: FetchContext): Promise<MetricsResult> {
+  const token = await ctx.token();
+  const body = await getJson(ctx, `${X_API}/tweets/${encodeURIComponent(ctx.platformId)}?tweet.fields=public_metrics`, { headers: { Authorization: `Bearer ${token}` } });
+  // A deleted post comes back as 200 with errors[] and no data.
+  const m = body.data?.public_metrics;
+  if (!m) throw new Error("Post not found on X");
+  return {
+    views: num(m.impression_count),
+    likes: num(m.like_count),
+    comments: num(m.reply_count),
+    reposts: num(m.retweet_count),
+    quotes: num(m.quote_count),
+    saves: num(m.bookmark_count),
+    extra: {},
+    unavailable: [],
+  };
 }
 
 export const FETCHERS: Record<Platform, (ctx: FetchContext) => Promise<MetricsResult>> = { instagram, facebook, threads, youtube, tiktok, linkedin, bluesky, x };
