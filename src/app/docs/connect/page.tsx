@@ -68,7 +68,7 @@ export default function ConnectPage() {
           <li>You connect your social accounts in Post Social yourself; AIs can send you a connect link but never sign in for you.</li>
           <li>TikTok posts from an AI go out directly, with the audience you ask for. To finish them in TikTok first, set the account to “Inbox first” in Accounts (or ask your AI to), and each post lands in your TikTok inbox.</li>
           <li>Everything an AI does is labelled with its name in your activity, and you can disconnect it any time under AI apps you signed in to, on the Connect your AI page.</li>
-          <li>Your first 2 accounts are free. After that it&apos;s usage based: you pay per connected account, and X posts cost a few cents each. See <Link href="/docs/billing" className="text-accent hover:underline">pricing and billing</Link>.</li>
+          <li>Your first 2 accounts are free. After that it&apos;s usage based: you pay per connected account, and X posts cost a few cents each (a card is needed for X). See <Link href="/docs/billing" className="text-accent hover:underline">pricing and billing</Link>.</li>
         </ul>
       </Section>
     </div>
