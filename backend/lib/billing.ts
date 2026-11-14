@@ -398,7 +398,7 @@ type StripeEvent = { type: string; data: { object: Record<string, unknown> } };
 const MONTH_NAME = (month: string) => new Date(`${month}T00:00:00Z`).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
 
 // A renewal invoice is a draft for about an hour before Stripe charges it: add the X posts
-// not billed yet, month by month, each month's first $1 free.
+// not billed yet, month by month, less any free allowance.
 export async function addXUsageToInvoice(deps: BillingDeps, invoice: { id: string; customer: string; status?: string; billing_reason?: string }) {
   if (invoice.status !== "draft" || invoice.billing_reason !== "subscription_cycle") return { added: 0 };
   const stripe = requireStripe(deps);
@@ -412,10 +412,10 @@ export async function addXUsageToInvoice(deps: BillingDeps, invoice: { id: strin
      GROUP BY 1, 2 ORDER BY 2`,
     [invoice.customer],
   );
-  const free = Math.round(X_PRICES.freeMonthly * 100);
   let added = 0;
   for (const m of months) {
-    const cents = Math.max(0, m.total_cents - free) - m.billed_cents;
+    const freeDollars = X_PRICES.freeMonthly;
+    const cents = Math.max(0, m.total_cents - Math.round(freeDollars * 100)) - m.billed_cents;
     if (cents <= 0) continue;
     // Saved first, so a repeated webhook can't add the same line twice.
     const [saved] = await deps.sql(
@@ -430,7 +430,7 @@ export async function addXUsageToInvoice(deps: BillingDeps, invoice: { id: strin
         invoice: invoice.id,
         currency: "usd",
         amount: cents,
-        description: `X posts, ${MONTH_NAME(m.month)}: ${m.posts} post${m.posts === 1 ? "" : "s"}${m.link_posts ? ` (${m.link_posts} with a link)` : ""}, first $${X_PRICES.freeMonthly} free`,
+        description: `X posts, ${MONTH_NAME(m.month)}: ${m.posts} post${m.posts === 1 ? "" : "s"}${m.link_posts ? ` (${m.link_posts} with a link)` : ""}${freeDollars > 0 ? `, first $${freeDollars} free` : ""}`,
         metadata: { workspace_id: m.workspace_id, month: m.month },
       });
     } catch (error) {

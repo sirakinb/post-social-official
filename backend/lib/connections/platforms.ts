@@ -4,7 +4,7 @@
 // (pushed requests and DPoP-bound tokens) and lives in atproto.ts.
 import { BLUESKY_SCOPE, publicProfile, refreshSession, revokeSession, type BlueskySession } from "./atproto";
 import type { TokenSet } from "./crypto";
-import { X_PRICES } from "../pricing";
+import { xPriceText } from "../pricing";
 import { X_SCOPES, refreshX, revokeX } from "./x";
 
 export type Platform = "instagram" | "facebook" | "threads" | "youtube" | "tiktok" | "linkedin" | "bluesky" | "x";
@@ -191,7 +191,7 @@ export const CAPABILITIES: Record<Platform, Capabilities> = {
     video_max_seconds: 140,
     carousel_max_items: 4,
     image_types: ["image/jpeg", "image/png", "image/webp", "image/gif"],
-    notes: `Up to 280 characters (links count as 23). Up to 4 images of up to 5 MB, or one MP4 video of up to 2 min 20 s. X posts are billed separately: ${Math.round(X_PRICES.post * 100)} cents each, ${Math.round(X_PRICES.postWithLink * 100)} cents with a link.`,
+    notes: `Up to 280 characters (links count as 23). Up to 4 images of up to 5 MB, or one MP4 video of up to 2 min 20 s. X posts are billed separately: ${xPriceText()}.`,
   },
 };
 
