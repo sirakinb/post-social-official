@@ -14,6 +14,72 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    at: "2026-11-11T03:13:00-05:00",
+    kind: "Improved",
+    title: "Clearer privacy page for YouTube",
+    body: "The Privacy page now names the YouTube read-only permission Post Social asks for, says what it's used for, and confirms we follow Google's Limited Use rules for that data.",
+  },
+  {
+    at: "2026-11-08T16:14:00-05:00",
+    kind: "New",
+    title: "Retry failed posts",
+    body: "When a post fails on an account, the Calendar and Logs now say why and give you two buttons. Retry sends it again to that account only, and first checks whether it went live anyway so it isn't posted twice. It's live marks it as published if you can see it on the platform. Your AI agents can do the same.",
+  },
+  {
+    at: "2026-11-08T09:20:00-05:00",
+    kind: "Fixed",
+    title: "Facebook Reels and TikTok photo posts",
+    body: "Some Facebook Reels showed Failed even though they went live, because Facebook was still fetching the video. Post Social now waits for Facebook to finish before deciding. When TikTok is slow to pick up photos, the post now says TikTok is still fetching them.",
+  },
+  {
+    at: "2026-11-08T04:13:00-05:00",
+    kind: "New",
+    title: "Instagram trial reels",
+    body: "Post a Reel as a trial reel: Instagram shows it to non-followers first. Then share it with your followers yourself from the Instagram app, or let Instagram share it if it does well. Turn it on with the Trial reel switch when you post a Reel to Instagram; your AI agents can use it too. Instagram only allows trial reels on accounts with enough followers, and Post Social tells you if yours doesn't qualify yet.",
+  },
+  {
+    at: "2026-10-31T18:50:00-04:00",
+    kind: "Fixed",
+    title: "Facebook Reels no longer marked failed while processing",
+    body: "Facebook can take a few minutes to make a new Reel or video available. Post Social now keeps checking for up to ten minutes instead of marking the post as failed, so a Reel that went live shows as Published.",
+  },
+  {
+    at: "2026-10-30T02:40:00-04:00",
+    kind: "New",
+    title: "Easier for AI agents to find and use Post Social",
+    body: "AI agents can now read our public pages as plain text, and find our API, MCP server and setup steps on their own. A new page explains how an agent gets access: with your approval, or with an API key you create. In browsers that support it, agents can also search our docs and estimate your monthly price right on the site.",
+  },
+  {
+    at: "2026-10-27T16:50:00-04:00",
+    kind: "Fixed",
+    title: "Editing scheduled posts",
+    body: "Swapping the picture on a scheduled post now works. If an edit fails, the post goes back to how it was and stays scheduled, instead of getting stuck and never going out. AI agents checking on a post now wait a few seconds for every account's live link, so they no longer report a post as still sending.",
+  },
+  {
+    at: "2026-10-26T22:05:00-04:00",
+    kind: "Improved",
+    title: "Smoother first steps",
+    body: "Getting started is clearer for new accounts. Connect an account sits right under the get-started steps, even on a phone. The email code step says where the code went and has a Send a new code button. The API & MCP page is now called Connect your AI, and Usage shows how many accounts you have connected and that the first 2 are free.",
+  },
+  {
+    at: "2026-10-26T18:14:00-04:00",
+    kind: "Improved",
+    title: "Clearer billing for extra accounts",
+    body: "Your 3rd account is paid for at checkout, and each account after that is charged when you connect it. Removing an account lowers your next bill. Your Billing page shows the date of your next charge, and payments made with Stripe Link now appear there too.",
+  },
+  {
+    at: "2026-10-26T14:44:00-04:00",
+    kind: "New",
+    title: "Affiliate program",
+    body: "Earn 20% of what the customers you refer pay Post Social, every month for 24 months. Anyone can join from the new Affiliates page.",
+  },
+  {
+    at: "2026-10-26T13:28:00-04:00",
+    kind: "Fixed",
+    title: "Accounts that need reconnecting",
+    body: "An account whose login has expired is now flagged on Accounts so you can reconnect it, and TikTok settings show a clear reconnect message instead of an error. Your monthly post count moved off the sidebar: it shows only when you're close to your limit, and the Usage page says when it resets.",
+  },
+  {
     at: "2026-10-26T12:00:00-04:00",
     kind: "Improved",
     title: "Easier to connect Grok and Muse",
