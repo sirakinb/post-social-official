@@ -168,11 +168,11 @@ describe("X stats", () => {
 });
 
 describe("X refresh schedule (lean)", () => {
-  it("reads hourly on day one, daily for a week, weekly to 30 days, then stops", () => {
+  it("reads when published, once a day later, then every 7 days to 30 days, then stops", () => {
     const now = Date.parse("2026-11-14T12:00:00Z");
     const h = 3600_000;
-    expect(nextFetchAt(now - 2 * h, now, "lean")!.getTime()).toBe(now + h);
-    expect(nextFetchAt(now - 3 * 24 * h, now, "lean")!.getTime()).toBe(now + 24 * h);
+    expect(nextFetchAt(now - 2 * h, now, "lean")!.getTime()).toBe(now + 22 * h);
+    expect(nextFetchAt(now - 25 * h, now, "lean")!.getTime()).toBe(now + 7 * 24 * h);
     expect(nextFetchAt(now - 10 * 24 * h, now, "lean")!.getTime()).toBe(now + 7 * 24 * h);
     expect(nextFetchAt(now - 31 * 24 * h, now, "lean")).toBeNull();
   });
