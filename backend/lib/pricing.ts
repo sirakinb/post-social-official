@@ -12,8 +12,16 @@ export const PRICE_BANDS = [
 export const FREE_ACCOUNTS = 2;
 export const MONTHLY_CREDIT = FREE_ACCOUNTS * PRICE_BANDS[0].perAccount; // $10
 
-// X's own API charges, passed on with a small markup (we pay $0.015 and $0.20).
-export const X_PRICES = { post: 0.02, postWithLink: 0.25, defaultMonthlyCap: 10, freeMonthly: 1 } as const;
+// X posts: what X charges us to post ($0.015, or $0.20 with a link) plus reading the post's
+// stats on its schedule (6 reads at $0.005, see nextFetchAt "lean"), with a little over, so
+// no X post costs Post Social more than it brings in. No free monthly X allowance: posting to
+// X needs a card (comped plans aren't charged).
+export const X_PRICES = { post: 0.05, postWithLink: 0.25, defaultMonthlyCap: 10, freeMonthly: 0 } as const;
+
+const centsText = (dollars: number) => `${Math.round(dollars * 100)} cents`;
+
+// "5 cents each, 25 cents with a link", for docs and the notes AI agents read.
+export const xPriceText = () => `${centsText(X_PRICES.post)} each, ${centsText(X_PRICES.postWithLink)} with a link`;
 
 export type BandCharge = { from: number; to: number; perAccount: number; units: number; amount: number };
 

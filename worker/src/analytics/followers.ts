@@ -1,8 +1,9 @@
 // Saves each account's follower count once a day, from the day it's first seen; the Growth
 // tab and engagement rates are built from these. Bluesky's count comes from its own free
 // public API and X's from X's API with the account's own access (a paid user read, $0.01 a
-// day per account), where they're switched on in ANALYTICS_PLATFORMS; other platforms' from
-// their public profile page through ScrapeCreators, where that's switched on. LinkedIn members have no public profile address, so their count is
+// day per account, so only for workspaces that pay; see PAYING_WORKSPACE), where they're
+// switched on in ANALYTICS_PLATFORMS; other platforms' from their public profile page
+// through ScrapeCreators, where that's switched on. LinkedIn members have no public profile address, so their count is
 // saved from their posts' pages instead (see runner.ts).
 import type { Sql } from "../../../backend/lib/access";
 import type { Platform, Settings } from "../../../backend/lib/connections/platforms";
@@ -29,6 +30,14 @@ type Account = { id: string; workspace_id: string; platform: Platform; handle: s
 // Platforms whose follower count is read through their own API when switched on there.
 const OFFICIAL_FOLLOWERS: Platform[] = ["bluesky", "x"];
 
+// SQL (for a row `a` of connected_accounts): the account's workspace pays, so its X follower
+// count (about $0.30 a month) is covered by at least one paid account ($5): a Paid plan with
+// a working card, or a comped plan (Tester). Free workspaces without a card get none.
+export const PAYING_WORKSPACE = `EXISTS (
+  SELECT 1 FROM (SELECT coalesce((SELECT p.plan_id FROM public.workspace_plans p WHERE p.workspace_id = a.workspace_id), 'tester') AS plan) pl
+  LEFT JOIN public.workspace_billing b ON b.workspace_id = a.workspace_id
+  WHERE pl.plan NOT IN ('free', 'paid') OR (pl.plan = 'paid' AND b.subscription_status IN ('active', 'trialing', 'past_due')))`;
+
 const HOUR = 3600_000;
 // Accounts whose profile read failed are left alone for a while, so a broken profile
 // doesn't cost a read every few minutes. Kept in memory: a restart just tries once more.
@@ -46,8 +55,9 @@ export async function runFollowerSweep(deps: FollowerDeps): Promise<number> {
      WHERE a.platform = ANY($1::text[]) AND a.health <> 'disconnected'
        AND (CASE WHEN $2::uuid IS NULL THEN NOT w.publishing_paused ELSE a.workspace_id = $2 END)
        AND NOT EXISTS (SELECT 1 FROM public.account_follower_days f WHERE f.connected_account_id = a.id AND f.day = (now() AT TIME ZONE 'UTC')::date)
+       AND (a.platform <> 'x' OR NOT $3::boolean OR ${PAYING_WORKSPACE})
      ORDER BY a.created_at LIMIT 40`,
-    [platforms, deps.onlyWorkspace ?? null],
+    [platforms, deps.onlyWorkspace ?? null, officialOn.includes("x")],
   );
   let saved = 0;
   for (const account of accounts) {

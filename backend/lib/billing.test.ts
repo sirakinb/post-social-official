@@ -104,10 +104,10 @@ describe("billingStatus", () => {
     expect(status.x.monthly_cap).toBeNull();
   });
 
-  it("caps X at the free $1 without a card", async () => {
+  it("stops X without a card (there's no free X allowance)", async () => {
     const { sql } = fakeSql({ plan_id: "free", plan_name: "Free", connected: 2, x_monthly_cap_cents: 1000 });
     const status = await billingStatus({ sql, stripe: null, webAppUrl: "" }, person, { workspace_id: WORKSPACE });
-    expect(status.x).toMatchObject({ monthly_cap: 1, set_cap: 10 });
+    expect(status.x).toMatchObject({ monthly_cap: 0, set_cap: 10, free_monthly: 0, price_per_post: 0.05 });
   });
 });
 
@@ -316,15 +316,16 @@ describe("addXUsageToInvoice", () => {
     return { sql, queries };
   }
 
-  it("adds each month's X posts past the free $1, minus what was billed already", async () => {
+  it("adds each month's X posts, minus what was billed already", async () => {
     const { sql } = db([
       { month: "2026-09-01", posts: 80, link_posts: 2, total_cents: 206, billed_cents: 50 },
       { month: "2026-10-01", posts: 30, link_posts: 0, total_cents: 60, billed_cents: 0 },
     ]);
     const { stripe, calls } = fakeStripe();
-    await expect(addXUsageToInvoice({ sql, stripe, webAppUrl: "" }, invoice)).resolves.toEqual({ added: 56 });
-    expect(calls).toHaveLength(1);
-    expect(calls[0].params).toMatchObject({ customer: "cus_1", invoice: "in_1", currency: "usd", amount: 56, description: "X posts, September 2026: 80 posts (2 with a link), first $1 free" });
+    await expect(addXUsageToInvoice({ sql, stripe, webAppUrl: "" }, invoice)).resolves.toEqual({ added: 216 });
+    expect(calls).toHaveLength(2);
+    expect(calls[0].params).toMatchObject({ customer: "cus_1", invoice: "in_1", currency: "usd", amount: 156, description: "X posts, September 2026: 80 posts (2 with a link)" });
+    expect(calls[1].params).toMatchObject({ amount: 60, description: "X posts, October 2026: 30 posts" });
   });
 
   it("never adds a line twice, and leaves other invoices alone", async () => {

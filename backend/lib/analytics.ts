@@ -141,9 +141,9 @@ export async function refreshAnalytics(sql: Sql, caller: Caller, platforms: Plat
        SELECT destination_id, fetched_at FROM public.post_metrics
        WHERE workspace_id = $1 AND platform = ANY($2::text[]) AND ($3::uuid IS NULL OR post_id = $3)
          AND published_at > now() - interval '90 days'
-         -- X charges for every read, and its automatic reads stop at 30 days, so older X
-         -- posts keep their final numbers instead of being read again by hand.
-         AND (platform <> 'x' OR published_at > now() - interval '30 days')
+         -- X charges for every read, so X posts are only read on their schedule (runner.ts),
+         -- never again by hand: each X post's reads stay within what it's billed.
+         AND platform <> 'x'
      ), queued AS (
        UPDATE public.post_metrics SET next_fetch_at = now(), refresh_requested_at = now()
        WHERE destination_id IN (

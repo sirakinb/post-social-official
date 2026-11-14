@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FREE_ACCOUNTS, MONTHLY_CREDIT, PRICE_BANDS, X_PRICES, monthlyBill } from "@/lib/pricing";
+import { FREE_ACCOUNTS, MONTHLY_CREDIT, PRICE_BANDS, X_PRICES, monthlyBill, xPriceText } from "@/lib/pricing";
 
 export const metadata = {
   title: "Docs: pricing and billing · Post Social",
@@ -91,11 +91,11 @@ export default function BillingDocsPage() {
 
         <Section id="x" title="X posts">
           <p>
-            X posts are billed by use: {cents(X_PRICES.post)} a post, or {cents(X_PRICES.postWithLink)} when the text has a link. The first {money(X_PRICES.freeMonthly)} of X posts each month is free. Reading posts and stats costs you nothing.
+            X posts are billed by use: {xPriceText()} in the text. Reading posts and stats costs you nothing.
           </p>
           <p>
             You set a monthly X cap on the Billing page ({money(X_PRICES.defaultMonthlyCap)}{" "}to start). The Billing page warns you once you&apos;ve used 80%. At the cap, X posts pause until the next
-            month and say so in the post&apos;s result; your other platforms keep posting. Without a card, X stops at the free {money(X_PRICES.freeMonthly)}.
+            month and say so in the post&apos;s result; your other platforms keep posting. Posting to X needs a card.
           </p>
           <p>Tip: leave links out of X posts (put them in a reply or your bio) and each post costs {cents(X_PRICES.post)} instead of {cents(X_PRICES.postWithLink)}.</p>
         </Section>

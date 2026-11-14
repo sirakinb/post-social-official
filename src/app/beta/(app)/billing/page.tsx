@@ -162,7 +162,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
             </ol>
             {status.x.posts > 0 && (
               <p className="mt-4 text-xs text-ps-subtle">
-                Plus {status.x.posts} X {status.x.posts === 1 ? "post" : "posts"} this month, {money(status.x.spent)} with the first {money(status.x.free_monthly)} free.
+                Plus {status.x.posts} X {status.x.posts === 1 ? "post" : "posts"} this month, {money(status.x.spent)}{status.x.free_monthly > 0 ? ` with the first ${money(status.x.free_monthly)} free` : ""}.
               </p>
             )}
           </section>
@@ -183,7 +183,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
                 )}
                 {near && <p role="status" className="mt-2 text-xs text-ps-attention">{status.x.spent >= (status.x.monthly_cap ?? 0) ? "X posts are paused until next month." : "Close to your limit."}</p>}
                 <p className="mt-3 text-xs text-ps-subtle">
-                  {paying ? "X posts pause at your limit. Everything else keeps posting." : `Free plan: X posts up to ${money(status.x.free_monthly)} a month.`}
+                  {paying ? "X posts pause at your limit. Everything else keeps posting." : status.x.free_monthly > 0 ? `Free plan: X posts up to ${money(status.x.free_monthly)} a month.` : "Add a card to post to X."}
                 </p>
                 {/* The limit is only yours to set once you're paying; on Free it's the free amount. */}
                 {status.can_manage && paying && (

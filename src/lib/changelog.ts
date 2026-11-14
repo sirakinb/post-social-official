@@ -14,6 +14,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    at: "2026-11-14T14:30:00-05:00",
+    kind: "New",
+    title: "Official X stats, and new X post prices",
+    body: "Your X posts' views, likes, replies, reposts, quotes and bookmarks, and on paid plans your X follower count, now come straight from X. To cover them, X posts without a link are now 5 cents (up from 2), posts with a link stay 25 cents, and posting to X needs a card. Your monthly X limit still applies.",
+  },
+  {
     at: "2026-10-26T12:00:00-04:00",
     kind: "Improved",
     title: "Easier to connect Grok and Muse",

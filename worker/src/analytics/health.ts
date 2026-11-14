@@ -8,7 +8,7 @@
 //   4. flags stats that stopped updating, and accounts with no follower count for two days.
 import type { Sql } from "../../../backend/lib/access";
 import { DISPLAY_NAMES, type Platform } from "../../../backend/lib/connections/platforms";
-import { blueskyFollowers } from "./followers";
+import { blueskyFollowers, PAYING_WORKSPACE } from "./followers";
 import { publicFollowers, realHandle, type FollowerTarget, type PublicContext } from "./public";
 
 // Large public profiles that won't disappear (not the platforms' own accounts: a handle equal
@@ -108,9 +108,10 @@ export async function runStatsHealthCheck(deps: HealthDeps): Promise<HealthResul
        FROM public.connected_accounts a JOIN public.workspaces w ON w.id = a.workspace_id
        WHERE a.platform = ANY($1::text[]) AND a.health <> 'disconnected' AND NOT w.publishing_paused
          AND a.created_at < now() - interval '36 hours'
+         AND (a.platform <> 'x' OR NOT $2::boolean OR ${PAYING_WORKSPACE})
          AND NOT EXISTS (SELECT 1 FROM public.account_follower_days f
            WHERE f.connected_account_id = a.id AND f.day >= (now() AT TIME ZONE 'UTC')::date - 1)`,
-      [followerPlatforms],
+      [followerPlatforms, deps.platforms.includes("x")],
     );
     const byPlatform = new Map<Platform, string[]>();
     for (const a of missing) {
