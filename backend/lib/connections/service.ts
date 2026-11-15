@@ -70,6 +70,19 @@ export async function startConnection(deps: ConnectionDeps, caller: Caller, inpu
   // Signing in to a platform is the person's step; AIs hand them a connect link instead.
   if (isAgentCaller(caller)) throw new ApiError(403, "Accounts are connected by a person in the Post Social web app. Use a connect link.");
   await membership(deps.sql, caller, workspaceId, true, "Reviewers cannot connect accounts.");
+  // At the plan's account limit, say so before the platform's sign-in rather than after it.
+  // Reconnecting goes through: a platform the workspace already has an account on may be a
+  // reconnect (the database still refuses a genuinely new account over the limit).
+  const [limit] = await deps.sql<{ plan_name: string; max: number; connected: number; on_platform: number }>(
+    `SELECT p.name AS plan_name, p.max_connected_accounts AS max,
+            (SELECT count(*)::int FROM public.connected_accounts a WHERE a.workspace_id = $1 AND a.health <> 'disconnected') AS connected,
+            (SELECT count(*)::int FROM public.connected_accounts a WHERE a.workspace_id = $1 AND a.platform = $2 AND a.health <> 'disconnected') AS on_platform
+     FROM public.plans p WHERE p.id = coalesce((SELECT plan_id FROM public.workspace_plans WHERE workspace_id = $1), 'tester')`,
+    [workspaceId, input.platform],
+  );
+  if (limit && limit.connected >= limit.max && limit.on_platform === 0) {
+    throw new ApiError(402, accountLimitMessage(new Error(`Your ${limit.plan_name} plan allows ${limit.max} connected accounts`)) ?? "This workspace is at its account limit.");
+  }
   // The profile the new account goes into, if one was chosen.
   let profileId: string | null = null;
   if (input.profile_id !== undefined && input.profile_id !== null && input.profile_id !== "") {

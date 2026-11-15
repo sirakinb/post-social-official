@@ -25,7 +25,7 @@ export default function TermsPage() {
           <h1 className="font-display text-3xl font-semibold text-ink">
             Terms of Service
           </h1>
-          <p className="mt-2 text-sm text-ink-subtle">Effective July 21, 2026 · Updated October 26, 2026</p>
+          <p className="mt-2 text-sm text-ink-subtle">Effective July 21, 2026 · Updated November 15, 2026</p>
 
           <div className="mt-8 space-y-6 text-ink-muted">
             <section>
@@ -116,9 +116,12 @@ export default function TermsPage() {
                 added later in a billing month are charged right away for the
                 days left in that month; removing an account lowers later
                 charges and is not refunded for the current month.
-                Posts to X are charged per post at the listed rates, up to the
-                monthly limit you set; at that limit, X posts pause until the
-                next month.
+                Posting to X requires a payment card on file (at no monthly
+                charge until your third account). Posts to X are charged per
+                post at the listed rates, up to the monthly limit you set; at
+                that limit, new X posts are not sent until the next month. X
+                posts made after a subscription ends are charged on a final
+                invoice.
               </p>
               <p className="mt-2 text-sm leading-relaxed">
                 Subscriptions renew monthly until cancelled, and you authorize

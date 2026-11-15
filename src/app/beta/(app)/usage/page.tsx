@@ -12,7 +12,7 @@ type Limit = { used: number; limit: number; unit: string; percent: number | null
 type Report = {
   period: { name: string; start: string; end: string };
   plan: { name: string; limits: Record<"posts_per_month" | "api_calls_per_day" | "media_storage_bytes" | "connected_accounts", Limit> };
-  totals: { posts_published: number; publishes_failed: number; posts_created: number; posts_created_by_ai: number; api_calls: number };
+  totals: { posts_published: number; publishes_failed: number; posts_created: number; posts_created_by_ai: number; api_calls: number; x_posts?: number; x_spent?: number };
   by_account: Array<{ account_id: string; platform: string; account: string; posts_published: number; publishes_failed: number }>;
   by_connection: Array<{ actor_id: string; name: string; kind: string; key_mode?: string; active: boolean; api_calls: number; posts_created: number; posts_published: number }>;
   daily: Array<{ day: string; posts_published: number; api_calls: number }>;
@@ -124,7 +124,7 @@ export default async function BetaUsagePage({ searchParams }: { searchParams: Pr
             <section className="mt-8" aria-label="Plan limits">
               <h2 className="text-sm font-semibold text-ps-text">Plan limits</h2>
               <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <LimitCard title="Posts published this month" limit={report.plan.limits.posts_per_month} format={count} note="Resets on the 1st of each month" />
+                <LimitCard title="Posts published this month" limit={report.plan.limits.posts_per_month} format={count} note="Resets on the 1st of each month (UTC)" />
                 <LimitCard title="API calls today" limit={report.plan.limits.api_calls_per_day} format={count} />
                 <LimitCard title="Media storage" limit={report.plan.limits.media_storage_bytes} format={bytes} />
                 {billed ? (
@@ -146,9 +146,10 @@ export default async function BetaUsagePage({ searchParams }: { searchParams: Pr
               <h2 className="text-sm font-semibold text-ps-text">This period</h2>
               <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <Stat label="Posts published" value={count(report.totals.posts_published)} note={report.totals.publishes_failed ? `${count(report.totals.publishes_failed)} failed` : "None failed"} />
-                <Stat label="Posts created" value={count(report.totals.posts_created)} note={`${count(report.totals.posts_created_by_ai)} by AI`} />
-                <Stat label="API and MCP calls" value={count(report.totals.api_calls)} />
+                <Stat label="Posts created" value={count(report.totals.posts_created)} note={`${count(report.totals.posts_created_by_ai)} by your AI agent`} />
+                <Stat label="API calls" value={count(report.totals.api_calls)} note="Including your AI agent's" />
                 <Stat label="Accounts posted to" value={count(report.by_account.filter((a) => a.posts_published > 0).length)} />
+                <Stat label="X posts" value={count(report.totals.x_posts ?? 0)} note={`$${(report.totals.x_spent ?? 0).toFixed(2)} this period · see Billing`} />
               </div>
             </section>
 

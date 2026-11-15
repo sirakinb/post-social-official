@@ -30,6 +30,14 @@ const followers: FollowerRow[] = [
 ];
 
 describe("buildDashboard", () => {
+  it("says an X account's followers need a card, instead of counting forever", () => {
+    const x: AccountRow = { id: "x", platform: "x", display_name: "Maker", handle: "maker", avatar_url: null };
+    const locked = buildDashboard({ now: NOW, days: 30, accounts: [x], followers: [], history: [], refreshesUsed: 0, posts: [], followersNeedCard: ["x"] });
+    expect(locked.accounts[0]).toMatchObject({ followers: null, followers_note: "needs_card" });
+    const open = buildDashboard({ now: NOW, days: 30, accounts: [x], followers: [], history: [], refreshesUsed: 0, posts: [] });
+    expect(open.accounts[0].followers_note).toBeNull();
+  });
+
   const dash = buildDashboard({
     now: NOW,
     days: 30,

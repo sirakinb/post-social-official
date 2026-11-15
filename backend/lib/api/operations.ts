@@ -563,7 +563,7 @@ export const operations: Operation[] = [
     name: "refresh_analytics",
     analytics: true,
     title: "Refresh stats now",
-    description: "Fetches fresh stats from the platforms for one post (or all recent posts) instead of waiting for the next automatic update. At most every 30 minutes per post.",
+    description: "Fetches fresh stats from the platforms for one post (or all posts from the last 90 days) instead of waiting for the next automatic update. At most every 30 minutes per post and 3 times a day per workspace. X posts aren't refreshed by hand: their stats update on their own (when posted, a day later, then weekly for 30 days).",
     method: "POST",
     path: "/v1/analytics/refresh",
     input: { properties: { post_id: id("post") } },

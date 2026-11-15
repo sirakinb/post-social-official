@@ -17,7 +17,7 @@ describe("LogsTable", () => {
   it("shows the failure reason on the line and the details when opened", () => {
     render(<LogsTable rows={[failed]} />);
     expect(screen.getByText("Instagram rejected the video: aspect ratio")).toBeTruthy();
-    expect(screen.getByText("Publisher")).toBeTruthy();
+    expect(screen.getAllByText("Post Social").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { expanded: false }));
     expect(screen.getByText("media_rejected")).toBeTruthy();
     expect(screen.getByText("destination.failed")).toBeTruthy();
@@ -44,5 +44,10 @@ describe("LogsTable", () => {
   it("says when nothing matches", () => {
     render(<LogsTable rows={[]} />);
     expect(screen.getByText("Nothing matches these filters.")).toBeTruthy();
+  });
+
+  it("says what will show up when there's nothing yet and no filters are set", () => {
+    render(<LogsTable rows={[]} filtered={false} />);
+    expect(screen.getByText("Nothing yet. Connecting accounts, posting and anything your AI agent does show up here.")).toBeTruthy();
   });
 });

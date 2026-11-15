@@ -132,7 +132,7 @@ export function PricingCalculator({ initial = 2, cta }: { initial?: number; cta?
           <div className="p-6 md:p-8">
             <p className="flex flex-wrap items-baseline gap-x-3">
               <span className="text-xl font-medium">Post Social</span>
-              <span className="text-[#FAF6F0]/55">Pay per account. Card only after {FREE_ACCOUNTS}.</span>
+              <span className="text-[#FAF6F0]/55">Pay per account. Card only after {FREE_ACCOUNTS}, or for X.</span>
             </p>
             <div className="mt-6 flex flex-wrap items-end justify-between gap-3">
               <p className="tabular-nums">
@@ -147,7 +147,7 @@ export function PricingCalculator({ initial = 2, cta }: { initial?: number; cta?
           </div>
           <ul className="space-y-4 border-t border-white/[0.07] bg-[radial-gradient(80%_120%_at_20%_120%,rgba(255,170,100,0.12),transparent_60%)] p-6 text-[15px] text-[#FAF6F0]/80 md:p-8">
             <Feature icon={<><circle cx="10" cy="8" r="4" /><path d="M3 20a7 7 0 0 1 12-4.9M15.5 19l2 2 4-4" /></>}>{FREE_ACCOUNTS} accounts free to start, no card needed</Feature>
-            <Feature icon={<><rect x="4" y="10" width="16" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 7.8-1.2M12 15v2" /></>}>Every feature included: all 8 platforms, your AI agent, the API, analytics</Feature>
+            <Feature icon={<><rect x="4" y="10" width="16" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 7.8-1.2M12 15v2" /></>}>All 8 platforms, your AI agent, the API and analytics. X posts are 5¢ each (25¢ with a link) with a card</Feature>
             <Feature icon={<><rect x="2.5" y="5" width="19" height="14" rx="2" /><path d="M2.5 10h19M7 15h3" /></>}>Usage based: add or remove accounts anytime, cancel anytime</Feature>
           </ul>
         </div>

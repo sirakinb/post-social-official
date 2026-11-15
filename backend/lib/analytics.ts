@@ -123,6 +123,9 @@ export async function postAnalytics(sql: Sql, caller: Caller, platforms: Platfor
   };
 }
 
+// How X post stats update (X charges per read, so they're never refreshed by hand).
+export const X_STATS_SCHEDULE = "X post stats update on their own: when a post goes out, a day later, then weekly for 30 days. Refresh doesn't re-read them.";
+
 // Asks the worker to fetch fresh numbers now (at most every 30 minutes per post).
 export async function refreshAnalytics(sql: Sql, caller: Caller, platforms: Platform[], input: { workspace_id: string; post_id?: unknown }) {
   // It makes the worker call the platforms, so read-only members (reviewers) can't.
@@ -136,7 +139,7 @@ export async function refreshAnalytics(sql: Sql, caller: Caller, platforms: Plat
   if (Number(used) >= REFRESHES_PER_DAY) {
     throw new ApiError(429, `Stats can be refreshed by hand ${REFRESHES_PER_DAY} times a day, and today's are used. They keep updating on their own.`);
   }
-  const [result] = await sql<{ queued: string; cooling: string }>(
+  const [result] = await sql<{ queued: string; cooling: string; x_posts: string }>(
     `WITH candidates AS (
        SELECT destination_id, fetched_at FROM public.post_metrics
        WHERE workspace_id = $1 AND platform = ANY($2::text[]) AND ($3::uuid IS NULL OR post_id = $3)
@@ -153,19 +156,25 @@ export async function refreshAnalytics(sql: Sql, caller: Caller, platforms: Plat
        RETURNING 1
      )
      SELECT (SELECT count(*) FROM queued) AS queued,
-            (SELECT count(*) FROM candidates WHERE fetched_at >= now() - make_interval(mins => $4)) AS cooling`,
+            (SELECT count(*) FROM candidates WHERE fetched_at >= now() - make_interval(mins => $4)) AS cooling,
+            (SELECT count(*) FROM public.post_metrics WHERE workspace_id = $1 AND platform = 'x' AND 'x' = ANY($2::text[])
+               AND ($3::uuid IS NULL OR post_id = $3) AND published_at > now() - interval '90 days') AS x_posts`,
     [input.workspace_id, enabledOrEmpty(platforms), postId, REFRESH_COOLDOWN_MINUTES],
   );
   const queued = Number(result.queued);
   const cooling = Number(result.cooling);
+  // X posts aren't re-read by hand: say so rather than "nothing to refresh".
+  const xNote = Number(result.x_posts ?? 0) ? ` ${X_STATS_SCHEDULE}` : "";
   if (queued) await sql(`INSERT INTO public.analytics_refreshes (workspace_id) VALUES ($1)`, [input.workspace_id]);
   return {
     queued,
     refreshes_left: Math.max(0, REFRESHES_PER_DAY - Number(used) - (queued ? 1 : 0)),
     message: queued
-      ? `Fetching fresh stats for ${queued} post${queued === 1 ? "" : "s"}; they update within a few minutes.`
+      ? `Fetching fresh stats for ${queued} post${queued === 1 ? "" : "s"}; they update within a few minutes.${xNote}`
       : cooling
-        ? `These stats were updated in the last ${REFRESH_COOLDOWN_MINUTES} minutes, so they are already fresh.`
-        : "There are no published posts with stats to refresh.",
+        ? `These stats were updated in the last ${REFRESH_COOLDOWN_MINUTES} minutes, so they are already fresh.${xNote}`
+        : xNote
+          ? xNote.trim()
+          : "There are no published posts with stats to refresh.",
   };
 }

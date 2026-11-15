@@ -5,6 +5,7 @@
 // Only numbers a platform reported are used: a post or account with no number for
 // something adds nothing to it (no invented zeros), so totals cover what exists.
 import { ApiError, membership, type Caller, type Sql } from "./access";
+import { xNeedsCard } from "./x-billing";
 import { publicHandle } from "./connections/handles";
 import { DISPLAY_NAMES, type Platform } from "./connections/platforms";
 
@@ -77,6 +78,8 @@ export function buildDashboard(input: {
   followers: FollowerRow[];
   history: DayRow[]; // day-by-day numbers for the build-up curve
   refreshesUsed: number;
+  // Platforms whose follower counts need a card here (X: paid reads, so paying workspaces only).
+  followersNeedCard?: Platform[];
 }) {
   const { now, days } = input;
   const since = now - days * DAY;
@@ -176,6 +179,8 @@ export function buildDashboard(input: {
       handle: publicHandle(a.platform, a.handle),
       avatar_url: a.avatar_url,
       followers: current ?? null,
+      // Why there's no count: "needs_card" when it's only read for workspaces with a card.
+      followers_note: current === undefined && input.followersNeedCard?.includes(a.platform) ? ("needs_card" as const) : null,
       change_7_days: change(now7),
       change_30_days: change(now30),
       // Since the first saved count, when there's less than 30 days of history.
@@ -357,7 +362,8 @@ export async function analyticsDashboard(sql: Sql, caller: Caller, platforms: Pl
         [[...new Set(history.map((h) => h.destination_id))]],
       )
     : [];
-  const dashboard = buildDashboard({ now: Date.now(), days, posts, accounts, followers, history: [], refreshesUsed: Number(used) });
+  const followersNeedCard: Platform[] = enabled.includes("x") && (await xNeedsCard(sql, input.workspace_id)) ? ["x"] : [];
+  const dashboard = buildDashboard({ now: Date.now(), days, posts, accounts, followers, history: [], refreshesUsed: Number(used), followersNeedCard });
   dashboard.build_up = buildUpCurve(older.map((o) => ({ ...o, published_at: new Date(o.published_at).toISOString() })), history);
   return { period, platforms: platforms.map((p) => ({ platform: p, platform_name: DISPLAY_NAMES[p] })), ...dashboard };
 }

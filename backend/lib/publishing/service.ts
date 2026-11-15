@@ -2,6 +2,7 @@
 // actions back the web app, the REST API and the MCP tools (Phase 5). Every change checks
 // membership and writes an audit entry naming the actor.
 import { ApiError, isAgentCaller, membership, requireUuid, type Caller, type Sql } from "../access";
+import { X_NEEDS_CARD_MESSAGE, xNeedsCard } from "../x-billing";
 import { reportError, trackEvent, tracking } from "../telemetry";
 import { publicHandle, withHandle } from "../connections/handles";
 import { DISPLAY_NAMES, type Platform } from "../connections/platforms";
@@ -151,6 +152,16 @@ function check(caption: string, media: MediaFacts[], destinations: DestinationIn
   return { ok: all.length === 0, problems: all, destinations: per };
 }
 
+// X posts are billed per post, so a workspace without a card can't send one: say so while
+// the post is being checked (the composer, validate_post, publishing, approving), not after
+// it fails. Drafts can still be saved.
+async function withXBilling(deps: PostsDeps, workspaceId: string, result: CheckResult): Promise<CheckResult> {
+  if (!result.destinations.some((d) => d.platform === "x") || !(await xNeedsCard(deps.sql, workspaceId))) return result;
+  const destinations = result.destinations.map((d) => (d.platform === "x" ? { ...d, problems: [...d.problems, `X (${d.account}): ${X_NEEDS_CARD_MESSAGE}`] } : d));
+  const problems = [...result.problems, ...destinations.filter((d) => d.platform === "x").map((d) => `X (${d.account}): ${X_NEEDS_CARD_MESSAGE}`)];
+  return { ok: false, problems, destinations };
+}
+
 // ----- reading a saved post -----
 
 type PostRow = { id: string; workspace_id: string; status: string; caption: string; scheduled_at: string | null; entry_point: string; actor_id: string | null; created_at: string; updated_at: string };
@@ -217,7 +228,7 @@ export async function validatePost(deps: PostsDeps, caller: Caller, input: Recor
     const accounts = await loadAccounts(deps, post.workspace_id, destinations.map((d) => d.connected_account_id));
     const media = await loadMedia(deps, post.workspace_id, mediaIds);
     const list = destinations.map((d) => ({ account_id: d.connected_account_id, options: d.options }));
-    return check(post.caption, media, list, accounts, [], await loadCovers(deps, post.workspace_id, list));
+    return withXBilling(deps, post.workspace_id, check(post.caption, media, list, accounts, [], await loadCovers(deps, post.workspace_id, list)));
   }
   const workspaceId = requireUuid(input.workspace_id, "Workspace");
   await membership(deps.sql, caller, workspaceId, false);
@@ -226,7 +237,7 @@ export async function validatePost(deps: PostsDeps, caller: Caller, input: Recor
   const accounts = await loadAccounts(deps, workspaceId, raw.map((d) => String(d?.account_id ?? "")).filter((id) => /^[0-9a-f-]{36}$/i.test(id)));
   const { destinations, problems } = parseDestinations(caller, input.destinations, accounts);
   const media = await loadMedia(deps, workspaceId, parseMediaIds(input.media_ids));
-  return check(caption, media, destinations, accounts, problems, await loadCovers(deps, workspaceId, destinations));
+  return withXBilling(deps, workspaceId, check(caption, media, destinations, accounts, problems, await loadCovers(deps, workspaceId, destinations)));
 }
 
 export async function createPost(deps: PostsDeps, caller: Caller, input: Record<string, unknown>) {
