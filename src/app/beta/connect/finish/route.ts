@@ -1,7 +1,8 @@
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 import { getAccessTokenCookieName } from "@insforge/sdk/ssr";
-import { OUR_SIDE, UNREACHABLE, requestError } from "../../../../../backend/lib/support";
+import { requestError } from "../../../../../backend/lib/support";
+import { flashCookie, type AccountErrorCode } from "@/lib/beta/flash";
 
 // The end of connecting a social account. The platform sends the browser here (through
 // the connections function's callback, or straight here for YouTube). The proxy makes sure
@@ -10,15 +11,21 @@ import { OUR_SIDE, UNREACHABLE, requestError } from "../../../../../backend/lib/
 // their account to the sender's workspace.
 export async function GET(request: NextRequest) {
   const accounts = new URL("/beta/accounts", request.nextUrl.origin);
-  const fail = (message: string) => {
-    accounts.searchParams.set("error", message);
-    return NextResponse.redirect(accounts, { headers: { "Referrer-Policy": "no-referrer" } });
+  // The address carries only a code; a message from our server goes in a short-lived cookie.
+  const send = (target: URL, flash?: { kind: "error" | "notice"; text: string }) => {
+    const response = NextResponse.redirect(target, { headers: { "Referrer-Policy": "no-referrer" } });
+    if (flash) response.cookies.set(flashCookie(flash.kind, flash.text));
+    return response;
+  };
+  const fail = (code: AccountErrorCode, text?: string) => {
+    accounts.searchParams.set("error", code);
+    return send(accounts, text ? { kind: "error", text } : undefined);
   };
 
   const base = process.env.CONNECTIONS_BASE_URL;
   const token = (await cookies()).get(getAccessTokenCookieName())?.value;
-  if (!base) return fail(OUR_SIDE);
-  if (!token) return fail("Your session ended. Sign in and connect again.");
+  if (!base) return fail("our_side");
+  if (!token) return fail("session_ended");
 
   const query = request.nextUrl.searchParams;
   const params: Record<string, string> = {};
@@ -32,16 +39,16 @@ export async function GET(request: NextRequest) {
     cache: "no-store",
   }).catch(() => null);
   const result = (await response?.json().catch(() => null)) as { ok?: boolean; returnTo?: string | null; message?: string; platform?: string; error?: string } | null;
-  if (!response) return fail(UNREACHABLE);
-  if (!response.ok || !result) return fail(requestError(response.status, result?.error));
+  if (!response) return fail("unreachable");
+  if (!response.ok || !result) return fail("connect_failed", requestError(response.status, result?.error));
 
   // returnTo was checked against the web app's addresses when the sign-in started.
   const target = new URL(result.returnTo ?? accounts.toString());
   if (result.ok) {
     target.searchParams.set("connected", result.platform ?? "");
-    target.searchParams.set("message", result.message ?? "Connected.");
-  } else {
-    target.searchParams.set("error", result.message ?? "The connection could not be finished.");
+    target.searchParams.set("message", "connected");
+    return send(target, result.message ? { kind: "notice", text: result.message } : undefined);
   }
-  return NextResponse.redirect(target, { headers: { "Referrer-Policy": "no-referrer" } });
+  target.searchParams.set("error", "connect_failed");
+  return send(target, result.message ? { kind: "error", text: result.message } : undefined);
 }

@@ -35,3 +35,17 @@ export async function checkAuthLimit(check: "signin" | "signup" | "reset_request
   await telemetry.captureException(new Error(`Auth limit check failed (${response ? response.status : "unreachable"}): limits skipped for this request`), { area: "auth limits", check });
   return GO_AHEAD;
 }
+
+// Reports a wrong password or code, after the sign-in service checked it. Only these count
+// toward the email-only backstop, so a stranger's tries from one network can't lock someone
+// out. Best effort: a failed report never changes the answer the person sees.
+export async function recordAuthFailure(check: "signin" | "reset_complete", email: string): Promise<void> {
+  const base = process.env.API_BASE_URL;
+  if (!base || !process.env.INTERNAL_PROXY_SECRET || !email) return;
+  await fetch(`${base}/internal/limits`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...forwardingHeaders(await headers()) },
+    body: JSON.stringify({ check: `${check}_failed`, email }),
+    cache: "no-store",
+  }).catch(() => null);
+}

@@ -6,7 +6,8 @@ import { AccountMark } from "@/components/beta/avatar-img";
 import { Label, PlatformMark, Thumb } from "@/components/beta/ui";
 import { useUpload, type ReadyMedia } from "@/components/beta/use-upload";
 import { KeepOpenNote, UploadCard } from "@/components/beta/upload-status";
-import { takeShared } from "@/lib/share-inbox";
+import { formatBytes } from "@/lib/media/part-upload";
+import { takeShared, type Shared } from "@/lib/share-inbox";
 import {
   captionLimits,
   defaultMediaType,
@@ -89,7 +90,18 @@ export function Composer({ workspaceId, accounts, profiles = [], library: initia
   });
 
   // Arriving from the phone's share sheet (Android) or the iPhone Shortcut: pick up the
-  // shared files once, then tidy the address so a reload doesn't repeat it.
+  // shared files once, then tidy the address so a reload doesn't repeat it. They're listed
+  // and only uploaded when the person presses Upload these files: another site could send
+  // files here too, so nothing goes into the library without a click.
+  const [pendingShare, setPendingShare] = useState<Shared | null>(null);
+  const acceptShare = () => {
+    if (!pendingShare) return;
+    for (const file of pendingShare.files) void upload(file);
+    // Shared words become the caption, unless they're only a link (Instagram shares a link).
+    const text = pendingShare.text;
+    if (text && !/^\s*https?:\/\/\S+\s*$/.test(text)) setCaption((c) => c || text);
+    setPendingShare(null);
+  };
   const arrived = useRef(false);
   useEffect(() => {
     if (arrived.current) return;
@@ -101,11 +113,9 @@ export function Composer({ workspaceId, accounts, profiles = [], library: initia
     void (shared === "failed" ? Promise.resolve(null) : takeShared()).then((got) => {
       if (shared === "failed") return setNotice("The shared file didn't come through. Open Post Social once, then share again, or use Add media.");
       if (!got || got.files.length === 0) return setNotice("Nothing was shared. Use Add media to pick a photo or video.");
-      for (const file of got.files) void upload(file);
-      // Shared words become the caption, unless they're only a link (Instagram shares a link).
-      if (got.text && !/^\s*https?:\/\/\S+\s*$/.test(got.text)) setCaption((c) => c || got.text);
+      setPendingShare(got);
     });
-  }, [waitFor, watch, upload]);
+  }, [waitFor, watch]);
 
   // TikTok's guidelines: read the creator's latest settings when the post page opens.
   const requested = useRef(new Set<string>());
@@ -203,6 +213,20 @@ export function Composer({ workspaceId, accounts, profiles = [], library: initia
           {editing && <span className="text-xs text-ps-subtle">Changes apply when you save</span>}
         </div>
         {notice && <p role="status" className="m-0 rounded-lg border border-ps-line bg-ps-surface px-3 py-2 text-[13px] text-ps-muted">{notice}</p>}
+        {pendingShare && (
+          <div role="group" aria-label="Shared files" className="flex flex-col gap-2 rounded-lg border border-ps-line bg-ps-surface px-3 py-2.5 text-[13px] text-ps-muted">
+            <p className="m-0 text-ps-text">{pendingShare.files.length === 1 ? "1 file was shared to Post Social." : `${pendingShare.files.length} files were shared to Post Social.`} Upload them only if you shared them.</p>
+            <ul className="m-0 list-disc pl-5">
+              {pendingShare.files.map((file, i) => (
+                <li key={i} className="break-all">{file.name || "Shared file"} ({formatBytes(file.size)})</li>
+              ))}
+            </ul>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={acceptShare} className="inline-flex h-8 items-center rounded-lg bg-ps-plum px-3 text-xs font-medium text-ps-ground">Upload these files</button>
+              <button type="button" onClick={() => setPendingShare(null)} className="inline-flex h-8 items-center rounded-lg border border-ps-fg/[0.12] px-3 text-xs text-ps-text hover:border-ps-fg/25">Discard</button>
+            </div>
+          </div>
+        )}
 
         <div>
           <div className="mb-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">

@@ -1,5 +1,6 @@
 // Files shared into the installed app (Android share sheet). public/sw.js keeps them in this
-// phone's IndexedDB and opens Create; Create takes them out once and uploads them.
+// phone's IndexedDB and opens Create; Create takes them out once and lists them, and
+// uploads them when the person presses Upload these files.
 const DB = "post-social-share";
 const STORE = "inbox";
 

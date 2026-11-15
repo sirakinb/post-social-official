@@ -17,7 +17,7 @@ import {
   signupOpen,
   verifyErrorMessage,
 } from "@/lib/insforge/auth-rules";
-import { checkAuthLimit } from "@/lib/security/limits";
+import { checkAuthLimit, recordAuthFailure } from "@/lib/security/limits";
 
 // codeRejected: the email code didn't work. The backend says the same for a typo and an expired
 // code, so the form words it by how long ago the code was sent.
@@ -39,9 +39,18 @@ export async function signIn(_previous: FormState, formData: FormData): Promise<
   const auth = await insforgeAuthActions();
   const { data, error } = await auth.signInWithPassword({ email, password });
   if (needsEmailVerification(error)) return sendVerificationCode(email);
-  if (error || !data?.user) return { error: signInErrorMessage(error ?? { statusCode: 401 }) ?? undefined };
+  if (error || !data?.user) {
+    if (wrongAnswer(error)) await recordAuthFailure("signin", email);
+    return { error: signInErrorMessage(error ?? { statusCode: 401 }) ?? undefined };
+  }
 
   redirect(safeNextPath(field(formData, "next")));
+}
+
+// A wrong password or code (not the service being busy or down).
+function wrongAnswer(error: { statusCode?: number } | null | undefined) {
+  const status = error?.statusCode;
+  return status === undefined || (status >= 400 && status < 500 && status !== 429);
 }
 
 // Right password, unconfirmed email: email a fresh code and ask for it. Sends share the
@@ -84,7 +93,10 @@ async function checkEmailCode(_previous: FormState, formData: FormData): Promise
 
   const auth = await insforgeAuthActions();
   const { data, error } = await auth.verifyEmail({ email, otp: code });
-  if (error?.statusCode === 400 || (!error && !data?.user)) return { step: "verify", email, codeRejected: true };
+  if (error?.statusCode === 400 || (!error && !data?.user)) {
+    await recordAuthFailure("reset_complete", email);
+    return { step: "verify", email, codeRejected: true };
+  }
   if (error || !data?.user) return { step: "verify", email, error: verifyErrorMessage(error) ?? undefined };
 
   redirect(safeNextPath(field(formData, "next")));
@@ -178,6 +190,7 @@ export async function completePasswordReset(_previous: FormState, formData: Form
   const client = createServerClient();
   const exchange = await client.auth.exchangeResetPasswordToken({ email, code });
   if (exchange.error || !exchange.data?.token) {
+    if (wrongAnswer(exchange.error)) await recordAuthFailure("reset_complete", email);
     return { step: "complete", email, error: resetErrorMessage(exchange.error ?? { statusCode: 400 }) ?? undefined };
   }
   const reset = await client.auth.resetPassword({ newPassword, otp: exchange.data.token });

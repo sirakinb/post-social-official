@@ -1,5 +1,6 @@
 // Pure rules for the InsForge sign-in flow, shared by the proxy, server actions and the
 // account script. No framework imports, so they are easy to test.
+import { trimTrailingSlashes } from "../../../backend/lib/text";
 
 export const BETA_HOME = "/beta";
 export const BETA_LOGIN = "/beta/login";
@@ -25,14 +26,21 @@ export function signupOpen(env: Record<string, string | undefined> = process.env
 // Google's screen would name InsForge). Flip to true once it's set up in InsForge.
 export const GOOGLE_SIGNIN = false;
 
+// Longest ?next= destination accepted; anything longer goes to the home page.
+export const NEXT_MAX_LENGTH = 2048;
+
 export function isPublicBetaPath(pathname: string) {
-  return (PUBLIC_BETA_PATHS as readonly string[]).includes(pathname.replace(/\/+$/, "") || "/");
+  return (PUBLIC_BETA_PATHS as readonly string[]).includes(trimTrailingSlashes(pathname) || "/");
+}
+
+export function isSignedOutOnlyPath(pathname: string) {
+  return (SIGNED_OUT_ONLY_PATHS as readonly string[]).includes(trimTrailingSlashes(pathname));
 }
 
 // Only same-site paths inside the new app are allowed as post-sign-in destinations, so a
 // crafted ?next= link cannot send someone to another site.
 export function safeNextPath(next: string | null | undefined) {
-  if (!next || !next.startsWith("/") || next.startsWith("//") || next.includes("\\")) return BETA_HOME;
+  if (!next || next.length > NEXT_MAX_LENGTH || !next.startsWith("/") || next.startsWith("//") || next.includes("\\")) return BETA_HOME;
   let url: URL;
   try {
     url = new URL(next, "https://postsocial.invalid");

@@ -423,3 +423,22 @@ describe("waiting for live links", () => {
     expect(pause).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("input size limits", () => {
+  it("answers 404 to an absurdly long address before any routing", async () => {
+    const handler = createApiHandler({
+      ...deps(), callerForKey: async () => null, callerForAccessToken: async () => null, userForToken: async () => null,
+      allowedOrigins: [], publicApiUrl: "https://www.postsocial.xyz/api",
+    });
+    const started = performance.now();
+    const response = await handler(new Request(`https://fn/v1${"/".repeat(5000)}x`));
+    expect(response.status).toBe(404);
+    expect(performance.now() - started).toBeLessThan(500);
+  });
+
+  it("enforces each operation's declared maxLength before running it", async () => {
+    const reply = (await handleMcp(deps(), caller(), { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "start_media_upload", arguments: { file_name: `${"a-".repeat(250_000)}a`, size_bytes: 1 } } })) as { result: { isError: boolean; content: Array<{ text: string }> } };
+    expect(reply.result.isError).toBe(true);
+    expect(reply.result.content[0].text).toMatch(/file_name can be at most 200 characters/);
+  });
+});

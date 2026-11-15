@@ -16,6 +16,7 @@ import { openApiDocument } from "../../lib/api/openapi";
 import { bodyInput, describeError, errorBody, handleRest } from "../../lib/api/rest";
 import { availableOperations, type ApiDeps } from "../../lib/api/operations";
 import type { SignedInUser } from "../../lib/insforge-admin";
+import { trimTrailingSlashes } from "../../lib/text";
 import {
   authorizationServerMetadata,
   callerForAccessToken,
@@ -42,7 +43,7 @@ import { analyticsDashboard } from "../../lib/analytics-dashboard";
 import { originAllowed } from "../media/handler";
 import { joinWaitlist } from "../../lib/waitlist";
 import { reportError } from "../../lib/telemetry";
-import { clientIp, enforceLimit, fromOurWebsite, hashId, retryHeaders, takeLimit } from "../../lib/rate-limit";
+import { RateLimitError, clientIp, enforceLimit, fromOurWebsite, hashId, peekLimit, retryHeaders, takeLimit } from "../../lib/rate-limit";
 
 export type ApiHandlerDeps = ApiDeps & {
   callerForKey: typeof callerForKey;
@@ -58,6 +59,8 @@ export type ApiHandlerDeps = ApiDeps & {
   stripeWebhookSecret?: string | null;
 };
 
+const MAX_PATH_LENGTH = 512;
+
 function json(status: number, body: unknown, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), { status, headers: { ...headers, "Content-Type": "application/json", "Cache-Control": "no-store" } });
 }
@@ -67,7 +70,7 @@ function json(status: number, body: unknown, headers: Record<string, string> = {
 const wantsHtml = (request: Request) => /text\/html/i.test(request.headers.get("accept") ?? "");
 
 function mcpBrowserPage(webAppUrl: string) {
-  const site = webAppUrl.replace(/\/+$/, "");
+  const site = trimTrailingSlashes(webAppUrl);
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Post Social MCP server</title>
 <style>body{margin:0;background:#0e0b1a;color:#ece8f6;font:15px/1.6 system-ui,sans-serif}main{max-width:560px;margin:12vh auto;padding:0 20px}h1{font-size:20px;font-weight:600;margin:0 0 8px}p{color:#b8b0cc;margin:0 0 14px}code{background:#1c1630;border:1px solid #2e2648;border-radius:6px;padding:2px 6px;color:#ece8f6}a{color:#c9b3ff}</style></head>
 <body><main><h1>This is Post Social's address for AI apps</h1>
@@ -98,7 +101,10 @@ export function createApiHandler(deps: ApiHandlerDeps) {
 
   return async function handle(request: Request): Promise<Response> {
     // The function may be reached directly (/v1/...) or through the web domain (/api/v1/...).
-    const path = new URL(request.url).pathname.replace(/\/+$/, "").replace(/^\/api(?=\/)/, "") || "/";
+    const pathname = new URL(request.url).pathname;
+    // No address here is anywhere near this long; refuse before any parsing.
+    if (pathname.length > MAX_PATH_LENGTH) return json(404, errorBody(404, "No such endpoint. See /v1/openapi.json."));
+    const path = trimTrailingSlashes(pathname).replace(/^\/api(?=\/)/, "") || "/";
 
     if (path.startsWith("/avatars/")) return avatarRoute(deps, request, path);
     if (path === "/keys") return personRoute(deps, request);
@@ -235,10 +241,16 @@ async function internalLimitsRoute(deps: ApiHandlerDeps, request: Request) {
     const ip = await hashId(clientIp(request, deps.proxySecret), deps.proxySecret);
     const email = typeof body.email === "string" && body.email.trim() ? await hashId(body.email, deps.proxySecret) : null;
     const emailAndIp = email ? await hashId(`${email}|${ip}`, deps.proxySecret) : null;
+    // Before the password or code is checked: per network, per email-and-network, and whether
+    // the email's failure backstop is already used up (looked at, not counted). After a wrong
+    // password or code, the website reports the failure (signin_failed, reset_complete_failed),
+    // and only those count toward the email-only backstop.
     if (body.check === "signin") {
       await enforceLimit(deps.sql, "signin_ip", ip);
       if (emailAndIp) await enforceLimit(deps.sql, "signin_email_ip", emailAndIp);
-      if (email) await enforceLimit(deps.sql, "signin_email", email);
+      if (email) await refuseIfUsedUp(deps.sql, "signin_email_failed", email);
+    } else if (body.check === "signin_failed") {
+      if (email) await takeLimit(deps.sql, "signin_email_failed", email);
     } else if (body.check === "signup") {
       await enforceLimit(deps.sql, "signup_ip", ip);
     } else if (body.check === "reset_request") {
@@ -248,7 +260,9 @@ async function internalLimitsRoute(deps: ApiHandlerDeps, request: Request) {
       if (email && (await takeLimit(deps.sql, "reset_request_email", email)) > 0) return json(200, { ok: true, send: false });
     } else if (body.check === "reset_complete") {
       if (emailAndIp) await enforceLimit(deps.sql, "reset_complete_email_ip", emailAndIp);
-      if (email) await enforceLimit(deps.sql, "reset_complete_email", email);
+      if (email) await refuseIfUsedUp(deps.sql, "reset_complete_email_failed", email);
+    } else if (body.check === "reset_complete_failed") {
+      if (email) await takeLimit(deps.sql, "reset_complete_email_failed", email);
     } else {
       throw new ApiError(400, "Unknown check.");
     }
@@ -257,6 +271,11 @@ async function internalLimitsRoute(deps: ApiHandlerDeps, request: Request) {
     const { status, message } = describeError(error);
     return json(status, errorBody(status, message), retryHeaders(error));
   }
+}
+
+async function refuseIfUsedUp(sql: Sql, name: "signin_email_failed" | "reset_complete_email_failed", id: string) {
+  const wait = await peekLimit(sql, name, id);
+  if (wait > 0) throw new RateLimitError(wait);
 }
 
 // Every /v1 and /mcp request, per address, before the key or token is looked up.
@@ -324,7 +343,7 @@ async function consentRoute(deps: ApiHandlerDeps, request: Request) {
     const body = await bodyInput(request);
     const params = (body.params ?? {}) as AuthorizeParams;
     if (body.action === "check") {
-      const { client, redirect } = await checkAuthorization(deps.sql, deps.webAppUrl, params);
+      const { client, redirect } = await checkAuthorization(deps.sql, deps.webAppUrl, params, undefined, user.id);
       if (redirect) return json(200, { redirect });
       let redirectHost = "";
       try {
