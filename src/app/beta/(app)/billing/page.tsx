@@ -83,7 +83,10 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const status = result?.data ?? null;
   const paying = Boolean(status?.subscription && status.subscription.status !== "canceled");
   const manage = Boolean(status?.can_manage && status.available && !status.plan.comped);
-  const near = Boolean(status && status.x.monthly_cap !== null && status.x.spent >= status.x.monthly_cap * 0.8);
+  // A $0 limit means X needs a card (no free X allowance), not a used-up month: no bar or
+  // "paused" warning then, only the note to add a card.
+  const xLimit = status && status.x.monthly_cap !== null && status.x.monthly_cap > 0 ? status.x.monthly_cap : null;
+  const near = Boolean(status && xLimit !== null && status.x.spent >= xLimit * 0.8);
 
   return (
     <div className="flex w-full max-w-[1100px] flex-col gap-6 px-4 sm:px-8 pb-14 pt-5">
@@ -170,18 +173,18 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
           <div className="grid gap-4 lg:grid-cols-2">
             <Panel title="X spending">
               <div className="px-5 py-4">
-                {status.x.monthly_cap !== null && (
+                {xLimit !== null && (
                   <>
                     <div className="flex items-baseline justify-between text-sm">
                       <span className="text-ps-text tabular-nums">{money(status.x.spent)}</span>
-                      <span className="text-xs text-ps-subtle">limit {money(status.x.monthly_cap)}</span>
+                      <span className="text-xs text-ps-subtle">limit {money(xLimit)}</span>
                     </div>
                     <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-ps-fg/[0.06]">
-                      <div className={cn("h-full rounded-full", near ? "bg-ps-attention" : "bg-ps-plum")} style={{ width: `${status.x.monthly_cap > 0 ? Math.min(100, (status.x.spent / status.x.monthly_cap) * 100) : 100}%` }} />
+                      <div className={cn("h-full rounded-full", near ? "bg-ps-attention" : "bg-ps-plum")} style={{ width: `${Math.min(100, (status.x.spent / xLimit) * 100)}%` }} />
                     </div>
                   </>
                 )}
-                {near && <p role="status" className="mt-2 text-xs text-ps-attention">{status.x.spent >= (status.x.monthly_cap ?? 0) ? "X posts are paused until next month." : "Close to your limit."}</p>}
+                {near && <p role="status" className="mt-2 text-xs text-ps-attention">{status.x.spent >= (xLimit ?? 0) ? "X posts are paused until next month." : "Close to your limit."}</p>}
                 <p className="mt-3 text-xs text-ps-subtle">
                   {paying ? "X posts pause at your limit. Everything else keeps posting." : status.x.free_monthly > 0 ? `Free plan: X posts up to ${money(status.x.free_monthly)} a month.` : "Add a card to post to X."}
                 </p>
