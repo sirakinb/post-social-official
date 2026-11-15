@@ -66,7 +66,7 @@ describe("BillingPage", () => {
     const rate = within(screen.getByRole("region", { name: "Your rate" }));
     expect(rate.getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Accounts 1–2Free2 of yours", "Accounts 3–10$5/mo\u00a0", "Accounts 11–100$2.50/mo\u00a0", "Accounts 101+$1/mo\u00a0"]);
     const x = within(screen.getByRole("region", { name: "X spending" }));
-    expect(x.getByText("Posting to X needs a card. Your plan stays $0 until your 3rd account; X posts are 5¢ each (25¢ with a link).")).toBeInTheDocument();
+    expect(x.getByText("Posting to X needs a card. X posts are 5¢ each (25¢ with a link), added to your monthly bill.")).toBeInTheDocument();
     expect(x.getByRole("button", { name: "Add a card" })).toBeInTheDocument();
     expect(screen.queryByText(/paused|until next month|^limit /)).toBeNull();
     expect(screen.queryByLabelText("X monthly limit in dollars")).toBeNull();

@@ -29,7 +29,6 @@ export type BillingStatus = {
   invoices: Array<{ id: string; number: string | null; date: string | null; total: number; status: string; pdf: string | null; url: string | null }>;
 };
 
-const ordinal = (n: number) => `${n}${n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th"}`;
 const cents = (n: number) => `${Math.round(n * 100)}¢`;
 const money = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const day = (iso: string | null, opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" }) => (iso ? new Date(iso).toLocaleDateString("en-US", { ...opts, timeZone: "UTC" }) : "");
@@ -235,15 +234,15 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
                 )}
                 {near && (
                   <p role="status" className="mt-2 text-xs text-ps-attention">
-                    {status.x.spent >= (xLimit ?? 0) ? "You've reached your X limit: new X posts won't go out until next month. Raise the limit below to keep posting." : "Close to your X limit."}
+                    {status.x.spent >= (xLimit ?? 0) ? "You've reached this month's X limit, so new X posts are paused. Raise the limit below to keep posting." : "Close to your X limit."}
                   </p>
                 )}
                 <p className="mt-3 text-xs text-ps-subtle">
                   {paying
                     ? status.x.set_cap === 0
                       ? "X posting is off: your monthly X limit is $0. Raise it to post to X."
-                      : `X posts are ${xPrice}. At your limit, new X posts don't go out until next month; everything else keeps posting.`
-                    : `Posting to X needs a card. Your plan stays $0 until your ${ordinal(status.free_accounts + 1)} account; X posts are ${xPrice}.`}
+                      : `X posts are ${xPrice}, added to your monthly bill. The monthly limit caps what X can cost: once this month's X posts reach it, new ones pause until next month or until you raise it.`
+                    : `Posting to X needs a card. X posts are ${xPrice}, added to your monthly bill.`}
                 </p>
                 {!paying && manage && (
                   <form action={addCard} data-rewardful="true" className="mt-3">
