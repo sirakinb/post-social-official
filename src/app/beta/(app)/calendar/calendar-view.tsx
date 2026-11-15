@@ -9,6 +9,18 @@ import { Label, PlatformMark, Status, Thumb, type Tone } from "@/components/beta
 import { cn } from "@/lib/utils";
 import { cancel, reschedule } from "./actions";
 
+// What each account's status means, in plain words.
+const STATUS_LABEL: Record<string, string> = {
+  queued: "waiting to send",
+  processing: "sending",
+  scheduled: "scheduled",
+  published: "published",
+  partially_published: "partly published",
+  failed: "failed",
+  cancelled: "cancelled",
+  awaiting_approval: "waiting for approval",
+};
+
 export type CalendarPost = {
   id: string;
   status: string;
@@ -176,7 +188,17 @@ export function CalendarView({ posts, anchor, canEdit, initialView }: { posts: C
 
       {view === "list" ? (
         <div className="rounded-xl border border-ps-line bg-ps-surface">
-          {shown.length === 0 && <p className="m-0 px-4 py-10 text-center text-ps-muted">Nothing in these dates. Ask your AI to schedule a week of posts.</p>}
+          {shown.length === 0 && (
+            <p className="m-0 px-4 py-10 text-center text-ps-muted">
+              Nothing in these dates.{" "}
+              {canEdit && (
+                <>
+                  <Link href="/beta/create" className="text-ps-plum-soft hover:text-ps-text">Create a post</Link>, or{" "}
+                  <Link href="/beta/api" className="text-ps-plum-soft hover:text-ps-text">connect your AI agent</Link> and ask it to schedule a week of posts.
+                </>
+              )}
+            </p>
+          )}
           {groupByDay(shown).map((g) => (
             <div key={g.day}>
               <Label className="border-b border-ps-fg/[0.04] px-4 pb-1.5 pt-3">{dayLabel(g.day, today)}</Label>
@@ -305,11 +327,21 @@ function PostCard({ post, canEdit, onClose }: { post: CalendarPost; canEdit: boo
             <div className="flex items-center gap-2 text-xs">
               <PlatformMark platform={d.platform} size={18} />
               <span className="min-w-0 flex-1 truncate">{d.account}</span>
-              {d.liveUrl?.startsWith("https://") ? <a href={d.liveUrl} target="_blank" rel="noreferrer" className="text-ps-plum-soft hover:text-ps-text">View live ↗</a> : <span className={d.status === "failed" ? "text-ps-failed-text" : "text-ps-subtle"}>{d.drafted ? "in TikTok drafts" : d.status.replace("_", " ")}</span>}
+              {d.liveUrl?.startsWith("https://") ? <a href={d.liveUrl} target="_blank" rel="noreferrer" className="text-ps-plum-soft hover:text-ps-text">View live ↗</a> : <span className={d.status === "failed" ? "text-ps-failed-text" : "text-ps-subtle"}>{d.drafted ? "in TikTok drafts" : STATUS_LABEL[d.status] ?? d.status.replaceAll("_", " ")}</span>}
             </div>
             {d.status === "failed" && (
               <div className="flex flex-col gap-1.5 pl-[26px]">
-                {d.error && <p className="m-0 line-clamp-3 text-xs text-ps-failed-text">{d.error}</p>}
+                {d.error && (
+                  <p className="m-0 line-clamp-3 text-xs text-ps-failed-text">
+                    {d.error}
+                    {/Billing page/.test(d.error) && (
+                      <>
+                        {" "}
+                        <Link href="/beta/billing" className="underline underline-offset-2">Go to Billing</Link>
+                      </>
+                    )}
+                  </p>
+                )}
                 {canEdit && d.accountId && <FailedPostActions postId={post.id} accountId={d.accountId} platform={d.platform} mayBeLive={Boolean(d.mayBeLive)} onDone={onClose} />}
               </div>
             )}
@@ -318,7 +350,7 @@ function PostCard({ post, canEdit, onClose }: { post: CalendarPost; canEdit: boo
         {post.by && (
           <div className="mt-1 flex items-center gap-2 text-xs text-ps-subtle">
             <ActorMark kind={post.by.kind as ActorKind} name={post.by.name} size={16} />
-            {post.scheduled ? "Scheduled" : "Posted"} by {post.by.name}{post.via === "mcp" ? " via MCP" : post.via === "api" ? " via the API" : ""}
+            {post.scheduled ? "Scheduled" : "Posted"} by {post.by.name}{post.via === "mcp" ? " via your AI agent" : post.via === "api" ? " via the API" : ""}
           </div>
         )}
       </div>

@@ -103,7 +103,9 @@ function Overview({ data, topPosts, showSources }: { data: AnalyticsData; topPos
   if (s.posts === 0 && !data.accounts.length) {
     return (
       <Card>
-        <Empty>No published posts in this period yet. Numbers appear a few minutes after a post goes live.</Empty>
+        <Empty>
+          No accounts with stats yet. <Link href="/beta/accounts" className="text-ps-plum-soft hover:text-ps-text">Connect an account</Link> and post: numbers appear a few minutes after a post goes live.
+        </Empty>
       </Card>
     );
   }
@@ -278,7 +280,15 @@ export function AccountTable({ accounts, showSources }: { accounts: Account[]; s
                     </span>
                   </div>
                 </td>
-                <td className="px-3 py-2.5 text-right tabular-nums text-ps-text">{a.followers !== null ? count(a.followers) : <span className="text-[11px] text-ps-subtle">{a.platform === "youtube" && !a.handle ? "After your first video" : "Counting"}</span>}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums text-ps-text">
+                  {a.followers !== null ? (
+                    count(a.followers)
+                  ) : a.followers_note === "needs_card" ? (
+                    <Link href="/beta/billing" className="text-[11px] text-ps-plum-soft hover:text-ps-text">Add a card to see</Link>
+                  ) : (
+                    <span className="text-[11px] text-ps-subtle">{a.platform === "youtube" && !a.handle ? "After your first video" : "Counting"}</span>
+                  )}
+                </td>
                 <td className="px-3 py-2.5 text-right tabular-nums">
                   {change !== null ? <span className={change > 0 ? "text-ps-live-text" : change < 0 ? "text-ps-failed-text" : "text-ps-muted"}>{signed(change)}</span> : <span className="text-[11px] text-ps-subtle">{a.tracking_since ? `Since ${day(a.tracking_since)}` : "Starting"}</span>}
                   {change !== null && a.change_30_days === null && a.tracking_since && <span className="block text-[11px] text-ps-subtle">since {day(a.tracking_since)}</span>}
@@ -371,7 +381,11 @@ function Growth({ data }: { data: AnalyticsData }) {
             {counted.map((a) => <GrowthCard key={a.id} account={a} />)}
           </ul>
         ) : (
-          <Empty>Follower counts are saved once a day from when an account is connected. The first ones appear within a day.</Empty>
+          <Empty>
+            {data.accounts.length && data.accounts.every((a) => a.followers_note === "needs_card")
+              ? "X follower counts show once you add a card on the Billing page."
+              : "Follower counts are saved once a day from when an account is connected. The first ones appear within a day."}
+          </Empty>
         )}
       </Card>
       {data.build_up && (

@@ -14,7 +14,7 @@ export const AREAS = {
 } as const;
 export type Area = keyof typeof AREAS;
 
-export const SOURCES = { ui: "Web app", api: "API", mcp: "MCP", worker: "Publisher", system: "System" } as const;
+export const SOURCES = { ui: "Web app", api: "API", mcp: "AI agent", worker: "Post Social", system: "System" } as const;
 export type Source = keyof typeof SOURCES;
 
 // Events that mean something went wrong, and ones worth a look.

@@ -181,7 +181,9 @@ describe.skipIf(!enabled)("post stats on the dev backend (US-068)", () => {
     const recent = await xPost(3);
     const old = await xPost(45);
     expect((await refreshAnalytics(sql, person(), ["x"], { workspace_id: owner.workspaceId, post_id: old })).queued).toBe(0);
-    expect((await refreshAnalytics(sql, person(), ["x"], { workspace_id: owner.workspaceId, post_id: recent })).queued).toBe(0);
+    const refreshed = await refreshAnalytics(sql, person(), ["x"], { workspace_id: owner.workspaceId, post_id: recent });
+    expect(refreshed.queued).toBe(0);
+    expect(refreshed.message).toMatch(/X post stats update on their own/);
     const [stale] = await sql<{ next_fetch_at: string | null }>(`SELECT next_fetch_at FROM public.post_metrics WHERE post_id = $1`, [old]);
     expect(stale.next_fetch_at).toBeNull();
   });

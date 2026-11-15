@@ -16,9 +16,15 @@ const LEVEL = {
 } as const;
 
 // One line per event; open a line for the reason a failure gave and the raw details.
-export function LogsTable({ rows, canEdit = false }: { rows: LogRow[]; canEdit?: boolean }) {
+export function LogsTable({ rows, canEdit = false, filtered = true }: { rows: LogRow[]; canEdit?: boolean; filtered?: boolean }) {
   const [open, setOpen] = useState<string | null>(null);
-  if (rows.length === 0) return <p className="m-0 px-4 py-10 text-center text-ps-muted">Nothing matches these filters.</p>;
+  if (rows.length === 0) {
+    return (
+      <p className="m-0 px-4 py-10 text-center text-ps-muted">
+        {filtered ? "Nothing matches these filters." : "Nothing yet. Connecting accounts, posting and anything your AI agent does show up here."}
+      </p>
+    );
+  }
   return (
     <div role="table" aria-label="Logs" className="text-[13px]">
       <div role="row" className="hidden grid-cols-[150px_minmax(0,1fr)_110px_160px] gap-3 border-b border-ps-fg/[0.06] px-4 py-2 text-[11px] uppercase tracking-wide text-ps-subtle md:grid">

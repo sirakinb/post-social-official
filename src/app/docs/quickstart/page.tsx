@@ -110,7 +110,7 @@ export default function QuickstartPage() {
         </Step>
 
         <Step id="post" number={3} title="Send your first post">
-          <p>Ask in plain language. For a first try, post text to an account that accepts text (Bluesky, X, Threads, LinkedIn or a Facebook Page):</p>
+          <p>Ask in plain language. For a first try, post text to an account that accepts text (Bluesky, Threads, LinkedIn or a Facebook Page; X works too once you add a card):</p>
           <Example>Post &ldquo;Hello from my AI&rdquo; to my Bluesky account right now.</Example>
           <p>Your AI checks the post against that platform&apos;s rules, then sends it. To post later, give a date and time:</p>
           <Example>Schedule &ldquo;New video this Friday&rdquo; to my LinkedIn for tomorrow at 9am.</Example>
