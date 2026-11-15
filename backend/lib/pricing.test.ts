@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MONTHLY_CREDIT, monthlyBill, unitsFromAccountDays } from "./pricing";
+import { MONTHLY_CREDIT, X_PRICES, monthlyBill, unitsFromAccountDays, xPriceText } from "./pricing";
 
 describe("monthlyBill", () => {
   it("keeps the first 2 accounts free", () => {
@@ -28,5 +28,17 @@ describe("monthlyBill", () => {
   it("ignores nonsense input", () => {
     expect(monthlyBill(-5).total).toBe(0);
     expect(monthlyBill(Number.NaN).total).toBe(0);
+  });
+});
+
+describe("X prices", () => {
+  it("are 5 cents a post, 25 cents with a link, with no free monthly allowance", () => {
+    expect(X_PRICES).toMatchObject({ post: 0.05, postWithLink: 0.25, freeMonthly: 0 });
+    expect(xPriceText()).toBe("5 cents each, 25 cents with a link");
+  });
+  it("never cost more than they bring in: posting plus 6 stats reads at $0.005", () => {
+    const read = 0.005 * 6;
+    expect(X_PRICES.post).toBeGreaterThanOrEqual(0.015 + read - 1e-9);
+    expect(X_PRICES.postWithLink).toBeGreaterThanOrEqual(0.2 + read - 1e-9);
   });
 });

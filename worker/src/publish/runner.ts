@@ -99,7 +99,7 @@ export async function runNextPublishJob(deps: PublishDeps): Promise<boolean> {
         [b.workspaceId],
       );
       if (plan && plan.connected > plan.max) {
-        throw new PublishError("over_plan_accounts", `This workspace has ${plan.connected} connected accounts and the ${plan.name} plan covers ${plan.max}, so posting is paused. Add a card on the Billing page, or disconnect accounts, then post again.`);
+        throw new PublishError("over_plan_accounts", `This workspace has ${plan.connected} connected accounts and the ${plan.name} plan covers ${plan.max}, so posting is paused. Add a card on the Billing page (from the 3rd account it's $5 a month each), or disconnect accounts, then press Retry.`);
       }
       const problems = destinationProblems({ options: b.options, caption: b.caption, media: b.media, capabilities: b.account.capabilities as { video_max_seconds?: number }, cover: b.cover });
       if (problems.length) throw new PublishError("invalid", problems.join(" "));

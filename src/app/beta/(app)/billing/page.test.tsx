@@ -21,7 +21,7 @@ const base: BillingStatus = {
   connected_accounts: 2,
   free_accounts: 2,
   subscription: null,
-  x: { spent: 0.42, posts: 21, monthly_cap: 1, set_cap: 10, free_monthly: 1 },
+  x: { spent: 0, posts: 0, monthly_cap: 0, set_cap: 10, free_monthly: 0 },
   can_manage: true,
   available: true,
   upcoming: { total: 0, period_start: "2026-10-01T00:00:00Z", period_end: "2026-10-31T00:00:00Z", lines: [{ label: "Connected accounts", detail: "2 accounts, 2 free", amount: 0 }] },
@@ -33,8 +33,10 @@ const base: BillingStatus = {
 const paid: BillingStatus = {
   ...base,
   plan: { id: "paid", name: "Paid", comped: false },
+  paying: true,
   connected_accounts: 12,
   subscription: { status: "active" },
+  x: { spent: 0.42, posts: 21, monthly_cap: 10, set_cap: 10, free_monthly: 0 },
   upcoming: {
     total: 45.42,
     period_start: "2026-10-01T00:00:00Z",
@@ -54,27 +56,71 @@ beforeEach(() => {
 });
 
 describe("BillingPage", () => {
-  it("shows the month and the rate ladder, and offers account 3 to Free workspaces", async () => {
+  it("offers a $0 card to a Free workspace, for X and account 3, with no used-up X limit", async () => {
     server.status = base;
     render(await BillingPage({ searchParams: Promise.resolve({}) }));
     const month = within(screen.getByRole("region", { name: "Your month" }));
     expect(month.getByText("To pay")).toBeInTheDocument();
-    expect(month.getByText("Your first 2 accounts are free. Account 3 is $5 a month, charged when you add it.")).toBeInTheDocument();
-    expect(month.getByRole("button", { name: "Add account 3 · $5/mo" })).toBeInTheDocument();
+    expect(month.getByText("Your first 2 accounts are free. Add a card to post to X or to connect account 3 ($5 a month).")).toBeInTheDocument();
+    expect(month.getByRole("button", { name: "Add a card · $0/mo" })).toBeInTheDocument();
     const rate = within(screen.getByRole("region", { name: "Your rate" }));
     expect(rate.getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Accounts 1–2Free2 of yours", "Accounts 3–10$5/mo\u00a0", "Accounts 11–100$2.50/mo\u00a0", "Accounts 101+$1/mo\u00a0"]);
-    expect(rate.getAllByRole("listitem")[0]).toHaveAttribute("aria-current", "step");
+    const x = within(screen.getByRole("region", { name: "X spending" }));
+    expect(x.getByText("Posting to X needs a card. Your plan stays $0 until your 3rd account; X posts are 5¢ each (25¢ with a link).")).toBeInTheDocument();
+    expect(x.getByRole("button", { name: "Add a card" })).toBeInTheDocument();
+    expect(screen.queryByText(/paused|until next month|^limit /)).toBeNull();
     expect(screen.queryByLabelText("X monthly limit in dollars")).toBeNull();
-    expect(screen.getByText("Free plan: X posts up to $1.00 a month.")).toBeInTheDocument();
     expect(screen.getByText("Receipts show up here after your first charge.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Cancel paid plan" })).toBeNull();
   });
 
-  it("doesn't offer account 3 before the 2 free accounts are connected", async () => {
+  it("offers the card before any account is connected too (X can be the first one)", async () => {
     server.status = { ...base, connected_accounts: 0 };
     render(await BillingPage({ searchParams: Promise.resolve({}) }));
-    expect(screen.getByText("Your first 2 accounts are free. Account 3 is $5 a month, charged when you add it.")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Add account 3 · $5/mo" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Add a card · $0/mo" })).toBeInTheDocument();
+  });
+
+  it("shows the real monthly price when a Free workspace already has more than 2 accounts", async () => {
+    server.status = { ...base, connected_accounts: 6, estimate: { monthly_total: 20 } };
+    render(await BillingPage({ searchParams: Promise.resolve({}) }));
+    expect(screen.getByText("You have 6 accounts: $20.00 a month once you add a card.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add a card · $20.00/mo" })).toBeInTheDocument();
+  });
+
+  it("says when a cancelled plan ends instead of a next charge, and offers to keep it", async () => {
+    server.status = { ...paid, ends_at: "2026-11-30T00:00:00Z", upcoming: null };
+    render(await BillingPage({ searchParams: Promise.resolve({}) }));
+    expect(screen.getByText(/Your paid plan ends on November 30\. No more charges after that/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Keep paid plan" })).toBeInTheDocument();
+    expect(screen.queryByText("Next charge")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Cancel paid plan" })).toBeNull();
+  });
+
+  it("asks for a new card when a payment didn't go through", async () => {
+    server.status = { ...paid, subscription: { status: "past_due" } };
+    render(await BillingPage({ searchParams: Promise.resolve({}) }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Your last payment didn't go through.");
+    expect(screen.getByRole("button", { name: "Update card" })).toBeInTheDocument();
+  });
+
+  it("says the plan stopped after a failed payment and offers the card again", async () => {
+    server.status = { ...paid, paying: false, plan: { id: "free", name: "Free", comped: false }, subscription: { status: "unpaid" }, connected_accounts: 2 };
+    render(await BillingPage({ searchParams: Promise.resolve({}) }));
+    expect(screen.getByRole("alert")).toHaveTextContent("A payment failed, so your paid plan stopped.");
+    expect(screen.getByRole("button", { name: "Add a card · $0/mo" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("X monthly limit in dollars")).toBeNull();
+  });
+
+  it("says X is off when a paying workspace sets its X limit to $0", async () => {
+    server.status = { ...paid, x: { ...paid.x, monthly_cap: 0, set_cap: 0 } };
+    render(await BillingPage({ searchParams: Promise.resolve({}) }));
+    expect(screen.getByText("X posting is off: your monthly X limit is $0. Raise it to post to X.")).toBeInTheDocument();
+  });
+
+  it("shows a Tester workspace its account count against the plan's limit", async () => {
+    server.status = { ...base, plan: { id: "tester", name: "Tester", comped: true, account_limit: 50 }, connected_accounts: 1, x: { ...base.x, posts: 3 } };
+    render(await BillingPage({ searchParams: Promise.resolve({}) }));
+    expect(screen.getByText("1 of 50 accounts connected · 3 X posts this month.")).toBeInTheDocument();
   });
 
   it("lets a paying workspace set its own X limit", async () => {
@@ -84,9 +130,9 @@ describe("BillingPage", () => {
   });
 
   it("warns near the X limit", async () => {
-    server.status = { ...base, x: { ...base.x, spent: 0.9 } };
+    server.status = { ...paid, x: { ...paid.x, spent: 9, monthly_cap: 10 } };
     render(await BillingPage({ searchParams: Promise.resolve({}) }));
-    expect(screen.getByText("Close to your limit.")).toBeInTheDocument();
+    expect(screen.getByText("Close to your X limit.")).toBeInTheDocument();
   });
 
   it("confirms a checkout on return and shows the next charge, card and receipts", async () => {
@@ -127,8 +173,9 @@ describe("BillingPage", () => {
   it("lets only owners and admins change billing", async () => {
     server.status = { ...base, can_manage: false };
     render(await BillingPage({ searchParams: Promise.resolve({}) }));
-    expect(screen.queryByRole("button", { name: "Add account 3 · $5/mo" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Add a card/ })).toBeNull();
     expect(screen.queryByLabelText("X monthly limit in dollars")).toBeNull();
+    expect(screen.getByText("Ask a workspace owner or admin to add a card.")).toBeInTheDocument();
     expect(screen.getByText("Only owners and admins can change billing.")).toBeInTheDocument();
   });
 });

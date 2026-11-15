@@ -378,10 +378,23 @@ export function Composer({ workspaceId, accounts, profiles = [], library: initia
           {error && <p role="alert" className="m-0 text-[13px] text-ps-failed-text">{error}</p>}
           <div className="flex flex-wrap items-center justify-between gap-2.5">
             <div className="min-w-0 flex-1 text-[13px]">
-              {tried && problems.length > 0 ? (
+              {/* Problems show as soon as the check finds them (not only after pressing Publish),
+                  so "Ready" never appears for a post that can't go out. */}
+              {(tried || shownCheck) && problems.length > 0 ? (
                 <ul id="composer-problems" role="alert" className="m-0 list-none space-y-1 p-0">
                   {problems.slice(0, 2).map((p) => (
-                    <li key={p} className="flex gap-2 text-ps-failed-text"><span className="mt-1.5 h-1.5 w-1.5 flex-none rounded-full bg-ps-failed" />{p}</li>
+                    <li key={p} className="flex gap-2 text-ps-failed-text">
+                      <span className="mt-1.5 h-1.5 w-1.5 flex-none rounded-full bg-ps-failed" />
+                      <span>
+                        {p}
+                        {/Billing page/.test(p) && (
+                          <>
+                            {" "}
+                            <Link href="/beta/billing" className="underline underline-offset-2">Go to Billing</Link>
+                          </>
+                        )}
+                      </span>
+                    </li>
                   ))}
                   {problems.length > 2 && <li className="pl-3.5 text-ps-subtle">and {problems.length - 2} more</li>}
                 </ul>
@@ -594,15 +607,15 @@ function Finished({ done }: { done: Done }) {
         {done.status === "draft"
           ? "It's in your drafts. You or your AI can finish it any time."
           : scheduled && done.scheduledAt
-            ? `It goes out ${new Date(done.scheduledAt).toLocaleString("en-US", { weekday: "long", hour: "numeric", minute: "2-digit" })}.`
-            : "Live links show up on Home as each platform confirms."}
+            ? `It goes out ${new Date(done.scheduledAt).toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" })}.`
+            : "Live links show up in Calendar as each platform confirms."}
       </p>
       {done.tiktokDirect && <p className="m-0 rounded-lg border border-ps-fg/[0.08] bg-ps-surface px-4 py-3 text-[13px] text-ps-muted">Your TikTok may take a few minutes to process before it appears on your profile.</p>}
       <div className="mt-2 flex gap-2">
         {done.status === "draft" ? (
           <Link href="/beta/drafts" className="inline-flex h-9 items-center rounded-lg border border-ps-fg/[0.12] px-4 hover:border-ps-fg/25">Go to Drafts</Link>
         ) : (
-          <Link href="/beta" className="inline-flex h-9 items-center rounded-lg border border-ps-fg/[0.12] px-4 hover:border-ps-fg/25">Go to Home</Link>
+          <Link href="/beta/calendar" className="inline-flex h-9 items-center rounded-lg border border-ps-fg/[0.12] px-4 hover:border-ps-fg/25">Go to Calendar</Link>
         )}
         <a href="/beta/create" className="inline-flex h-9 items-center rounded-lg bg-ps-plum px-4 font-medium text-ps-ground hover:bg-ps-plum-hover">Create another</a>
       </div>

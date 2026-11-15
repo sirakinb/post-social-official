@@ -11,7 +11,7 @@ import { postActions } from "../publishing/service";
 import { listAccounts, listMedia, listPosts, listResults } from "./reads";
 import { createProfile, deleteProfile, listProfiles, moveAccount, setTiktokDelivery, updateProfile } from "../connections/profiles";
 import { PERIODS, usageReport } from "../usage";
-import { X_PRICES } from "../pricing";
+import { xPriceText } from "../pricing";
 import { deleteComment, dmCommenter, getConversation, hideComment, listComments, listContacts, listConversations, replyToComment, sendMessage, setConversationStatus, updateContact } from "../inbox/inbox";
 import { LIMITS, MATCH_MODES, createAutomation, deleteAutomation, getAutomation, listAutomations, updateAutomation, type InboxSwitch } from "../inbox/automations";
 
@@ -67,7 +67,7 @@ const OPTIONS_HELP = [
   "tiktok: delivery_mode direct (posts straight away; needs privacy_level PUBLIC_TO_EVERYONE | MUTUAL_FOLLOW_FRIENDS | FOLLOWER_OF_CREATOR | SELF_ONLY, the audience the person asked for, never assumed) or inbox (a draft in the creator's TikTok inbox, where they finish it and tap Post); left out, it follows the account's tiktok_delivery from list_accounts (direct unless the person chose inbox; set_tiktok_delivery changes it); media_type video (one video) | photo (1 to 35 images as a swipeable carousel; JPEG, PNG or WebP, resized for TikTok automatically), left out it follows the media; title (photo posts only, up to 90 characters); comments_enabled, duet_enabled, stitch_enabled (default off; Duet and Stitch are video only); disclose_your_brand, disclose_branded_content; ai_generated.",
   "linkedin (the member's own profile): media_type text | image | video, left out it follows the media; text (overrides caption, up to 3,000 characters); title (videos); visibility PUBLIC (default) | CONNECTIONS. Images: 1 to 20 JPEG, PNG or GIF (2 or more show as a gallery). Videos: one MP4, 3 seconds to 30 minutes, up to 500 MB.",
   "bluesky: media_type text | image | video, left out it follows the media; text (overrides caption, up to 300 characters); alt_text (one description per image, in order). Images: 1 to 4 JPEG, PNG, WebP or GIF (larger than 1 MB are resized to fit). Videos: one MP4, up to 3 minutes and 100 MB. Links, @mentions and #hashtags become clickable.",
-  `x: media_type text | image | video, left out it follows the media; text (overrides caption, up to 280 characters; links count as 23, emoji as 2); alt_text (one description per image). Images: 1 to 4 JPEG, PNG or WebP up to 5 MB, or one GIF up to 15 MB. Videos: one MP4 or MOV, up to 2 min 20 s and 512 MB. X posts are billed separately: ${Math.round(X_PRICES.post * 100)} cents each, ${Math.round(X_PRICES.postWithLink * 100)} cents with a link.`,
+  `x: media_type text | image | video, left out it follows the media; text (overrides caption, up to 280 characters; links count as 23, emoji as 2); alt_text (one description per image). Images: 1 to 4 JPEG, PNG or WebP up to 5 MB, or one GIF up to 15 MB. Videos: one MP4 or MOV, up to 2 min 20 s and 512 MB. X posts are billed separately: ${xPriceText()}.`,
 ].join(" ");
 
 const destinations: JsonSchema = {
@@ -820,7 +820,7 @@ export const operations: Operation[] = [
     name: "refresh_analytics",
     analytics: true,
     title: "Refresh stats now",
-    description: "Fetches fresh stats from the platforms for one post (or all recent posts) instead of waiting for the next automatic update. At most every 30 minutes per post.",
+    description: "Fetches fresh stats from the platforms for one post (or all posts from the last 90 days) instead of waiting for the next automatic update. At most every 30 minutes per post and 3 times a day per workspace. X posts aren't refreshed by hand: their stats update on their own (when posted, a day later, then weekly for 30 days).",
     method: "POST",
     path: "/v1/analytics/refresh",
     input: { properties: { post_id: id("post") } },

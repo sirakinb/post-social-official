@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FREE_ACCOUNTS, MONTHLY_CREDIT, PRICE_BANDS, X_PRICES, monthlyBill } from "@/lib/pricing";
+import { FREE_ACCOUNTS, MONTHLY_CREDIT, PRICE_BANDS, X_PRICES, monthlyBill, xPriceText } from "@/lib/pricing";
 
 export const metadata = {
   title: "Docs: pricing and billing · Post Social",
@@ -48,8 +48,8 @@ export default function BillingDocsPage() {
         <p className="utility-label text-accent">Post Social / Docs / Billing</p>
         <h1 className="mt-3 text-3xl font-semibold tracking-[-0.035em] text-ink">Pricing and billing</h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-muted">
-          Your first {FREE_ACCOUNTS}{" "}accounts are free, with no card needed. After that it&apos;s usage based: you pay per connected account, only while it&apos;s connected, plus a few cents per X post. Every
-          feature is included at every size.
+          Your first {FREE_ACCOUNTS}{" "}accounts are free, with no card needed. After that it&apos;s usage based: you pay per connected account, only while it&apos;s connected. X posts are a few cents
+          each and need a card (it stays $0 a month until your {FREE_ACCOUNTS + 1}rd account).
         </p>
 
         <Section id="accounts" title="Connected accounts">
@@ -68,8 +68,8 @@ export default function BillingDocsPage() {
             </table>
           </div>
           <p>
-            Every workspace gets a {money(MONTHLY_CREDIT)} credit each month, which covers your first {FREE_ACCOUNTS} accounts. So with {FREE_ACCOUNTS} or fewer you pay nothing, and you need a card only
-            to connect a {FREE_ACCOUNTS + 1}rd.
+            Every workspace gets a {money(MONTHLY_CREDIT)} credit each month, which covers your first {FREE_ACCOUNTS} accounts. So with {FREE_ACCOUNTS} or fewer you pay nothing for accounts. You need a
+            card to connect a {FREE_ACCOUNTS + 1}rd, or to post to X; adding one doesn&apos;t cost anything by itself.
           </p>
           <div className="grid gap-4 md:grid-cols-3">
             <Example accounts={5} />
@@ -80,7 +80,7 @@ export default function BillingDocsPage() {
 
         <Section id="usage" title="Only pay for what you use">
           <p>
-            Your {FREE_ACCOUNTS + 1}rd account is charged when you add it, and that day becomes your billing date. Each account you connect after that is charged right away for the days left in your
+            Your {FREE_ACCOUNTS + 1}rd account is charged when you add it. The day you add a card becomes your billing date. Each account you connect after that is charged right away for the days left in your
             billing month, then it&apos;s part of your monthly charge. Disconnect one and your next charge goes down. Nothing to switch on: connecting and disconnecting in Post Social is enough.
           </p>
           <p>
@@ -91,24 +91,25 @@ export default function BillingDocsPage() {
 
         <Section id="x" title="X posts">
           <p>
-            X posts are billed by use: {cents(X_PRICES.post)} a post, or {cents(X_PRICES.postWithLink)} when the text has a link. The first {money(X_PRICES.freeMonthly)} of X posts each month is free. Reading posts and stats costs you nothing.
+            X posts are billed by use: {xPriceText()} in the text. Reading posts and stats costs you nothing.
           </p>
           <p>
-            You set a monthly X cap on the Billing page ({money(X_PRICES.defaultMonthlyCap)}{" "}to start). The Billing page warns you once you&apos;ve used 80%. At the cap, X posts pause until the next
-            month and say so in the post&apos;s result; your other platforms keep posting. Without a card, X stops at the free {money(X_PRICES.freeMonthly)}.
+            Posting to X needs a card: add one on the Billing page (it&apos;s $0 a month until your {FREE_ACCOUNTS + 1}rd account), and your X posts are added to your monthly bill. You set a monthly X
+            limit there ({money(X_PRICES.defaultMonthlyCap)}{" "}to start), and the page warns you once you&apos;ve used 80%. At the limit, new X posts fail with a note saying so until next month (or until you
+            raise it), and you can retry them; your other platforms keep posting. X follower counts in Analytics also need a card.
           </p>
           <p>Tip: leave links out of X posts (put them in a reply or your bio) and each post costs {cents(X_PRICES.post)} instead of {cents(X_PRICES.postWithLink)}.</p>
         </Section>
 
         <Section id="invoices" title="Cards, invoices and cancelling">
           <p>
-            Add a card on the <Link href="/beta/billing" className="text-accent hover:underline">Billing page</Link>. Payments are handled by Stripe; Post Social never sees your card. Manage billing
-            opens Stripe&apos;s page, where you change your card, download invoices and receipts, or cancel.
+            Add a card on the <Link href="/beta/billing" className="text-accent hover:underline">Billing page</Link>. Payments are handled by Stripe; Post Social never sees your card. Update (next
+            to your card) and Cancel paid plan open Stripe&apos;s page, where you change your card, download invoices and receipts, or cancel.
           </p>
           <p>
             Each invoice lists your accounts by price step, the {money(MONTHLY_CREDIT)}{" "}credit, any changes during the month, and last month&apos;s X posts. If a payment fails, Stripe tries again for a
-            few days and your posts keep going in the meantime. Cancel any time: you keep the rest of the month you paid for, then the workspace goes back to Free. Nothing is deleted, but posting
-            pauses until you&apos;re down to {FREE_ACCOUNTS} connected accounts or add a card again.
+            few days and your posts keep going in the meantime. Cancel any time: you keep the rest of the month you paid for, then the workspace goes back to Free and any X posts since your last bill are
+            charged one last time. Nothing is deleted, but posting pauses until you&apos;re down to {FREE_ACCOUNTS} connected accounts or add a card again, and X posts need a card again.
           </p>
           <p>Only the workspace owner and admins can change billing. Questions or more than 2,000 accounts: <a href="mailto:support@postsocial.xyz" className="text-accent hover:underline">support@postsocial.xyz</a>.</p>
         </Section>

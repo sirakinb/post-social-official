@@ -14,6 +14,18 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    at: "2026-11-15T10:00:00-05:00",
+    kind: "Improved",
+    title: "Add a card any time, and clearer billing and posting",
+    body: "You can add a card on the Billing page whenever you like: it's $0 a month until your 3rd account, and it's what lets you post to X. Create now tells you an X post needs a card before you send it, connecting a 3rd account tells you the price before you sign in to the platform, and Billing shows when a cancelled plan ends and when a payment needs a new card. Empty pages now say what to do next, and Refresh now explains how X stats update.",
+  },
+  {
+    at: "2026-11-14T14:30:00-05:00",
+    kind: "New",
+    title: "Official X stats, and new X post prices",
+    body: "Your X posts' views, likes, replies, reposts, quotes and bookmarks, and on paid plans your X follower count, now come straight from X. To cover them, X posts without a link are now 5 cents (up from 2), posts with a link stay 25 cents, and posting to X needs a card. Your monthly X limit still applies.",
+  },
+  {
     at: "2026-10-26T12:00:00-04:00",
     kind: "Improved",
     title: "Easier to connect Grok and Muse",

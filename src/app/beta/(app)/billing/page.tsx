@@ -1,17 +1,22 @@
 import Link from "next/link";
 import { callServer, callServerResult, loadViewer } from "@/lib/beta/workspace";
 import { cn } from "@/lib/utils";
-import { FREE_ACCOUNTS, PRICE_BANDS } from "@/lib/pricing";
+import { FREE_ACCOUNTS, PRICE_BANDS, X_PRICES } from "@/lib/pricing";
 import { addCard, manageBilling, saveXCap } from "./actions";
 
 export const metadata = { title: "Billing · Post Social" };
 
 type Line = { label: string; detail: string; amount: number };
 export type BillingStatus = {
-  plan: { id: string; name: string; comped: boolean };
+  plan: { id: string; name: string; comped: boolean; account_limit?: number };
+  // A working card on the paid plan (the backend's own test).
+  paying?: boolean;
   connected_accounts: number;
   free_accounts: number;
   subscription: { status: string } | null;
+  // Set when the paid plan is cancelling: the day it ends.
+  ends_at?: string | null;
+  estimate?: { monthly_total: number } | null;
   // monthly_cap is the cap in force (null: not capped); set_cap is the one the workspace chose.
   x: { spent: number; posts: number; monthly_cap: number | null; set_cap: number; free_monthly: number };
   can_manage: boolean;
@@ -24,6 +29,8 @@ export type BillingStatus = {
   invoices: Array<{ id: string; number: string | null; date: string | null; total: number; status: string; pdf: string | null; url: string | null }>;
 };
 
+const ordinal = (n: number) => `${n}${n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th"}`;
+const cents = (n: number) => `${Math.round(n * 100)}¢`;
 const money = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const day = (iso: string | null, opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" }) => (iso ? new Date(iso).toLocaleDateString("en-US", { ...opts, timeZone: "UTC" }) : "");
 const BRANDS: Record<string, string> = { visa: "Visa", mastercard: "Mastercard", amex: "American Express", discover: "Discover" };
@@ -81,9 +88,17 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   if (workspace && checkout) await callServer("billing_confirm", { workspace_id: workspace.id, session_id: checkout });
   const result = workspace ? await callServerResult<BillingStatus>("billing_status", { workspace_id: workspace.id }) : null;
   const status = result?.data ?? null;
-  const paying = Boolean(status?.subscription && status.subscription.status !== "canceled");
+  const paying = Boolean(status?.paying ?? (status?.subscription && status.subscription.status !== "canceled"));
+  const endsAt = status?.ends_at ?? null;
+  const pastDue = status?.subscription?.status === "past_due";
+  // A payment failed for good: Stripe stopped the plan but the subscription isn't cancelled.
+  const stopped = Boolean(status?.subscription && !paying && status.subscription.status !== "canceled");
+  const xPrice = `${cents(X_PRICES.post)} each (${cents(X_PRICES.postWithLink)} with a link)`;
   const manage = Boolean(status?.can_manage && status.available && !status.plan.comped);
-  const near = Boolean(status && status.x.monthly_cap !== null && status.x.spent >= status.x.monthly_cap * 0.8);
+  // A $0 limit means X needs a card (no free X allowance), not a used-up month: no bar or
+  // "paused" warning then, only the note to add a card.
+  const xLimit = status && status.x.monthly_cap !== null && status.x.monthly_cap > 0 ? status.x.monthly_cap : null;
+  const near = Boolean(status && xLimit !== null && status.x.spent >= xLimit * 0.8);
 
   return (
     <div className="flex w-full max-w-[1100px] flex-col gap-6 px-4 sm:px-8 pb-14 pt-5">
@@ -100,15 +115,45 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
           You&apos;re on the paid plan. <Link href="/beta/accounts#connect" className="text-ps-plum-soft hover:text-ps-text">Connect your next account</Link>
         </p>
       )}
-      {saved === "x_cap" && <p role="status" className="rounded-lg border border-ps-line px-4 py-3 text-sm text-ps-text">Cap saved.</p>}
+      {saved === "x_cap" && <p role="status" className="rounded-lg border border-ps-line px-4 py-3 text-sm text-ps-text">X limit saved.</p>}
+      {workspace && status && !status.plan.comped && pastDue && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-ps-attention/40 px-4 py-3 text-sm text-ps-text">
+          <span>Your last payment didn&apos;t go through. Update your card so your paid plan and X posts keep working.</span>
+          {manage && (
+            <form action={manageBilling}>
+              <Hidden id={workspace.id} />
+              <button type="submit" className={primary}>Update card</button>
+            </form>
+          )}
+        </div>
+      )}
+      {workspace && status && !status.plan.comped && stopped && (
+        <p role="alert" className="rounded-lg border border-ps-attention/40 px-4 py-3 text-sm text-ps-text">
+          A payment failed, so your paid plan stopped. Add a card to start it again; your first {status.free_accounts} accounts stay free.
+        </p>
+      )}
+      {workspace && status && !status.plan.comped && endsAt && (
+        <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-ps-line px-4 py-3 text-sm text-ps-text">
+          <span>Your paid plan ends on {day(endsAt, { month: "long", day: "numeric" })}. No more charges after that; you keep {status.free_accounts} free accounts, and X posting stops.</span>
+          {manage && (
+            <form action={manageBilling}>
+              <Hidden id={workspace.id} />
+              <button type="submit" className={quiet}>Keep paid plan</button>
+            </form>
+          )}
+        </div>
+      )}
 
       {!workspace ? (
         <p className="text-sm text-ps-muted">You are not a member of any workspace yet.</p>
       ) : !status ? (
         <p role="alert" className="text-sm text-ps-failed-text">Billing could not be loaded. {result?.error ?? "Refresh the page to try again."}</p>
       ) : status.plan.comped ? (
-        <Panel title={`${status.plan.name} plan`} note="This workspace isn't billed.">
-          <p className="px-5 py-4 text-sm text-ps-muted">{status.connected_accounts} connected accounts.</p>
+        <Panel title={`${status.plan.name} plan`} note="This workspace isn't billed, including X posts.">
+          <p className="px-5 py-4 text-sm text-ps-muted">
+            {status.connected_accounts} of {status.plan.account_limit ?? "unlimited"} accounts connected
+            {status.x.posts > 0 ? ` · ${status.x.posts} X ${status.x.posts === 1 ? "post" : "posts"} this month` : ""}.
+          </p>
         </Panel>
       ) : (
         <>
@@ -124,19 +169,26 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
             </div>
             <div className="flex flex-col justify-between gap-4 border-t border-ps-line bg-ps-fg/[0.02] p-6 md:border-l md:border-t-0">
               <div>
-                <p className="text-sm text-ps-muted">{paying ? "Next charge" : "To pay"}</p>
-                <p className="mt-1 text-4xl font-semibold tracking-[-0.03em] text-ps-text tabular-nums">{money(status.upcoming?.total ?? 0)}</p>
+                <p className="text-sm text-ps-muted">{paying ? (endsAt ? "Paid plan ends" : "Next charge") : "To pay"}</p>
+                <p className="mt-1 text-4xl font-semibold tracking-[-0.03em] text-ps-text tabular-nums">
+                  {paying && endsAt ? day(endsAt, { month: "short", day: "numeric" }) : money(paying ? status.upcoming?.total ?? 0 : 0)}
+                </p>
                 <p className="mt-2 text-xs text-ps-subtle">
                   {paying
-                    ? `On ${day(status.upcoming?.period_end ?? null, { month: "long", day: "numeric" })}.`
-                    : `Your first ${status.free_accounts} accounts are free. Account ${status.free_accounts + 1} is $5 a month, charged when you add it.`}
+                    ? endsAt
+                      ? "No more charges after that."
+                      : `On ${day(status.upcoming?.period_end ?? null, { month: "long", day: "numeric" })}.`
+                    : status.connected_accounts > status.free_accounts
+                      ? `You have ${status.connected_accounts} accounts: ${money(status.estimate?.monthly_total ?? 0)} a month once you add a card.`
+                      : `Your first ${status.free_accounts} accounts are free. Add a card to post to X or to connect account ${status.free_accounts + 1} ($5 a month).`}
                 </p>
               </div>
-              {/* Offered once the free accounts are used up, not to someone who hasn't connected any. */}
-              {manage && !paying && status.connected_accounts >= status.free_accounts && (
+              {manage && !paying && (
                 <form action={addCard} data-rewardful="true">
                   <Hidden id={workspace.id} />
-                  <button type="submit" className={primary}>Add account {status.free_accounts + 1} · $5/mo</button>
+                  <button type="submit" className={primary}>
+                    {status.connected_accounts > status.free_accounts ? `Add a card · ${money(status.estimate?.monthly_total ?? 0)}/mo` : "Add a card · $0/mo"}
+                  </button>
                 </form>
               )}
             </div>
@@ -162,7 +214,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
             </ol>
             {status.x.posts > 0 && (
               <p className="mt-4 text-xs text-ps-subtle">
-                Plus {status.x.posts} X {status.x.posts === 1 ? "post" : "posts"} this month, {money(status.x.spent)} with the first {money(status.x.free_monthly)} free.
+                Plus {status.x.posts} X {status.x.posts === 1 ? "post" : "posts"} this month, {money(status.x.spent)}{status.x.free_monthly > 0 ? ` with the first ${money(status.x.free_monthly)} free` : ""}.
               </p>
             )}
           </section>
@@ -170,22 +222,37 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
           <div className="grid gap-4 lg:grid-cols-2">
             <Panel title="X spending">
               <div className="px-5 py-4">
-                {status.x.monthly_cap !== null && (
+                {xLimit !== null && (
                   <>
                     <div className="flex items-baseline justify-between text-sm">
                       <span className="text-ps-text tabular-nums">{money(status.x.spent)}</span>
-                      <span className="text-xs text-ps-subtle">limit {money(status.x.monthly_cap)}</span>
+                      <span className="text-xs text-ps-subtle">limit {money(xLimit)}</span>
                     </div>
                     <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-ps-fg/[0.06]">
-                      <div className={cn("h-full rounded-full", near ? "bg-ps-attention" : "bg-ps-plum")} style={{ width: `${status.x.monthly_cap > 0 ? Math.min(100, (status.x.spent / status.x.monthly_cap) * 100) : 100}%` }} />
+                      <div className={cn("h-full rounded-full", near ? "bg-ps-attention" : "bg-ps-plum")} style={{ width: `${Math.min(100, (status.x.spent / xLimit) * 100)}%` }} />
                     </div>
                   </>
                 )}
-                {near && <p role="status" className="mt-2 text-xs text-ps-attention">{status.x.spent >= (status.x.monthly_cap ?? 0) ? "X posts are paused until next month." : "Close to your limit."}</p>}
+                {near && (
+                  <p role="status" className="mt-2 text-xs text-ps-attention">
+                    {status.x.spent >= (xLimit ?? 0) ? "You've reached your X limit: new X posts won't go out until next month. Raise the limit below to keep posting." : "Close to your X limit."}
+                  </p>
+                )}
                 <p className="mt-3 text-xs text-ps-subtle">
-                  {paying ? "X posts pause at your limit. Everything else keeps posting." : `Free plan: X posts up to ${money(status.x.free_monthly)} a month.`}
+                  {paying
+                    ? status.x.set_cap === 0
+                      ? "X posting is off: your monthly X limit is $0. Raise it to post to X."
+                      : `X posts are ${xPrice}. At your limit, new X posts don't go out until next month; everything else keeps posting.`
+                    : `Posting to X needs a card. Your plan stays $0 until your ${ordinal(status.free_accounts + 1)} account; X posts are ${xPrice}.`}
                 </p>
-                {/* The limit is only yours to set once you're paying; on Free it's the free amount. */}
+                {!paying && manage && (
+                  <form action={addCard} data-rewardful="true" className="mt-3">
+                    <Hidden id={workspace.id} />
+                    <button type="submit" className={primary}>Add a card</button>
+                  </form>
+                )}
+                {!paying && !manage && status.available && <p className="mt-2 text-xs text-ps-subtle">Ask a workspace owner or admin to add a card.</p>}
+                {/* The limit is only yours to set once you're paying. */}
                 {status.can_manage && paying && (
                   <form action={saveXCap} className="mt-3 flex items-center gap-2">
                     <Hidden id={workspace.id} />
@@ -248,10 +315,10 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
             </Panel>
           </div>
 
-          {manage && paying && (
+          {manage && paying && !endsAt && (
             <form action={manageBilling} className="flex flex-wrap items-center gap-x-2 text-xs text-ps-subtle">
               <Hidden id={workspace.id} />
-              <span>Done paying? You keep {status.free_accounts} free accounts.</span>
+              <span>Done paying? You keep {status.free_accounts} free accounts; X posting stops.</span>
               <button type="submit" className="text-ps-muted underline underline-offset-2 hover:text-ps-text">Cancel paid plan</button>
             </form>
           )}

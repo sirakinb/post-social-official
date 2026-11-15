@@ -50,7 +50,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="m-0 text-lg font-medium">Analytics</h1>
-          <p className="mt-1 text-ps-muted">How your posts and accounts are doing. Numbers update on their own, newer posts more often.</p>
+          <p className="mt-1 text-ps-muted">How your posts and accounts are doing. Numbers update on their own, newer posts more often{data?.platforms.some((p) => p.platform === "x") ? "; X posts at posting, a day later, then weekly for 30 days" : ""}.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <nav aria-label="Period" className="flex gap-1 rounded-lg border border-ps-line bg-ps-surface p-1 text-xs">
@@ -58,7 +58,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
               <Link key={p.id} href={periodLink(p.id)} aria-current={p.id === period ? "page" : undefined} className={cn("rounded-md px-2.5 py-1", p.id === period ? "bg-ps-segment text-ps-text" : "text-ps-muted hover:text-ps-text")}>{p.label}</Link>
             ))}
           </nav>
-          {data && <RefreshButton workspaceId={workspace.id} left={data.refreshes_left} />}
+          {data && data.accounts.length > 0 && <RefreshButton workspaceId={workspace.id} left={data.refreshes_left} />}
         </div>
       </div>
 

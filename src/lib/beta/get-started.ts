@@ -15,7 +15,8 @@ export async function loadGetStarted(client: Client, workspaceId: string): Promi
   const [account, app, key, post] = await Promise.all([
     one(client.database.from("connected_accounts").select("id").eq("workspace_id", workspaceId).limit(1)),
     one(client.database.from("oauth_grants").select("id").eq("workspace_id", workspaceId).is("revoked_at", null).limit(1)),
-    one(client.database.from("api_keys").select("id").eq("workspace_id", workspaceId).is("revoked_at", null).limit(1)),
+    // A key counts once an AI has used it, not just for being created.
+    one(client.database.from("api_keys").select("id").eq("workspace_id", workspaceId).is("revoked_at", null).not("last_used_at", "is", null).limit(1)),
     one(client.database.from("posts").select("id").eq("workspace_id", workspaceId).in("status", SENT).limit(1)),
   ]);
   return { account, ai: app || key, post };

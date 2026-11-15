@@ -91,7 +91,7 @@ export function ApiView(props: { workspaceId: string; role: string; apps: AiApp[
       <section aria-labelledby="ai-h">
         <h2 id="ai-h" className="m-0 mb-2.5 text-sm font-medium">AI apps you signed in to</h2>
         <div className="rounded-xl border border-ps-line bg-ps-surface">
-          {props.apps.length === 0 && <p className="m-0 px-4 py-6 text-center text-ps-muted">No AI apps yet. Connect one with the setup steps on this page and it will show up here.</p>}
+          {props.apps.length === 0 && <p className="m-0 px-4 py-6 text-center text-ps-muted">No AI apps yet. Connect one with the <a href="#connect-ai" className="text-ps-plum-soft hover:text-ps-text">setup steps below</a> and it will show up here.</p>}
           {props.apps.map((a) => (
             <div key={a.id} className="border-b border-ps-fg/[0.05] last:border-b-0">
               <button type="button" aria-expanded={openApp === a.id} onClick={() => setOpenApp(openApp === a.id ? null : a.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left">
@@ -105,7 +105,9 @@ export function ApiView(props: { workspaceId: string; role: string; apps: AiApp[
                     <li>✓ See your accounts, media and posts</li>
                     <li>✓ Upload media and write posts</li>
                     <li>✓ Publish and schedule when you ask it to</li>
-                    <li className="text-ps-subtle">✕ Connect accounts or change settings</li>
+                    <li>✓ Organize profiles, delete drafts and media, set TikTok delivery</li>
+                    <li>✓ Send you a link to connect an account</li>
+                    <li className="text-ps-subtle">✕ Sign in to your accounts, billing or members</li>
                   </ul>
                   {(a.mine || canManageKeys) && (
                     confirming === a.id ? (
@@ -122,6 +124,31 @@ export function ApiView(props: { workspaceId: string; role: string; apps: AiApp[
       </section>
 
       <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(360px,100%),1fr))]">
+        <section id="connect-ai" aria-labelledby="connect-h">
+          <h2 id="connect-h" className="m-0 mb-2.5 text-sm font-medium">Connect an AI</h2>
+          <div className="overflow-hidden rounded-xl border border-ps-line bg-ps-surface">
+            <div role="tablist" aria-label="AI app" className="flex flex-wrap gap-0.5 border-b border-ps-fg/[0.06] px-2 pt-1.5">
+              {(Object.keys(snippets) as Array<keyof typeof snippets>).map((id) => (
+                <button key={id} type="button" role="tab" aria-selected={client === id} onClick={() => setClient(id)} className={cn("h-[34px] px-3 text-xs", client === id ? "text-ps-text shadow-[inset_0_-2px_0_rgb(var(--ps-plum))]" : "text-ps-muted hover:text-ps-text")}>{snippets[id].label}</button>
+              ))}
+            </div>
+            <div className="flex flex-col gap-2.5 p-4">
+              <p className="m-0 leading-relaxed text-ps-muted">{snippets[client].help}</p>
+              <div className="relative">
+                <pre className="m-0 whitespace-pre-wrap break-all rounded-lg border border-ps-fg/[0.08] bg-ps-ground py-3 pl-3.5 pr-11 font-mono text-xs leading-relaxed">{snippets[client].code}</pre>
+                <button type="button" aria-label="Copy" onClick={() => navigator.clipboard.writeText(snippets[client].code)} className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-md border border-ps-fg/10 bg-ps-surface text-ps-muted hover:text-ps-text">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
+                </button>
+              </div>
+              {client === "muse" && canManageKeys && (
+                newKey?.name === "Muse"
+                  ? <p className="m-0 text-xs text-ps-attention-text">Your Muse key is under API keys on this page. Copy it now; you won&apos;t see it again.</p>
+                  : <button type="button" data-attr="create-muse-key" disabled={busy === "key"} onClick={onCreateMuseKey} className={cn(btn, "self-start")}>Create a key for Muse</button>
+              )}
+              <span className="text-xs text-ps-subtle">Everything your AI does shows in Logs with its name. <a href="/docs" className="text-ps-plum-soft hover:text-ps-text">Full setup guide</a></span>
+            </div>
+          </div>
+        </section>
         <section id="keys" aria-labelledby="keys-h">
           <div className="mb-2.5 flex items-baseline justify-between">
             <h2 id="keys-h" className="m-0 text-sm font-medium">API keys</h2>
@@ -171,32 +198,6 @@ export function ApiView(props: { workspaceId: string; role: string; apps: AiApp[
               </div>
             ))}
             <p className="m-0 px-4 py-3 text-xs text-ps-subtle">Test keys can do everything except publish. A key is shown once.</p>
-          </div>
-        </section>
-
-        <section id="connect-ai" aria-labelledby="connect-h">
-          <h2 id="connect-h" className="m-0 mb-2.5 text-sm font-medium">Connect an AI</h2>
-          <div className="overflow-hidden rounded-xl border border-ps-line bg-ps-surface">
-            <div role="tablist" aria-label="AI app" className="flex flex-wrap gap-0.5 border-b border-ps-fg/[0.06] px-2 pt-1.5">
-              {(Object.keys(snippets) as Array<keyof typeof snippets>).map((id) => (
-                <button key={id} type="button" role="tab" aria-selected={client === id} onClick={() => setClient(id)} className={cn("h-[34px] px-3 text-xs", client === id ? "text-ps-text shadow-[inset_0_-2px_0_rgb(var(--ps-plum))]" : "text-ps-muted hover:text-ps-text")}>{snippets[id].label}</button>
-              ))}
-            </div>
-            <div className="flex flex-col gap-2.5 p-4">
-              <p className="m-0 leading-relaxed text-ps-muted">{snippets[client].help}</p>
-              <div className="relative">
-                <pre className="m-0 whitespace-pre-wrap break-all rounded-lg border border-ps-fg/[0.08] bg-ps-ground py-3 pl-3.5 pr-11 font-mono text-xs leading-relaxed">{snippets[client].code}</pre>
-                <button type="button" aria-label="Copy" onClick={() => navigator.clipboard.writeText(snippets[client].code)} className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-md border border-ps-fg/10 bg-ps-surface text-ps-muted hover:text-ps-text">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
-                </button>
-              </div>
-              {client === "muse" && canManageKeys && (
-                newKey?.name === "Muse"
-                  ? <p className="m-0 text-xs text-ps-attention-text">Your Muse key is under API keys on this page. Copy it now; you won&apos;t see it again.</p>
-                  : <button type="button" data-attr="create-muse-key" disabled={busy === "key"} onClick={onCreateMuseKey} className={cn(btn, "self-start")}>Create a key for Muse</button>
-              )}
-              <span className="text-xs text-ps-subtle">Everything your AI does shows in Logs with its name. <a href="/docs" className="text-ps-plum-soft hover:text-ps-text">Full setup guide</a></span>
-            </div>
           </div>
         </section>
       </div>

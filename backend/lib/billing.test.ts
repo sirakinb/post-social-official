@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Sql } from "./access";
 import { flushReports, setErrorReporter } from "./telemetry";
-import { accountLimitMessage, addXUsageToInvoice, billingStatus, confirmCheckout, formEncode, handleStripeEvent, setXCap, startCheckout, syncAccountQuantity, verifyStripeSignature, type Stripe } from "./billing";
+import { accountLimitMessage, addXUsageToInvoice, billFinalXUsage, billingStatus, confirmCheckout, formEncode, handleStripeEvent, setXCap, startCheckout, syncAccountQuantity, verifyStripeSignature, type Stripe } from "./billing";
 
 const WORKSPACE = "22222222-2222-4222-8222-222222222222";
 const REFERRAL = "98288128-0d5f-45a9-88b3-ef95b229f798";
@@ -104,22 +104,22 @@ describe("billingStatus", () => {
     expect(status.x.monthly_cap).toBeNull();
   });
 
-  it("caps X at the free $1 without a card", async () => {
+  it("stops X without a card (there's no free X allowance)", async () => {
     const { sql } = fakeSql({ plan_id: "free", plan_name: "Free", connected: 2, x_monthly_cap_cents: 1000 });
     const status = await billingStatus({ sql, stripe: null, webAppUrl: "" }, person, { workspace_id: WORKSPACE });
-    expect(status.x).toMatchObject({ monthly_cap: 1, set_cap: 10 });
+    expect(status.x).toMatchObject({ monthly_cap: 0, set_cap: 10, free_monthly: 0, price_per_post: 0.05 });
   });
 });
 
 describe("startCheckout", () => {
-  it("opens Stripe Checkout charging the 3rd account, with the signed-in email for receipts", async () => {
+  it("opens Stripe Checkout for the connected accounts ($0 with 2), with the signed-in email for receipts", async () => {
     const { sql } = fakeSql({ plan_id: "free", plan_name: "Free", connected: 2 });
     const { stripe, calls } = fakeStripe({ "GET /v1/prices": { data: [{ id: "price_accounts" }] }, "POST /v1/checkout/sessions": { url: "https://checkout.stripe.com/c/pay/cs_test" } });
     const result = await startCheckout({ sql, stripe, webAppUrl: "https://www.postsocial.xyz" }, person, { workspace_id: WORKSPACE });
     expect(result.url).toBe("https://checkout.stripe.com/c/pay/cs_test");
     const session = calls.find((c) => c.path === "/v1/checkout/sessions")!.params!;
     expect(session).toMatchObject({ mode: "subscription", client_reference_id: WORKSPACE, metadata: { workspace_id: WORKSPACE }, subscription_data: { metadata: { workspace_id: WORKSPACE } } });
-    expect(session.line_items).toEqual([{ price: "price_accounts", quantity: 3 }]);
+    expect(session.line_items).toEqual([{ price: "price_accounts", quantity: 2 }]);
     expect(session.customer_email).toBe("ada@example.com");
     expect(session.success_url).toBe("https://www.postsocial.xyz/beta/billing?checkout={CHECKOUT_SESSION_ID}");
   });
@@ -228,11 +228,11 @@ describe("syncAccountQuantity", () => {
     expect(writes[0].params).toEqual([WORKSPACE, 5]);
   });
 
-  it("lowers the next bill when an account goes, without a refund, and never below the 3rd account", async () => {
+  it("lowers the next bill when an account goes, without a refund, down to the accounts connected ($0 with 2 or fewer)", async () => {
     const { sql } = fakeSql({ plan_id: "paid", plan_name: "Paid", connected: 1, stripe_subscription_id: "sub_1", subscription_status: "active", billed_quantity: 5 });
     const { stripe, calls } = fakeStripe({ "GET /v1/subscriptions/sub_1": { items: { data: [{ id: "si_1", quantity: 5 }] } } });
-    await expect(syncAccountQuantity({ sql, stripe, webAppUrl: "" }, WORKSPACE)).resolves.toBe(3);
-    expect(calls.at(-1)).toEqual({ method: "POST", path: "/v1/subscription_items/si_1", params: { quantity: 3, proration_behavior: "none" } });
+    await expect(syncAccountQuantity({ sql, stripe, webAppUrl: "" }, WORKSPACE)).resolves.toBe(1);
+    expect(calls.at(-1)).toEqual({ method: "POST", path: "/v1/subscription_items/si_1", params: { quantity: 1, proration_behavior: "none" } });
   });
 
   it("leaves a cancelling subscription alone unless an account is added, which is still charged", async () => {
@@ -259,7 +259,7 @@ describe("syncAccountQuantity", () => {
   it("does nothing when the count matches or there is no subscription", async () => {
     const { stripe, calls } = fakeStripe();
     await syncAccountQuantity({ sql: fakeSql({ plan_id: "paid", plan_name: "Paid", connected: 4, stripe_subscription_id: "sub_1", subscription_status: "active", billed_quantity: 4 }).sql, stripe, webAppUrl: "" }, WORKSPACE);
-    await syncAccountQuantity({ sql: fakeSql({ plan_id: "paid", plan_name: "Paid", connected: 2, stripe_subscription_id: "sub_1", subscription_status: "active", billed_quantity: 3 }).sql, stripe, webAppUrl: "" }, WORKSPACE);
+    await syncAccountQuantity({ sql: fakeSql({ plan_id: "paid", plan_name: "Paid", connected: 2, stripe_subscription_id: "sub_1", subscription_status: "active", billed_quantity: 2 }).sql, stripe, webAppUrl: "" }, WORKSPACE);
     await syncAccountQuantity({ sql: fakeSql({ plan_id: "free", plan_name: "Free", connected: 2 }).sql, stripe, webAppUrl: "" }, WORKSPACE);
     expect(calls).toEqual([]);
   });
@@ -316,15 +316,27 @@ describe("addXUsageToInvoice", () => {
     return { sql, queries };
   }
 
-  it("adds each month's X posts past the free $1, minus what was billed already", async () => {
+  it("adds each month's X posts, minus what was billed already", async () => {
     const { sql } = db([
       { month: "2026-09-01", posts: 80, link_posts: 2, total_cents: 206, billed_cents: 50 },
       { month: "2026-10-01", posts: 30, link_posts: 0, total_cents: 60, billed_cents: 0 },
     ]);
     const { stripe, calls } = fakeStripe();
-    await expect(addXUsageToInvoice({ sql, stripe, webAppUrl: "" }, invoice)).resolves.toEqual({ added: 56 });
-    expect(calls).toHaveLength(1);
-    expect(calls[0].params).toMatchObject({ customer: "cus_1", invoice: "in_1", currency: "usd", amount: 56, description: "X posts, September 2026: 80 posts (2 with a link), first $1 free" });
+    await expect(addXUsageToInvoice({ sql, stripe, webAppUrl: "" }, invoice)).resolves.toEqual({ added: 216 });
+    expect(calls).toHaveLength(2);
+    expect(calls[0].params).toMatchObject({ customer: "cus_1", invoice: "in_1", currency: "usd", amount: 156, description: "X posts, September 2026: 80 posts (2 with a link)" });
+    expect(calls[1].params).toMatchObject({ amount: 60, description: "X posts, October 2026: 30 posts" });
+  });
+
+  it("bills X posts on one last invoice when a paid plan ends, and creates none when there's nothing to bill", async () => {
+    const owed = fakeStripe({ "POST /v1/invoices": { id: "in_final" } });
+    await expect(billFinalXUsage({ sql: db([{ month: "2026-11-01", posts: 4, link_posts: 0, total_cents: 20, billed_cents: 0 }]).sql, stripe: owed.stripe, webAppUrl: "" }, "cus_1")).resolves.toEqual({ added: 20 });
+    expect(owed.calls.map((c) => `${c.method} ${c.path}`)).toEqual(["POST /v1/invoices", "POST /v1/invoiceitems", "POST /v1/invoices/in_final/finalize"]);
+    expect(owed.calls[1].params).toMatchObject({ invoice: "in_final", amount: 20 });
+
+    const nothing = fakeStripe({ "POST /v1/invoices": { id: "in_empty" } });
+    await expect(billFinalXUsage({ sql: db([]).sql, stripe: nothing.stripe, webAppUrl: "" }, "cus_1")).resolves.toEqual({ added: 0 });
+    expect(nothing.calls.map((c) => `${c.method} ${c.path}`)).toEqual(["POST /v1/invoices", "DELETE /v1/invoices/in_empty"]);
   });
 
   it("never adds a line twice, and leaves other invoices alone", async () => {
