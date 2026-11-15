@@ -54,10 +54,14 @@ jobs:
       - name: Install the test browser
         run: npx @e2e-dev/web install chromium --with-deps
 
+      # A token copied from a wrapped terminal line can carry line breaks; strip them.
       - name: Run the journeys on the live site
-        run: npx e2e run
+        run: |
+          CLAUDE_CODE_OAUTH_TOKEN="$(printf '%s' "$RAW_CLAUDE_TOKEN" | tr -d '[:space:]')"
+          export CLAUDE_CODE_OAUTH_TOKEN
+          npx e2e run
         env:
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          RAW_CLAUDE_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           E2E_USER_TESTER_USERNAME: ${{ secrets.E2E_TESTER_EMAIL }}
           E2E_USER_TESTER_PASSWORD: ${{ secrets.E2E_TESTER_PASSWORD }}
 
