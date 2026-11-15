@@ -83,12 +83,27 @@ jobs:
       - name: Database (back up prod, then apply migrations verified on dev)
         run: npm run db:promote
 
+      # InsForge's deploy command sometimes prints success and then never exits (on a Mac
+      # that's Ctrl+C). So each deploy runs in its own process group, counts as done once
+      # InsForge reports success, and is then stopped; no success in 4 minutes fails the run.
       - name: Functions
         run: |
           for fn in api connections media posts; do
             echo "::group::$fn"
-            npm run functions:deploy -- prod "$fn"
+            log=$(mktemp)
+            setsid npm run functions:deploy -- prod "$fn" > "$log" 2>&1 &
+            pid=$!
+            ok=""
+            for _ in $(seq 1 120); do
+              if grep -qE "Function \"$fn\" (updation|creation) success" "$log"; then ok=1; break; fi
+              kill -0 "$pid" 2>/dev/null || break
+              sleep 2
+            done
+            grep -qE "Function \"$fn\" (updation|creation) success" "$log" && ok=1
+            kill -- "-$pid" 2>/dev/null || true
+            cat "$log"
             echo "::endgroup::"
+            [[ -n "$ok" ]] || { echo "::error::The $fn function didn't report a successful deploy."; exit 1; }
           done
 
       - name: Worker
