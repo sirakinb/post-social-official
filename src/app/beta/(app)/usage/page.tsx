@@ -149,7 +149,7 @@ export default async function BetaUsagePage({ searchParams }: { searchParams: Pr
                 <Stat label="Posts created" value={count(report.totals.posts_created)} note={`${count(report.totals.posts_created_by_ai)} by your AI agent`} />
                 <Stat label="API calls" value={count(report.totals.api_calls)} note="Including your AI agent's" />
                 <Stat label="Accounts posted to" value={count(report.by_account.filter((a) => a.posts_published > 0).length)} />
-                <Stat label="X posts" value={count(report.totals.x_posts ?? 0)} note={`$${(report.totals.x_spent ?? 0).toFixed(2)}, billed to your card`} />
+                <Stat label="X posts" value={count(report.totals.x_posts ?? 0)} note={`$${(report.totals.x_spent ?? 0).toFixed(2)} this period · see Billing`} />
               </div>
             </section>
 
