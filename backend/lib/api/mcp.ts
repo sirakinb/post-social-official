@@ -3,7 +3,7 @@
 // the operations list, so they match the REST API exactly.
 import type { AgentCaller } from "../access";
 import { clientLabel } from "./clients";
-import { availableOperations, type ApiDeps, type Operation } from "./operations";
+import { availableOperations, runOperation, type ApiDeps, type Operation } from "./operations";
 import { describeError } from "./rest";
 
 export const PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
@@ -88,7 +88,7 @@ export async function handleMcp(deps: ApiDeps, caller: AgentCaller, raw: unknown
         return rpcError(message.id, -32602, "Tool arguments must be an object.");
       }
       try {
-        const result = await operation.run(deps, caller, (args ?? {}) as Record<string, unknown>);
+        const result = await runOperation(operation, deps, caller, (args ?? {}) as Record<string, unknown>);
         const structured = result && typeof result === "object" && !Array.isArray(result) ? { structuredContent: result } : {};
         return rpcResult(message.id, { content: [{ type: "text", text: JSON.stringify(result, null, 2) }], ...structured, isError: false });
       } catch (error) {

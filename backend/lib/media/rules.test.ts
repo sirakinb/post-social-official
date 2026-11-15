@@ -91,3 +91,18 @@ describe("mimeTypeFromName", () => {
     expect(uploadProblem({ fileName: "a.mov", mimeType: "video/quicktime", sizeBytes: 0 })).toBe("The file is empty.");
   });
 });
+
+describe("long file names (ReDoS)", () => {
+  it("cleans a huge name of dashes quickly and keeps the usual result", () => {
+    const started = performance.now();
+    expect(safeFileName(`a${"-".repeat(500_000)}a`)).toBe(`${"-".repeat(119)}a`);
+    expect(safeFileName(`photo${"-".repeat(200_000)}`)).toBe("photo");
+    expect(performance.now() - started).toBeLessThan(500);
+    expect(safeFileName("my--photo--.jpg--")).toBe("my--photo--.jpg");
+  });
+
+  it("refuses names longer than 255 characters before anything else", () => {
+    expect(uploadProblem({ fileName: `${"a".repeat(256)}.png`, mimeType: "image/png", sizeBytes: 10 })).toMatch(/at most 255 characters/);
+    expect(uploadProblem({ fileName: `${"a".repeat(200)}.png`, mimeType: "image/png", sizeBytes: 10 })).toBeNull();
+  });
+});

@@ -31,6 +31,8 @@ export function originAllowed(origin: string, allowed: string[]) {
   });
 }
 
+const MAX_BODY_BYTES = 256 * 1024;
+
 function json(status: number, body: unknown, headers: Record<string, string>) {
   return new Response(JSON.stringify(body), { status, headers: { ...headers, "Content-Type": "application/json" } });
 }
@@ -45,9 +47,13 @@ export function createMediaHandler(deps: HandlerDeps) {
     const user = await deps.userForToken(token);
     if (!user) return json(401, { error: "Sign in to manage media." }, cors);
 
+    // Media actions send a few small fields (the files themselves go straight to storage).
+    if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) return json(413, { error: "The request is too large." }, cors);
     let body: Record<string, unknown>;
     try {
-      body = (await request.json()) as Record<string, unknown>;
+      const text = await request.text();
+      if (text.length > MAX_BODY_BYTES) return json(413, { error: "The request is too large." }, cors);
+      body = JSON.parse(text) as Record<string, unknown>;
     } catch {
       return json(400, { error: "Send a JSON body with an action." }, cors);
     }
