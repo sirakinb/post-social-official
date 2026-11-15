@@ -21,6 +21,11 @@ describe("decide", () => {
     expect(decide({ ref: "main", message: "", changedFiles: ["src/a.tsx"] }).build).toBe(false);
   });
 
+  it("always builds the release workflow's production deploy", () => {
+    expect(decide({ ref: "main", message: "", changedFiles: [], target: "production" }).build).toBe(true);
+    expect(decide({ ref: "main", message: "", changedFiles: null, target: "production" }).build).toBe(true);
+  });
+
   it("builds a feature branch only when asked", () => {
     expect(decide({ ref: "billing-copy", message: "Billing copy", changedFiles: ["src/a.tsx"] }).build).toBe(false);
     expect(decide({ ref: "billing-copy", message: "Billing copy [Preview]", changedFiles: ["src/a.tsx"] }).build).toBe(true);
