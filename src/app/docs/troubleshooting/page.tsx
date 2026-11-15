@@ -63,7 +63,7 @@ const WAITING: Row[] = [
 ];
 
 const BILLING: Row[] = [
-  { sees: "“This post didn’t go out on X. Posting to X needs a card. Add one on the Billing page…”", fix: "Add a card on the Billing page (it’s $0 a month until your 3rd account), then press Retry on the post. See X posts in pricing and billing." },
+  { sees: "“This post didn’t go out on X. Posting to X needs a card. Add one on the Billing page…”", fix: "Add a card on the Billing page (X posts are then added to your monthly bill), then press Retry on the post. See X posts in pricing and billing." },
   { sees: "“This post didn’t go out on X: this workspace reached its monthly X limit…”", fix: "Raise the X limit on the Billing page and press Retry, or post it next month." },
   { sees: "“This workspace has <n> connected accounts and the <plan> plan covers <m>, so posting is paused. Add a card on the Billing page (from the 3rd account it’s $5 a month each), or disconnect accounts, then press Retry.”", fix: "Add a card on the Billing page, or disconnect accounts until you’re within the plan." },
   { sees: "“Your <plan> plan allows <n> … limit.” (status 402)", fix: "You have reached a plan limit, such as published posts in a month. See Rate limits and status." },

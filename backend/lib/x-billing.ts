@@ -19,4 +19,4 @@ export async function xNeedsCard(sql: Sql, workspaceId: string): Promise<boolean
   return !(row.plan === "paid" && PAID_STATUSES.has(row.status ?? ""));
 }
 
-export const X_NEEDS_CARD_MESSAGE = `Posting to X needs a card. Add one on the Billing page (it stays free until your 3rd account); X posts are ${xPriceText()}.`;
+export const X_NEEDS_CARD_MESSAGE = `Posting to X needs a card. Add one on the Billing page; X posts are ${xPriceText()}, added to your monthly bill.`;
