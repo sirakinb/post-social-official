@@ -1,4 +1,5 @@
 import { DOCS_PAGES } from "@/lib/docs-nav";
+import { trimTrailingSlashes } from "../../backend/lib/text";
 
 // The public pages: listed in the sitemap, and served as Markdown to agents that ask for it
 // (Accept: text/markdown). Docs pages come from the docs map, so a new docs page is included
@@ -26,7 +27,8 @@ const PUBLIC_SET = new Set(PUBLIC_PATHS);
 
 // "/docs/quickstart/" and "/docs/quickstart" are the same page.
 export function publicPath(pathname: string): string | null {
-  const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+  if (pathname.length > 512) return null;
+  const path = pathname.length > 1 ? trimTrailingSlashes(pathname) : pathname;
   return PUBLIC_SET.has(path) ? path : null;
 }
 

@@ -73,8 +73,11 @@ in order to dev, then to prod, exactly the same files.
    only from a synced `main`).
    It then shows any differences between `insforge.toml` and prod's settings and asks
    again before applying them.
-5. **Deploy the web app.** Vercel builds a preview for every pull request (pointing at
-   dev). Vercel itself doesn't deploy production on a merge (set in `vercel.json`): the
+5. **Deploy the web app.** Previews point at dev and build only when someone will look at
+   them (`scripts/vercel-ignore.mjs`): `dev` builds after each merge unless nothing the
+   website uses changed (worker, migrations, functions, tests, docs); a feature branch
+   builds only when its latest commit message contains `[preview]`; `staging` never
+   builds. Vercel itself doesn't deploy production on a merge (set in `vercel.json`): the
    release workflow does, after the backend, so the site never goes out ahead of it. By
    hand: `npm run deploy:prod`, which refuses to run unless you are on a clean `main` that
    matches GitHub.

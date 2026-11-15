@@ -1,5 +1,6 @@
 // Media rules shared by the media function, the worker and the web app. Runtime-neutral:
 // no Node, Deno or browser-only APIs.
+import { trimEndChars } from "../text";
 
 export const MAX_MEDIA_BYTES = 1024 * 1024 * 1024; // 1 GB
 
@@ -55,15 +56,22 @@ export function partLength(sizeBytes: number, partSize: number, partNumber: numb
   return Math.min(partSize, sizeBytes - (partNumber - 1) * partSize);
 }
 
+// Longest file name accepted from people and apps (the usual file-system limit).
+export const MAX_FILE_NAME_LENGTH = 255;
+
 // Keeps letters, numbers, dots, dashes and underscores; everything else becomes a dash.
+// Trailing dashes are trimmed with a loop (a /-+$/ regex takes quadratic time on a long run
+// of dashes that doesn't reach the end), so any input takes linear time.
 export function safeFileName(fileName: string) {
   const base = fileName.split(/[\\/]/).pop() ?? "";
-  const cleaned = base
-    .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^A-Za-z0-9._-]+/g, "-")
-    .replace(/^[-.]+|-+$/g, "")
-    .slice(-120);
+  const cleaned = trimEndChars(
+    base
+      .normalize("NFKD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/[^A-Za-z0-9._-]+/g, "-")
+      .replace(/^[-.]+/, ""),
+    "-",
+  ).slice(-120);
   return cleaned || "file";
 }
 
@@ -76,6 +84,7 @@ export type UploadRequest = { fileName: string; mimeType: string; sizeBytes: num
 // sizeBytes null: not known yet (a single-part upload; checked when it finishes).
 export function uploadProblem(request: Omit<UploadRequest, "sizeBytes"> & { sizeBytes: number | null }): string | null {
   if (!request.fileName?.trim()) return "Choose a file to upload.";
+  if (request.fileName.length > MAX_FILE_NAME_LENGTH) return `File names can be at most ${MAX_FILE_NAME_LENGTH} characters. Rename the file and try again.`;
   if (!mediaTypeFor(request.mimeType ?? "")) {
     return "That file type is not supported. Use MP4, MOV or WebM video, or JPEG, PNG or WebP images.";
   }

@@ -4,7 +4,7 @@
 import { reportError } from "../telemetry";
 import { ApiError, type AgentCaller } from "../access";
 import { sha256Hex } from "../connections/crypto";
-import { availableOperations, operations, type ApiDeps, type Operation } from "./operations";
+import { availableOperations, operations, runOperation, type ApiDeps, type Operation } from "./operations";
 
 const CODES: Record<number, string> = {
   400: "invalid_request",
@@ -137,7 +137,7 @@ export async function handleRest(deps: ApiDeps, caller: AgentCaller, request: Re
 
   const execute = async (input: Record<string, unknown>) => {
     try {
-      const body = await operation.run(deps, caller, input);
+      const body = await runOperation(operation, deps, caller, input);
       return { status: operation.creates ? 201 : 200, body };
     } catch (error) {
       const { status, message } = describeError(error);
