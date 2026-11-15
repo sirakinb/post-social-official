@@ -43,12 +43,14 @@ export function affectsWebsite(file) {
 }
 
 /**
- * @param {{ ref: string, message: string, changedFiles: string[] | null }} input
+ * @param {{ ref: string, message: string, changedFiles: string[] | null, target?: string }} input
  *   changedFiles is null when the files since the last build can't be worked out.
+ *   target is VERCEL_ENV: "production" for the release workflow's deploy, which always builds.
  * @returns {{ build: boolean, reason: string }}
  */
-export function decide({ ref, message, changedFiles }) {
-  if (ref === "main" || ref === "staging") return { build: false, reason: `${ref} is deployed by the release workflow, not previews` };
+export function decide({ ref, message, changedFiles, target = "" }) {
+  if (target === "production") return { build: true, reason: "production deploys always build" };
+  if (ref === "main" || ref === "staging") return { build: false, reason: `${ref} previews are off; the release workflow deploys production` };
   if (ref !== "dev") {
     return PREVIEW_TAG.test(message)
       ? { build: true, reason: "the commit asks for a preview" }
@@ -76,7 +78,8 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
     ref: process.env.VERCEL_GIT_COMMIT_REF ?? "",
     message: process.env.VERCEL_GIT_COMMIT_MESSAGE ?? "",
     changedFiles: changedSince(process.env.VERCEL_GIT_PREVIOUS_SHA),
+    target: process.env.VERCEL_ENV ?? "",
   });
-  console.log(`${build ? "Building" : "Skipping"} this preview: ${reason}.`);
+  console.log(`${build ? "Building" : "Skipping"} this deploy: ${reason}.`);
   process.exit(build ? 1 : 0);
 }
