@@ -21,7 +21,19 @@ export type DraftItem = {
 
 // One line per draft, newest first: open it in the composer, or delete it.
 export function DraftsList({ drafts, canEdit }: { drafts: DraftItem[]; canEdit: boolean }) {
-  if (drafts.length === 0) return <p className="m-0 px-4 py-10 text-center text-ps-muted">No drafts. Posts you or your AI apps save without scheduling show up here.</p>;
+  if (drafts.length === 0) {
+    return (
+      <p className="m-0 px-4 py-10 text-center text-ps-muted">
+        No drafts. Posts you or your AI agent save without scheduling show up here.
+        {canEdit && (
+          <>
+            {" "}
+            <Link href="/beta/create" className="text-ps-plum-soft hover:text-ps-text">New post</Link>
+          </>
+        )}
+      </p>
+    );
+  }
   return (
     <ul aria-label="Drafts" className="m-0 list-none p-0">
       {drafts.map((d) => <DraftLine key={d.id} draft={d} canEdit={canEdit} />)}

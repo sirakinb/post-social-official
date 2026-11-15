@@ -23,6 +23,7 @@ const PERSON_CAN_FIX = new Set([
   "rate_limited",
   "x_rate_limited",
   "x_cap_reached",
+  "x_needs_card",
   "over_plan_accounts",
   "linkedin_rate_limited",
   "bluesky_rate_limited",
