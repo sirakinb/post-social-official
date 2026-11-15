@@ -158,6 +158,13 @@ sees admin-only data columns.
 
 ## How to ship (deploys and their gotchas)
 
+**Since 2026-11-15 prod releases run on GitHub Actions** (`.github/workflows/release.yml`):
+merging the "Release to production" PR into `main` runs db:promote (with its backup), the
+api, connections, media and posts functions, the worker, the Vercel production deploy and
+health checks, with no typed `prod`. So "ship it" from Aki = Claude merges the release PR
+and watches the run. Secrets it needs (Aki adds them in GitHub): `INSFORGE_USER_API_KEY`,
+`VERCEL_TOKEN`. The manual Mac commands below remain the fallback.
+
 ### Rules
 
 - Merges and prod deploys **always wait for Aki's word in the thread**. Once he
