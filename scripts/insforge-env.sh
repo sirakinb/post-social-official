@@ -32,7 +32,11 @@ ensure_dev() {
 
 switch_to_prod() {
   trap ensure_dev EXIT
-  "${CLI[@]}" branch switch --parent >/dev/null
+  # Already on prod (a run that was stopped before switching back): switching again fails
+  # with "No parent backup found", so go straight on; the trap still returns to dev.
+  if [[ "$(linked_name)" != "$PROD_NAME" ]]; then
+    "${CLI[@]}" branch switch --parent >/dev/null
+  fi
   [[ "$(linked_name)" == "$PROD_NAME" ]] || { echo "Could not link to prod" >&2; exit 1; }
 }
 
