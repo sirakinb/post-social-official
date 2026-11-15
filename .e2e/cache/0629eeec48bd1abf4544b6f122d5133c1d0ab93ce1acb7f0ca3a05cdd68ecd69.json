@@ -1,0 +1,108 @@
+{
+  "schemaVersion": "trace-1",
+  "createdAt": "2026-11-15T11:37:58.634Z",
+  "payload": {
+    "actions": [
+      {
+        "name": "tap",
+        "summary": "tap link \"Set up\" in \"2\"",
+        "target": {
+          "role": "link",
+          "name": "Set up",
+          "within": "2"
+        }
+      }
+    ],
+    "executor": {
+      "name": "claude-code",
+      "version": "1"
+    },
+    "recordedFor": {
+      "testId": "e2e/journeys/getting-started.e2e.ts::getting%20started::the%20Connect%20your%20AI%20step%20leads%20to%20setup%20steps",
+      "targetId": "web",
+      "instructionDigest": "1e6ae6a1fa6ec32904129e6fc3cbbd9016103d8acda6da3889317491be509bb1",
+      "paramsDigest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "callIndex": 0,
+      "agent": "default"
+    },
+    "summary": "Tapped \"Set up\" on the Connect your AI item in Get started. The app opened /beta/api, titled \"Connect your AI\". The page loaded without errors. It shows an empty state for signed-in AI apps, setup tabs (Claude selected) with a connector address, and an API keys section with no keys.",
+    "startPath": "/beta/accounts",
+    "endPath": "/beta/api",
+    "endAnchors": [
+      {
+        "role": "heading",
+        "name": "Connect your AI"
+      },
+      {
+        "text": "Connect Claude, ChatGPT, Codex, Grok and other AI apps, or your own code, and see who has access."
+      },
+      {
+        "role": "heading",
+        "name": "AI apps you signed in to"
+      },
+      {
+        "role": "link",
+        "name": "setup steps below"
+      },
+      {
+        "role": "heading",
+        "name": "Connect an AI"
+      },
+      {
+        "role": "tab",
+        "name": "Claude",
+        "states": [
+          "selected"
+        ]
+      },
+      {
+        "role": "tab",
+        "name": "ChatGPT"
+      },
+      {
+        "role": "tab",
+        "name": "Claude Code"
+      }
+    ],
+    "goneAnchors": [
+      {
+        "role": "heading",
+        "name": "Accounts"
+      },
+      {
+        "text": "The social accounts Post Social posts to, grouped by profile."
+      },
+      {
+        "role": "heading",
+        "name": "Get started"
+      },
+      {
+        "text": "0 of 3 done"
+      },
+      {
+        "role": "button",
+        "name": "Hide"
+      },
+      {
+        "text": "Connect a social account"
+      },
+      {
+        "text": "Pick Instagram, TikTok, YouTube or another platform under Connect an account below. You sign in on its own page."
+      },
+      {
+        "text": "Claude, ChatGPT or any AI agent, so you can post just by asking."
+      }
+    ],
+    "endWaitMs": 17269,
+    "keyedBy": {
+      "cacheSchema": "trace-1",
+      "policyVersion": "conservative/6",
+      "project": "d574540f777ea7253cc58cf1274462ffccd4d783d9aa45604c4b1e0215761ab7",
+      "platform": "web",
+      "engineName": "web",
+      "engineSpiVersion": 1,
+      "appIdentity": "95508cc3b8c85c6322976ce49ee447d0c60400189d6ac7a64efbfebebc1aca5c",
+      "agentContextDigest": "df3058c1dfb19084732668df3bfb5f0642522d1bc54f8732bc054ab327838e63"
+    }
+  }
+}
