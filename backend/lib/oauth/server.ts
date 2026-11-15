@@ -7,6 +7,7 @@
 // Only SHA-256 hashes of codes and tokens are stored.
 import { API_LIMIT_SQL, ApiError, apiLimitMessage, isAgentCaller, membership, PLAN_JOIN_SQL, requireUuid, type AgentCaller, type Caller, type Sql } from "../access";
 import { randomToken, sha256Hex } from "../connections/crypto";
+import { trimTrailingSlashes } from "../text";
 
 export const SCOPE = "posts";
 const CODE_MINUTES = 10;
@@ -63,11 +64,25 @@ export function protectedResourceMetadata(issuer: string, resourcePath = "/mcp")
   };
 }
 
+// Longest value accepted for each sign-in link field. Real apps stay far below these; the
+// caps keep a huge value from reaching any parsing or comparison.
+export const PARAM_MAX_LENGTH: Record<keyof AuthorizeParams, number> = {
+  response_type: 32,
+  client_id: 500,
+  redirect_uri: 2000,
+  code_challenge: 128,
+  code_challenge_method: 16,
+  state: 2048,
+  scope: 256,
+  resource: 2048,
+};
+
 // Tokens are valid for the MCP server and the REST API on this site.
 function resourceAllowed(issuer: string, resource: string | null | undefined) {
   if (!resource) return true;
+  if (resource.length > PARAM_MAX_LENGTH.resource) return false;
   const e = endpoints(issuer);
-  const clean = resource.replace(/\/+$/, "");
+  const clean = trimTrailingSlashes(resource);
   return clean === e.mcp || clean === issuer || clean === e.api || clean === `${e.api}/v1`;
 }
 
@@ -272,16 +287,41 @@ async function findClient(sql: Sql, clientId: string, redirectUri: string | unde
   return saved;
 }
 
+// Every field must be text of a sane length; anything else is refused on the page.
+function paramsProblem(params: AuthorizeParams) {
+  for (const [key, max] of Object.entries(PARAM_MAX_LENGTH) as [keyof AuthorizeParams, number][]) {
+    const value = (params as Record<string, unknown>)[key];
+    if (value !== undefined && value !== null && (typeof value !== "string" || value.length > max)) return key;
+  }
+  return null;
+}
+
+// Whether this person already allowed this app (a connection that is still active). Only then
+// do problems with the request go back to the app's address before the consent screen.
+async function personApproved(sql: Sql, clientRowId: string, personId: string | undefined) {
+  if (!personId) return false;
+  const rows = await sql(`SELECT 1 FROM public.oauth_grants WHERE oauth_client_id = $1 AND user_id = $2 AND revoked_at IS NULL LIMIT 1`, [clientRowId, personId]);
+  return rows.length > 0;
+}
+
 // Problems that make it unsafe to send the person back to the app are shown on the page
-// (bad client or redirect). Everything else goes back to the app as an OAuth error.
-export async function checkAuthorization(sql: Sql, issuer: string, params: AuthorizeParams, fetcher?: Fetcher) {
+// (bad client or redirect). Other problems go back to the app as an OAuth error only when
+// the person has allowed this app before: anyone can register an app, so an address nobody
+// has approved is never followed before the person has seen the consent screen (RFC 9700
+// 4.11.2). Otherwise the problem is shown on the page too.
+export async function checkAuthorization(sql: Sql, issuer: string, params: AuthorizeParams, fetcher?: Fetcher, personId?: string) {
+  const tooLong = paramsProblem(params);
+  if (tooLong) throw new OAuthError("invalid_request", `This sign-in link's ${tooLong} is not valid, so it was stopped.`);
   if (!params.client_id) throw new OAuthError("invalid_request", "This sign-in link is missing the app's id.");
   const client = await findClient(sql, params.client_id, params.redirect_uri, fetcher);
   if (!client) throw new OAuthError("invalid_client", "This app is not registered with Post Social. Try connecting again from the app.");
   if (!params.redirect_uri || !redirectMatches(client.redirect_uris, params.redirect_uri)) {
     throw new OAuthError("invalid_request", "This sign-in link sends you to an address the app did not register, so it was stopped.");
   }
-  const back = (error: string, description: string) => ({ client, redirect: errorRedirect(params, error, description, issuer) });
+  const back = async (error: string, description: string) => {
+    if (!(await personApproved(sql, client.id, personId))) throw new OAuthError(error, `The app sent a sign-in link Post Social can't use: ${description}`);
+    return { client, redirect: errorRedirect(params, error, description, issuer) };
+  };
   if (params.response_type !== "code") return back("unsupported_response_type", "Only response_type=code is supported.");
   if (!params.code_challenge || params.code_challenge_method !== "S256" || !/^[A-Za-z0-9_-]{43}$/.test(params.code_challenge)) {
     return back("invalid_request", "PKCE with code_challenge_method=S256 is required.");
@@ -306,7 +346,7 @@ type Person = { id: string; name: string };
 
 // The person's answer on the consent page. Returns where to send their browser.
 export async function decideAuthorization(sql: Sql, issuer: string, person: Person, params: AuthorizeParams & { workspace_id?: unknown; approve?: unknown }) {
-  const { client, redirect } = await checkAuthorization(sql, issuer, params);
+  const { client, redirect } = await checkAuthorization(sql, issuer, params, undefined, person.id);
   if (redirect) return { redirect };
   if (params.approve !== true) return { redirect: errorRedirect(params, "access_denied", "The person declined.", issuer) };
   const workspaceId = requireUuid(params.workspace_id, "Workspace");
@@ -384,7 +424,7 @@ async function exchangeCode(sql: Sql, issuer: string, form: Record<string, strin
   const invalid = new OAuthError("invalid_grant", "This sign-in code is not valid, has expired or was already used. Connect again.");
   if (!code || code.client_id !== form.client_id || code.redirect_uri !== form.redirect_uri) throw invalid;
   if ((await s256(form.code_verifier)) !== code.code_challenge) throw invalid;
-  if (form.resource && (!resourceAllowed(issuer, form.resource) || (code.resource && form.resource.replace(/\/+$/, "") !== code.resource.replace(/\/+$/, "")))) {
+  if (form.resource && (!resourceAllowed(issuer, form.resource) || (code.resource && trimTrailingSlashes(form.resource) !== trimTrailingSlashes(code.resource)))) {
     throw new OAuthError("invalid_target", "The resource does not match the one that was approved.");
   }
   if (!(await stillMember(sql, code.workspace_id, code.user_id))) throw invalid;

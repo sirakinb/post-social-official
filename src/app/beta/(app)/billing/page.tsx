@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { BILLING_ERRORS, FLASH_COOKIE, noticeText, readFlash } from "@/lib/beta/flash";
 import { callServer, callServerResult, loadViewer } from "@/lib/beta/workspace";
 import { cn } from "@/lib/utils";
 import { FREE_ACCOUNTS, PRICE_BANDS, X_PRICES } from "@/lib/pricing";
@@ -82,7 +84,9 @@ const primary = "inline-flex h-8 flex-none items-center rounded-lg bg-ps-plum px
 
 export default async function BillingPage({ searchParams }: { searchParams: Promise<{ checkout?: string; error?: string; saved?: string }> }) {
   const { workspace } = await loadViewer("/beta/billing");
-  const { checkout, error, saved } = await searchParams;
+  const { checkout, error: errorCode, saved } = await searchParams;
+  // Only known codes from the address are shown, in our own words (see lib/beta/flash).
+  const error = noticeText(BILLING_ERRORS, errorCode, readFlash((await cookies()).get(FLASH_COOKIE)?.value, "error"));
   // Back from Stripe Checkout: confirm it here so Paid turns on without waiting for Stripe.
   if (workspace && checkout) await callServer("billing_confirm", { workspace_id: workspace.id, session_id: checkout });
   const result = workspace ? await callServerResult<BillingStatus>("billing_status", { workspace_id: workspace.id }) : null;

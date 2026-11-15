@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isPublicBetaPath,
+  isSignedOutOnlyPath,
   passwordProblem,
   resetErrorMessage,
   safeNextPath,
@@ -94,5 +95,24 @@ describe("open sign-up", () => {
   it("never says whether an email already has an account", () => {
     expect(signUpErrorMessage({ statusCode: 409 })).toBe(signUpErrorMessage({ statusCode: 400 }));
     expect(signUpErrorMessage({ statusCode: 429 })).toMatch(/Too many attempts/);
+  });
+});
+
+describe("long next values and paths (ReDoS)", () => {
+  it("sends a next value over 2,048 characters to the home page without parsing it", () => {
+    const started = performance.now();
+    expect(safeNextPath(`/beta/${"/".repeat(1_000_000)}x`)).toBe("/beta");
+    expect(safeNextPath(`/beta/posts?q=${"a".repeat(2100)}`)).toBe("/beta");
+    expect(performance.now() - started).toBeLessThan(500);
+    expect(safeNextPath(`/beta/posts?q=${"a".repeat(1000)}`)).toBe(`/beta/posts?q=${"a".repeat(1000)}`);
+  });
+
+  it("checks long paths in linear time", () => {
+    const started = performance.now();
+    expect(isPublicBetaPath(`/beta/${"/".repeat(1_000_000)}x`)).toBe(false);
+    expect(isSignedOutOnlyPath(`/beta/${"/".repeat(1_000_000)}x`)).toBe(false);
+    expect(performance.now() - started).toBeLessThan(500);
+    expect(isPublicBetaPath("/beta/login//")).toBe(true);
+    expect(isSignedOutOnlyPath("/beta/signup/")).toBe(true);
   });
 });

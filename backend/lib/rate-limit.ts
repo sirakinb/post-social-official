@@ -13,16 +13,19 @@ export const LIMITS = {
   waitlist_ip: { limit: 5, windowSeconds: 3600 },
   oauth_register_ip: { limit: 20, windowSeconds: 3600 },
   oauth_token_ip: { limit: 120, windowSeconds: 60 },
-  // Per email AND address, so a stranger can't use up someone's attempts; the email-only
-  // caps are a high backstop against attacks spread over many addresses.
+  // Per email AND address, so a stranger can't use up someone's attempts. The email-only
+  // caps are a backstop against guessing spread over many networks: they count only failed
+  // attempts (recorded after the password or code was checked) and sit far above what one
+  // network can reach (signin_ip allows 120 tries an hour), so no single network can lock
+  // someone out.
   signin_ip: { limit: 20, windowSeconds: 600 },
   signin_email_ip: { limit: 5, windowSeconds: 60 }, // 5 wrong tries, then wait a minute
-  signin_email: { limit: 100, windowSeconds: 3600 },
+  signin_email_failed: { limit: 1000, windowSeconds: 3600 },
   signup_ip: { limit: 10, windowSeconds: 3600 },
   reset_request_ip: { limit: 10, windowSeconds: 3600 },
   reset_request_email: { limit: 3, windowSeconds: 3600 }, // over it: same answer, no email sent
   reset_complete_email_ip: { limit: 10, windowSeconds: 3600 },
-  reset_complete_email: { limit: 30, windowSeconds: 3600 },
+  reset_complete_email_failed: { limit: 100, windowSeconds: 3600 }, // 10 networks' worth of wrong codes
   // Every /v1 and /mcp request per address, checked before the key: stops floods of bad keys.
   api_ip: { limit: 600, windowSeconds: 60 },
   // Signed in (on top of each plan's daily API limit)
@@ -70,6 +73,24 @@ export async function takeLimit(sql: Sql, name: LimitName, id: string): Promise<
   const { limit, windowSeconds } = LIMITS[name];
   try {
     const [row] = await sql<{ wait: number }>(`SELECT public.take_rate_limit($1, $2, $3) AS wait`, [`${name}:${id}`, limit, windowSeconds]);
+    return Number(row?.wait ?? 0);
+  } catch (error) {
+    reportError(error, { area: "rate limit", limit: name });
+    return 0;
+  }
+}
+
+// Seconds to wait if the limit is already used up, without counting this request (0 = go
+// ahead). For counters that only record failures. Never throws for infrastructure trouble.
+export async function peekLimit(sql: Sql, name: LimitName, id: string): Promise<number> {
+  const { limit, windowSeconds } = LIMITS[name];
+  try {
+    const [row] = await sql<{ wait: number }>(
+      `SELECT GREATEST(1, ceil(extract(epoch FROM (window_start + make_interval(secs => $3) - now())))::integer) AS wait
+       FROM public.rate_limits
+       WHERE key = $1 AND count >= $2 AND window_start = to_timestamp(floor(extract(epoch FROM now()) / $3) * $3)`,
+      [`${name}:${id}`, limit, windowSeconds],
+    );
     return Number(row?.wait ?? 0);
   } catch (error) {
     reportError(error, { area: "rate limit", limit: name });

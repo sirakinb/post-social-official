@@ -77,3 +77,13 @@ describe("HOME_LINKS and auth.md", () => {
     expect(md).toContain("Authorization: Bearer");
   });
 });
+
+describe("publicPath on long paths (ReDoS)", () => {
+  it("answers quickly and refuses paths over 512 characters", () => {
+    const started = performance.now();
+    expect(publicPath(`/docs${"/".repeat(100_000)}x`)).toBeNull();
+    expect(publicPath(`/pricing${"/".repeat(600)}`)).toBeNull();
+    expect(performance.now() - started).toBeLessThan(200);
+    expect(publicPath("/pricing///")).toBe("/pricing");
+  });
+});

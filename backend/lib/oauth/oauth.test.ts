@@ -125,3 +125,55 @@ describe("apps whose id is a web address", () => {
     expect(authorizationServerMetadata("https://www.postsocial.xyz")).toMatchObject({ client_id_metadata_document_supported: true });
   });
 });
+
+describe("problems found before the consent screen (open redirect)", () => {
+  const ISSUER = "https://www.postsocial.xyz";
+  const EVIL = "https://postsocial-login.example/session-expired";
+  // A self-registered app; `approved` says whether this person has an active connection to it.
+  const db = (approved: boolean) => {
+    const queries: string[] = [];
+    const sql = (async (query: string) => {
+      queries.push(query);
+      if (query.includes("FROM public.oauth_clients")) return [{ id: "c1", client_id: "psc_x", client_name: "Some app", redirect_uris: [EVIL], client_uri: null }];
+      if (query.includes("FROM public.oauth_grants")) return approved ? [{ "?column?": 1 }] : [];
+      return [];
+    }) as Sql;
+    return { sql, queries };
+  };
+  const good = { client_id: "psc_x", redirect_uri: EVIL, response_type: "code", code_challenge: "a".repeat(43), code_challenge_method: "S256" };
+
+  it("shows the problem on our page instead of sending a person to an app they never approved", async () => {
+    for (const params of [{ ...good, response_type: "x" }, { ...good, code_challenge: "short" }, { ...good, resource: "https://elsewhere.example" }, { ...good, scope: "admin" }]) {
+      await expect(checkAuthorization(db(false).sql, ISSUER, params, undefined, "person-1")).rejects.toThrow(/can't use/);
+    }
+    // Without knowing who is asking, nothing is redirected either.
+    await expect(checkAuthorization(db(true).sql, ISSUER, { ...good, response_type: "x" })).rejects.toThrow(/can't use/);
+  });
+
+  it("still sends the OAuth error back to an app the person already connected", async () => {
+    const result = await checkAuthorization(db(true).sql, ISSUER, { ...good, response_type: "x", state: "s" }, undefined, "person-1");
+    const back = new URL(result.redirect!);
+    expect(back.origin + back.pathname).toBe(EVIL);
+    expect(back.searchParams.get("error")).toBe("unsupported_response_type");
+    expect(back.searchParams.get("state")).toBe("s");
+  });
+
+  it("asks nothing extra for a good request", async () => {
+    const { sql, queries } = db(false);
+    expect((await checkAuthorization(sql, ISSUER, good, undefined, "person-1")).redirect).toBeNull();
+    expect(queries.some((q) => q.includes("oauth_grants"))).toBe(false);
+  });
+
+  it("refuses oversized or non-text fields quickly, before any parsing, and never redirects them", async () => {
+    const started = performance.now();
+    const huge = `${"/".repeat(260_000)}x`;
+    await expect(checkAuthorization(db(true).sql, ISSUER, { ...good, resource: huge }, undefined, "person-1")).rejects.toThrow(/resource is not valid/);
+    await expect(checkAuthorization(db(true).sql, ISSUER, { ...good, state: "s".repeat(5000) }, undefined, "person-1")).rejects.toThrow(/state is not valid/);
+    await expect(checkAuthorization(db(true).sql, ISSUER, { ...good, scope: ["posts"] as unknown as string }, undefined, "person-1")).rejects.toThrow(/scope is not valid/);
+    expect(performance.now() - started).toBeLessThan(500);
+  });
+
+  it("accepts this site's resource with trailing slashes", async () => {
+    expect((await checkAuthorization(db(false).sql, ISSUER, { ...good, resource: `${ISSUER}/mcp///` }, undefined, "person-1")).redirect).toBeNull();
+  });
+});
