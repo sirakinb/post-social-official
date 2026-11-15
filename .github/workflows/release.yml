@@ -101,7 +101,10 @@ jobs:
             done
             grep -qE "Function \"$fn\" (updation|creation) success" "$log" && ok=1
             kill -- "-$pid" 2>/dev/null || true
+            sleep 2
             cat "$log"
+            # Stopping it can cut off its own switch back to dev; put the link back on dev.
+            npx -y "$INSFORGE_CLI" branch switch dev >/dev/null 2>&1 || true
             echo "::endgroup::"
             [[ -n "$ok" ]] || { echo "::error::The $fn function didn't report a successful deploy."; exit 1; }
           done
