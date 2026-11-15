@@ -1,0 +1,107 @@
+{
+  "schemaVersion": "trace-1",
+  "createdAt": "2026-11-15T11:34:24.294Z",
+  "payload": {
+    "actions": [
+      {
+        "name": "tap",
+        "summary": "tap link \"Create a post\" in \"3\"",
+        "target": {
+          "role": "link",
+          "name": "Create a post",
+          "within": "3"
+        }
+      }
+    ],
+    "executor": {
+      "name": "claude-code",
+      "version": "1"
+    },
+    "recordedFor": {
+      "testId": "e2e/journeys/getting-started.e2e.ts::getting%20started::the%20Send%20your%20first%20post%20step%20opens%20the%20composer",
+      "targetId": "web",
+      "instructionDigest": "fc2dee16aa43464313b3ed8076d24d6baa961716c105f35896820987bf030063",
+      "paramsDigest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "callIndex": 0,
+      "agent": "default"
+    },
+    "summary": "Tapped \"Create a post\" in Get started; landed on /beta/create showing the \"New post\" editor. With no accounts, it says \"No accounts yet. Connect one first.\" and links to connect; Save draft is disabled.",
+    "startPath": "/beta/accounts",
+    "endPath": "/beta/create",
+    "endAnchors": [
+      {
+        "role": "heading",
+        "name": "New post"
+      },
+      {
+        "text": "Post to"
+      },
+      {
+        "role": "link",
+        "name": "Connect one"
+      },
+      {
+        "role": "tab",
+        "name": "All platforms",
+        "states": [
+          "selected"
+        ]
+      },
+      {
+        "text": "Caption"
+      },
+      {
+        "role": "textbox",
+        "name": "Caption",
+        "placeholder": "Write a caption…"
+      },
+      {
+        "text": "Media"
+      },
+      {
+        "role": "button",
+        "name": "Add media"
+      }
+    ],
+    "goneAnchors": [
+      {
+        "role": "heading",
+        "name": "Accounts"
+      },
+      {
+        "text": "The social accounts Post Social posts to, grouped by profile."
+      },
+      {
+        "role": "heading",
+        "name": "Get started"
+      },
+      {
+        "text": "0 of 3 done"
+      },
+      {
+        "role": "button",
+        "name": "Hide"
+      },
+      {
+        "text": "Connect a social account"
+      },
+      {
+        "text": "Pick Instagram, TikTok, YouTube or another platform under Connect an account below. You sign in on its own page."
+      },
+      {
+        "text": "Claude, ChatGPT or any AI agent, so you can post just by asking."
+      }
+    ],
+    "endWaitMs": 16641,
+    "keyedBy": {
+      "cacheSchema": "trace-1",
+      "policyVersion": "conservative/6",
+      "project": "d574540f777ea7253cc58cf1274462ffccd4d783d9aa45604c4b1e0215761ab7",
+      "platform": "web",
+      "engineName": "web",
+      "engineSpiVersion": 1,
+      "appIdentity": "95508cc3b8c85c6322976ce49ee447d0c60400189d6ac7a64efbfebebc1aca5c",
+      "agentContextDigest": "05d668e717a4591bce35f50b18d252cdd90ae6831aa3d842d959747e35dbe7ea"
+    }
+  }
+}

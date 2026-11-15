@@ -1,0 +1,107 @@
+{
+  "schemaVersion": "trace-1",
+  "createdAt": "2026-11-15T11:34:39.172Z",
+  "payload": {
+    "actions": [
+      {
+        "name": "tap",
+        "summary": "tap button \"Settings\"",
+        "target": {
+          "role": "button",
+          "name": "Settings"
+        }
+      },
+      {
+        "name": "tap",
+        "summary": "tap link \"Billing\"",
+        "target": {
+          "role": "link",
+          "name": "Billing"
+        }
+      }
+    ],
+    "executor": {
+      "name": "claude-code",
+      "version": "1"
+    },
+    "recordedFor": {
+      "testId": "e2e/journeys/getting-started.e2e.ts::getting%20started::a%20customer%20can%20find%20how%20to%20add%20a%20card%20for%20X",
+      "targetId": "web",
+      "instructionDigest": "3ffecf182534b08e7c503413a0af5c6decc9e79046959ab873811f7bf049e7bd",
+      "paramsDigest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "callIndex": 0,
+      "agent": "default"
+    },
+    "summary": "Settings > Billing (/beta/billing) is where you add a card. The page loads cleanly and shows \"Add a card\" buttons in \"Your month\" and \"X spending\" (5¢ per X post, 25¢ with a link). \"Card and receipts\" says \"No card yet.\" I did not press any Add a card button.",
+    "startPath": "/beta/accounts",
+    "endPath": "/beta/billing",
+    "endAnchors": [
+      {
+        "text": "General"
+      },
+      {
+        "text": "Billing"
+      },
+      {
+        "role": "heading",
+        "name": "Billing"
+      },
+      {
+        "role": "link",
+        "name": "How it works"
+      },
+      {
+        "text": "Connected accounts"
+      },
+      {
+        "text": "2 on us, every month"
+      },
+      {
+        "text": "To pay"
+      },
+      {
+        "text": "$0.00"
+      }
+    ],
+    "goneAnchors": [
+      {
+        "role": "heading",
+        "name": "Accounts"
+      },
+      {
+        "text": "The social accounts Post Social posts to, grouped by profile."
+      },
+      {
+        "role": "heading",
+        "name": "Get started"
+      },
+      {
+        "text": "0 of 3 done"
+      },
+      {
+        "role": "button",
+        "name": "Hide"
+      },
+      {
+        "text": "Connect a social account"
+      },
+      {
+        "text": "Pick Instagram, TikTok, YouTube or another platform under Connect an account below. You sign in on its own page."
+      },
+      {
+        "text": "Claude, ChatGPT or any AI agent, so you can post just by asking."
+      }
+    ],
+    "endWaitMs": 15556,
+    "keyedBy": {
+      "cacheSchema": "trace-1",
+      "policyVersion": "conservative/6",
+      "project": "d574540f777ea7253cc58cf1274462ffccd4d783d9aa45604c4b1e0215761ab7",
+      "platform": "web",
+      "engineName": "web",
+      "engineSpiVersion": 1,
+      "appIdentity": "95508cc3b8c85c6322976ce49ee447d0c60400189d6ac7a64efbfebebc1aca5c",
+      "agentContextDigest": "05d668e717a4591bce35f50b18d252cdd90ae6831aa3d842d959747e35dbe7ea"
+    }
+  }
+}
