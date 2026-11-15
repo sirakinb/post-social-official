@@ -54,6 +54,14 @@ beforeEach(() => {
 });
 
 describe("BillingPage", () => {
+  it("tells a workspace without a card to add one for X, without a used-up limit or paused warning", async () => {
+    server.status = { ...base, x: { spent: 0, posts: 0, monthly_cap: 0, set_cap: 10, free_monthly: 0 } };
+    render(await BillingPage({ searchParams: Promise.resolve({}) }));
+    expect(screen.getByText("Add a card to post to X.")).toBeInTheDocument();
+    expect(screen.queryByText(/paused until next month/)).toBeNull();
+    expect(screen.queryByText(/^limit /)).toBeNull();
+  });
+
   it("shows the month and the rate ladder, and offers account 3 to Free workspaces", async () => {
     server.status = base;
     render(await BillingPage({ searchParams: Promise.resolve({}) }));
