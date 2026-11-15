@@ -58,8 +58,65 @@ describe("rate limits on the api function", () => {
     expect(keys).toEqual([]);
     const ok = await check({ "x-ps-proxy-secret": "the-secret", "x-ps-client-ip": "203.0.113.9" });
     expect(ok.status).toBe(200);
-    // Per address, per email-and-address, then a high email-only backstop.
-    expect(keys.map((k) => k.split(":")[0])).toEqual(["signin_ip", "signin_email_ip", "signin_email"]);
+    // Per address and per email-and-address; the email-only backstop is only looked at.
+    expect(keys.map((k) => k.split(":")[0])).toEqual(["signin_ip", "signin_email_ip"]);
+  });
+
+  // A database whose counters behave like take_rate_limit: fixed limits, counted per key.
+  function countingSql() {
+    const counts = new Map<string, number>();
+    const taken: string[] = [];
+    const sql = (async (query: string, params: unknown[]) => {
+      const key = String(params[0]);
+      const limit = Number(params[1]);
+      if (query.includes("take_rate_limit")) {
+        taken.push(key);
+        const count = (counts.get(key) ?? 0) + 1;
+        counts.set(key, count);
+        return [{ wait: count <= limit ? 0 : 60 }];
+      }
+      if (query.includes("FROM public.rate_limits")) return (counts.get(key) ?? 0) >= limit ? [{ wait: 60 }] : [];
+      return [];
+    }) as Sql;
+    return { sql, taken };
+  }
+
+  const limitsCall = (sql: Sql, check: string, ip: string, email = "victim@x.com") =>
+    handlerFor(sql)(new Request("https://fn/internal/limits", { method: "POST", headers: { "x-ps-proxy-secret": "the-secret", "x-ps-client-ip": ip }, body: JSON.stringify({ check, email }) }));
+
+  it("never lets one network lock someone out of signing in", async () => {
+    const { sql, taken } = countingSql();
+    // A stranger on one network tries as often as the per-network limits allow, failing each time.
+    let allowed = 0;
+    for (let i = 0; i < 200; i++) {
+      const check = await limitsCall(sql, "signin", "198.51.100.7");
+      if (check.status !== 200) continue;
+      allowed++;
+      await limitsCall(sql, "signin_failed", "198.51.100.7");
+    }
+    expect(allowed).toBeLessThan(200);
+    // Only failures count toward the email-only backstop, and one network stays far below it.
+    expect(taken.filter((k) => k.startsWith("signin_email_failed:")).length).toBe(allowed);
+    expect(allowed).toBeLessThan(1000);
+    // The real person, on their own network, still gets in.
+    expect((await limitsCall(sql, "signin", "203.0.113.20")).status).toBe(200);
+  });
+
+  it("blocks an email only after many failures from many networks", async () => {
+    const { sql } = countingSql();
+    for (let i = 0; i < 1000; i++) await limitsCall(sql, "signin_failed", `10.0.${Math.floor(i / 250)}.${i % 250}`);
+    const blocked = await limitsCall(sql, "signin", "203.0.113.20");
+    expect(blocked.status).toBe(429);
+    expect(blocked.headers.get("retry-after")).toBe("60");
+  });
+
+  it("counts only wrong codes toward the email-only reset backstop", async () => {
+    const { sql, taken } = countingSql();
+    for (let i = 0; i < 20; i++) await limitsCall(sql, "reset_complete", "198.51.100.7");
+    expect(taken.some((k) => k.startsWith("reset_complete_email_failed:"))).toBe(false);
+    // One network can make at most 10 attempts an hour for this email, far below 100.
+    expect((await limitsCall(sql, "reset_complete", "198.51.100.7")).status).toBe(429);
+    expect((await limitsCall(sql, "reset_complete", "203.0.113.20")).status).toBe(200);
   });
 
   it("over the per-email reset cap, answers as usual but says not to send", async () => {
