@@ -6,6 +6,9 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createSql } from "../lib/insforge-admin";
 import { provisionWorkspace } from "../lib/signup";
+import { startConnection, type ConnectionDeps } from "../lib/connections/service";
+import { xNeedsCard } from "../lib/x-billing";
+import { validatePost, type PostsDeps } from "../lib/publishing/service";
 import { resolveTarget } from "../../scripts/lib/accounts";
 import { api, uniqueSuffix } from "./dev-backend";
 
@@ -65,7 +68,37 @@ describe.skipIf(!enabled)("billing on the dev backend", () => {
     await connect("limit-3"); // the freed slot
     await expect(connect("limit-2")).rejects.toThrow(/Your Free plan allows 2 connected accounts/); // coming back would make 3
 
+    // At the limit, a new platform is refused before its sign-in, saying how to add a 3rd;
+    // a platform it already has goes through (it may be a reconnect).
+    const deps = { sql, setting: () => "", allowedReturnOrigins: [] } as unknown as ConnectionDeps;
+    const caller = { userId, displayName: "Billing Test", entryPoint: "ui" as const };
+    await expect(startConnection(deps, caller, { workspace_id: workspaceId, platform: "x" })).rejects.toMatchObject({ status: 402, message: expect.stringMatching(/To connect a 3rd, add a card on the Billing page/) });
+    await expect(startConnection(deps, caller, { workspace_id: workspaceId, platform: "bluesky", handle: "" })).rejects.not.toMatchObject({ status: 402 });
+
     await sql(`DELETE FROM public.connected_accounts WHERE workspace_id = $1`, [workspaceId]);
+  });
+
+  it("needs a card for X on Free, not on a comped plan, whose X posts are recorded at 0 cents", async () => {
+    expect(await xNeedsCard(sql, workspaceId)).toBe(true);
+    // Checking an X post on Free says it needs a card before anything is sent.
+    const [account] = await sql<{ id: string }>(
+      `INSERT INTO public.connected_accounts (workspace_id, platform, external_account_id, handle, display_name, capabilities, health)
+       VALUES ($1, 'x', $2, $2, 'X Test', '{}', 'connected') RETURNING id`,
+      [workspaceId, `x-card-${uniqueSuffix()}`],
+    );
+    const caller = { userId, displayName: "Billing Test", entryPoint: "ui" as const };
+    const checked = await validatePost({ sql } as unknown as PostsDeps, caller, { workspace_id: workspaceId, caption: "Hello", destinations: [{ account_id: account.id, options: {} }] });
+    expect(checked.ok).toBe(false);
+    expect(checked.problems.join(" ")).toMatch(/Posting to X needs a card/);
+    await sql(`DELETE FROM public.connected_accounts WHERE id = $1`, [account.id]);
+    await sql(`UPDATE public.workspace_plans SET plan_id = 'tester' WHERE workspace_id = $1`, [workspaceId]);
+    expect(await xNeedsCard(sql, workspaceId)).toBe(false);
+    const destination = randomUUID();
+    await sql(`SELECT public.reserve_x_charge($1, $2, 5, false, 0)`, [destination, workspaceId]);
+    const [{ cents }] = await sql<{ cents: number }>(`SELECT cents FROM public.x_charges WHERE destination_id = $1`, [destination]);
+    expect(cents).toBe(0);
+    await sql(`DELETE FROM public.x_charges WHERE destination_id = $1`, [destination]);
+    await sql(`UPDATE public.workspace_plans SET plan_id = 'free' WHERE workspace_id = $1`, [workspaceId]);
   });
 
   it("lets a paying workspace go up to its own cap", async () => {

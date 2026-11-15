@@ -54,7 +54,9 @@ export async function usageReport(sql: Sql, caller: Caller, input: { workspace_i
        (SELECT coalesce(sum(quantity), 0) FROM public.usage_events WHERE workspace_id = $1 AND event_type = 'post_published' AND occurred_at >= date_trunc('month', now())) AS posts_this_month,
        (SELECT coalesce(sum(quantity), 0) FROM public.usage_events WHERE workspace_id = $1 AND event_type = 'api_call' AND occurred_at >= date_trunc('day', now())) AS api_calls_today,
        (SELECT coalesce(sum(size_bytes), 0) FROM public.media_assets WHERE workspace_id = $1 AND status IN ('uploading', 'processing', 'ready')) AS storage_bytes,
-       (SELECT count(*) FROM public.connected_accounts WHERE workspace_id = $1 AND health <> 'disconnected') AS connected_accounts`,
+       (SELECT count(*) FROM public.connected_accounts WHERE workspace_id = $1 AND health <> 'disconnected') AS connected_accounts,
+       (SELECT count(*) FROM public.x_charges WHERE workspace_id = $1 AND created_at >= $2 AND created_at < $3) AS x_posts,
+       (SELECT coalesce(sum(cents), 0) FROM public.x_charges WHERE workspace_id = $1 AND created_at >= $2 AND created_at < $3) AS x_cents`,
     range,
   );
 
@@ -126,6 +128,9 @@ export async function usageReport(sql: Sql, caller: Caller, input: { workspace_i
       posts_created: n(totals.posts_created),
       posts_created_by_ai: n(totals.posts_created_by_ai),
       api_calls: n(totals.api_calls),
+      // X posts are the one thing billed per use (5 cents, 25 with a link; see Billing).
+      x_posts: n(totals.x_posts),
+      x_spent: n(totals.x_cents) / 100,
     },
     by_account: byAccount.map((r) => ({ ...r, posts_published: n(r.posts_published), publishes_failed: n(r.publishes_failed) })),
     by_connection: byConnection.map((r) => ({

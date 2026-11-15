@@ -5,7 +5,7 @@ import { SAMPLE_DRAFT } from "../../../backend/lib/sample-draft";
 describe("savedBy", () => {
   it("names the person or app and where the draft came from", () => {
     expect(savedBy({ kind: "user", display_name: "Aki" }, "ui")?.text).toBe("Saved by Aki");
-    expect(savedBy({ kind: "oauth_grant", display_name: "Claude" }, "mcp")?.text).toBe("Saved by Claude via MCP");
+    expect(savedBy({ kind: "oauth_grant", display_name: "Claude" }, "mcp")?.text).toBe("Saved by Claude");
     expect(savedBy({ kind: "api_key", display_name: "Zapier key" }, "api")?.text).toBe("Saved by Zapier key via the API");
   });
 
@@ -15,7 +15,7 @@ describe("savedBy", () => {
   });
 
   it("uses the name an AI app gave when it connected, as the logs do", () => {
-    expect(savedBy({ kind: "api_key", display_name: "Laptop key", client_name: "Claude Code" }, "mcp")).toEqual({ kind: "api_key", name: "Claude Code", text: "Saved by Claude Code via MCP" });
+    expect(savedBy({ kind: "api_key", display_name: "Laptop key", client_name: "Claude Code" }, "mcp")).toEqual({ kind: "api_key", name: "Claude Code", text: "Saved by Claude Code" });
     // A person's own name always wins.
     expect(savedBy({ kind: "user", display_name: "Aki", client_name: "Claude Code" }, "ui")?.name).toBe("Aki");
   });

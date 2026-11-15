@@ -41,7 +41,7 @@ export default function LimitsPage() {
       </Section>
 
       <Section id="plans" title="Plan limits">
-        <p>These come from the plan your workspace is on. The Free plan is the one you start on; a workspace moves to Paid when you add a card.</p>
+        <p>These come from the plan your workspace is on. The Free plan is the one you start on; a workspace moves to Paid when you add a card, which also lets it post to X and shows X follower counts in Analytics.</p>
         <div className="overflow-hidden rounded-xl border border-border bg-surface">
           <table className="w-full text-sm">
             <thead><tr className="text-left text-xs text-ink-subtle"><th className="px-4 py-2 font-medium">Limit</th><th className="px-4 py-2 font-medium">Free</th><th className="px-4 py-2 font-medium">Paid</th></tr></thead>

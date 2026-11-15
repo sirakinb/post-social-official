@@ -60,6 +60,14 @@ export default async function SettingsPage() {
           <CardHeader title="Workspace" />
           <Row label="Name">{workspace.name}</Row>
           <Row label="Your role">{ROLE[workspace.role] ?? workspace.role}</Row>
+          <Row label="Plan and billing">
+            <Link href="/beta/billing" className="text-ps-plum-soft hover:text-ps-text">Billing</Link>
+            <span className="ml-2 text-xs text-ps-subtle">Your plan, card, X posts and receipts.</span>
+          </Row>
+          <Row label="Usage">
+            <Link href="/beta/usage" className="text-ps-plum-soft hover:text-ps-text">Usage</Link>
+            <span className="ml-2 text-xs text-ps-subtle">Posts, API calls and plan limits.</span>
+          </Row>
         </Card>
       )}
 

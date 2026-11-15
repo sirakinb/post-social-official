@@ -5,7 +5,7 @@ import { Fraunces, GeistPixelGrid } from "../fonts";
 
 export const metadata: Metadata = {
   title: "Pricing · Post Social",
-  description: "Start free. Your first 2 accounts are free, then you pay per connected account, with every feature included.",
+  description: "Start free. Your first 2 accounts are free, then you pay per connected account. X posts are a few cents each with a card.",
 };
 
 export default function PricingPage() {
@@ -19,7 +19,7 @@ export default function PricingPage() {
           <h1 className="lp-h2 mt-3">
             <span className="lp-display lp-ink">Start free.</span> Pay only for the accounts you use.
           </h1>
-          <p className="mx-auto mt-4 max-w-xl leading-relaxed text-[#FAF6F0]/65">Your first 2 accounts are free, no card needed. After that it&apos;s usage based: you pay per account you connect, and every feature is included.</p>
+          <p className="mx-auto mt-4 max-w-xl leading-relaxed text-[#FAF6F0]/65">Your first 2 accounts are free, no card needed. After that it&apos;s usage based: you pay per account you connect. X posts are 5¢ each (25¢ with a link) and need a card.</p>
         </div>
         <div className="mt-12">
           <PricingCalculator initial={2} cta={<PrimaryCta />} />
