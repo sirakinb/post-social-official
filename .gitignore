@@ -43,3 +43,7 @@ worker/dist/
 # End-to-end test results and run logs
 adzo-tests/.e2e/
 adzo-tests/.e2e-runs/
+
+# e2e.com journeys (e2e.config.ts): keep the replay cache so CI replays without model calls
+/.e2e/*
+!/.e2e/cache/
