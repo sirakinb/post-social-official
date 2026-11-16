@@ -159,3 +159,12 @@ export async function linkedinIdentities(token: LinkedInToken, capabilities: { p
   }
   return identities;
 }
+
+// A Page's current name, public address and logo. LinkedIn lets apps keep a connected Page's
+// profile for eight weeks, so it is read again every week (worker/src/avatars.ts).
+export async function linkedinPageProfile(http: Http, token: string, externalId: string) {
+  const id = externalId.slice(PAGE_PREFIX.length);
+  const page = await get(http, `${LINKEDIN_API}/organizations/${id}?projection=(id,localizedName,vanityName,logoV2(original~:playableStreams))`, token, "Reading the LinkedIn Page");
+  const name = typeof page.localizedName === "string" && page.localizedName.trim() ? page.localizedName.trim() : null;
+  return { name, handle: typeof page.vanityName === "string" && page.vanityName ? page.vanityName : name, logo: largestImage(page.logoV2?.["original~"]) ?? null };
+}
