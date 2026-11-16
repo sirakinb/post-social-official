@@ -80,6 +80,8 @@ const nextConfig: NextConfig = {
       { source: "/mcp", destination: `${api}/mcp` },
       // Saved profile pictures of connected accounts.
       { source: "/api/avatars/:path*", destination: `${api}/avatars/:path*` },
+      // Tracked links in automations' DMs (backend/functions/api: /l/{code}).
+      { source: "/l/:code", destination: `${api}/l/:code` },
       // OAuth for AI apps (ChatGPT, the Claude app): discovery, registration and tokens.
       // The sign-in page itself is /oauth/authorize, a page on this site.
       { source: "/.well-known/oauth-protected-resource", destination: `${api}/.well-known/oauth-protected-resource` },

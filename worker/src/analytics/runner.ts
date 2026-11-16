@@ -54,7 +54,7 @@ export function nextFetchAt(publishedAt: number, now: number, source: FetchSched
 }
 
 type Claimed = { destination_id: string; workspace_id: string; connected_account_id: string; platform: Platform; published_at: string };
-type Target = { platform_request_id: string | null; media_type: string | null; display_name: string; live_url: string | null; privacy_level: string | null; handle: string | null };
+type Target = { platform_request_id: string | null; media_type: string | null; display_name: string; live_url: string | null; privacy_level: string | null; handle: string | null; external_account_id?: string | null };
 const COUNTER_KEYS: Array<keyof Counters> = ["views", "likes", "comments", "shares", "saves", "reposts", "quotes"];
 
 // Official numbers win; numbers the official read could not give are taken from the public
@@ -104,7 +104,7 @@ const publicOn = (deps: MetricsDeps) => (deps.publicApiKey ? deps.publicPlatform
 async function fetchOne(deps: MetricsDeps, row: Claimed, now: () => number) {
   const [target] = await deps.sql<Target>(
     `SELECT d.platform_request_id, d.options->>'media_type' AS media_type, a.display_name, d.live_url,
-       d.options->>'privacy_level' AS privacy_level, a.handle
+       d.options->>'privacy_level' AS privacy_level, a.handle, a.external_account_id
      FROM public.destinations d JOIN public.connected_accounts a ON a.id = d.connected_account_id WHERE d.id = $1`,
     [row.destination_id],
   );
@@ -177,6 +177,7 @@ async function fetchOne(deps: MetricsDeps, row: Claimed, now: () => number) {
       result = await fetcher({
         platformId: target.platform_request_id,
         mediaType: target.media_type ?? undefined,
+        accountExternalId: target.external_account_id ?? undefined,
         token,
         http: deps.http ?? fetch,
       });

@@ -12,6 +12,8 @@ import { listAccounts, listMedia, listPosts, listResults } from "./reads";
 import { createProfile, deleteProfile, listProfiles, moveAccount, setTiktokDelivery, updateProfile } from "../connections/profiles";
 import { PERIODS, usageReport } from "../usage";
 import { xPriceText } from "../pricing";
+import { deleteComment, dmCommenter, getConversation, hideComment, listComments, listContacts, listConversations, replyToComment, sendMessage, setConversationStatus, updateContact } from "../inbox/inbox";
+import { LIMITS, MATCH_MODES, createAutomation, deleteAutomation, getAutomation, listAutomations, updateAutomation, type InboxSwitch } from "../inbox/automations";
 
 export type ApiDeps = {
   sql: Sql;
@@ -19,6 +21,7 @@ export type ApiDeps = {
   newId: () => string;
   webAppUrl: string;
   analyticsPlatforms: Platform[]; // platforms whose stats are switched on here (none: no stats tools)
+  inbox?: InboxSwitch; // where comment-to-DM automations are switched on (none: no automation tools)
   pause?: (ms: number) => Promise<void>; // how status checks wait between reads (tests skip the wait)
 };
 
@@ -35,6 +38,7 @@ export type Operation = {
   creates?: boolean; // REST answers 201 Created
   strict?: boolean; // unknown input fields are refused (400) instead of ignored
   analytics?: boolean; // only offered where stats are switched on
+  inbox?: boolean; // only offered where automations are switched on
   run: (deps: ApiDeps, caller: AgentCaller, input: Record<string, unknown>) => Promise<unknown>;
 };
 
@@ -97,6 +101,259 @@ const createPostInput = {
   },
   draft: { type: "boolean", default: false, description: "Only save a draft; do not send or schedule." },
 };
+
+// Comment-to-DM automations (backend/lib/inbox/automations.ts).
+const automationFields = {
+  name: { type: "string", maxLength: LIMITS.name, description: "A label, e.g. \"Free guide\"." },
+  platform_post_id: {
+    type: "string",
+    description: "The post (Instagram media id or Facebook post id) it answers comments on, e.g. a post's platform id from get_post. Leave out to answer comments on every post.",
+  },
+  keywords: {
+    type: "array",
+    maxItems: LIMITS.keywords,
+    items: { type: "string", maxLength: LIMITS.keyword },
+    description: "Words that trigger it, e.g. [\"guide\"]. Case doesn't matter. Empty: any comment triggers it.",
+  },
+  match_mode: {
+    type: "string",
+    enum: MATCH_MODES,
+    default: "word",
+    description: "word: the keyword as a whole word (\"guide\" fires on \"send the guide\", not \"guidebook\"); contains: anywhere, even inside a word; exact: the whole comment.",
+  },
+  exclude_keywords: { type: "array", maxItems: LIMITS.keywords, items: { type: "string", maxLength: LIMITS.keyword }, description: "Comments with any of these never trigger it." },
+  dm_message: {
+    type: "string",
+    maxLength: LIMITS.dm,
+    description: "The DM sent to the commenter (Meta allows one DM per comment, within 7 days). {username} becomes their @handle (their name on Facebook).",
+  },
+  dm_variations: { type: "array", maxItems: LIMITS.variations, items: { type: "string", maxLength: LIMITS.dm }, description: "Other versions of the DM, picked at random so repeat DMs aren't identical." },
+  dm_buttons: {
+    type: "array",
+    maxItems: LIMITS.buttons,
+    items: {
+      type: "object",
+      required: ["label", "url"],
+      properties: { label: { type: "string", maxLength: LIMITS.buttonLabel }, url: { type: "string", description: "A web address." } },
+    },
+    description: "Up to 3 link buttons on the DM. Clicks are counted.",
+  },
+  comment_reply: { type: "string", maxLength: LIMITS.reply, description: "An optional public reply to the comment, posted after the DM." },
+  comment_reply_variations: { type: "array", maxItems: LIMITS.variations, items: { type: "string", maxLength: LIMITS.reply }, description: "Other versions of the public reply, picked at random." },
+  repeat_mode: {
+    type: "string",
+    enum: ["once", "every_comment"],
+    default: "once",
+    description: "once: each person gets the DM once, however often they comment; every_comment: every matching comment gets one.",
+  },
+  is_active: { type: "boolean", default: true, description: "false saves it paused." },
+};
+const AUTOMATION_STATS =
+  "Each automation comes with its stats: triggered (comments it matched), sent, failed, skipped (e.g. the person already got the DM), clicks and people_clicked (on its link buttons).";
+const INBOX_OFF: InboxSwitch = { all: false, workspaces: [] };
+const automationOperations: Operation[] = [
+  {
+    name: "list_automations",
+    inbox: true,
+    title: "Comment-to-DM automations",
+    description: `Lists the workspace's comment-to-DM automations: when someone comments a keyword on an Instagram or Facebook Page post, they get a DM. ${AUTOMATION_STATS}`,
+    method: "GET",
+    path: "/v1/automations",
+    input: { properties: { account_id: id("connected Instagram account or Facebook Page") } },
+    readOnly: true,
+    run: (deps, caller, input) => listAutomations({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, { ...input, workspace_id: caller.workspaceId }),
+  },
+  {
+    name: "get_automation",
+    inbox: true,
+    title: "One automation and its activity",
+    description: `Shows one automation, its stats and its recent activity: each comment it matched (who, what they wrote), whether the DM went out (or why not), the public reply, and link clicks. ${AUTOMATION_STATS}`,
+    method: "GET",
+    path: "/v1/automations/{automation_id}",
+    input: { properties: { automation_id: id("automation"), limit: { type: "integer", minimum: 1, maximum: 100, default: 50, description: "How much recent activity to return." } }, required: ["automation_id"] },
+    readOnly: true,
+    run: (deps, caller, input) => getAutomation({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, input),
+  },
+  {
+    name: "create_automation",
+    inbox: true,
+    title: "Set up comment-to-DM",
+    description:
+      "Creates an automation on an Instagram account or Facebook Page: when someone comments one of the keywords (on one post, or every post), Post Social DMs them, with optional link buttons and an optional public reply. Only use it when the person asked for it; it messages real people.",
+    method: "POST",
+    path: "/v1/automations",
+    input: { properties: { account_id: id("connected Instagram account or Facebook Page"), ...automationFields }, required: ["account_id", "name", "dm_message"] },
+    creates: true,
+    strict: true,
+    run: (deps, caller, input) => createAutomation({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, { ...input, workspace_id: caller.workspaceId }),
+  },
+  {
+    name: "update_automation",
+    inbox: true,
+    title: "Change or pause an automation",
+    description: "Changes an automation. Send only the fields to change; is_active false pauses it, true turns it back on.",
+    method: "PATCH",
+    path: "/v1/automations/{automation_id}",
+    input: { properties: { automation_id: id("automation"), ...automationFields }, required: ["automation_id"] },
+    strict: true,
+    run: (deps, caller, input) => updateAutomation({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, input),
+  },
+  {
+    name: "delete_automation",
+    inbox: true,
+    title: "Delete an automation",
+    description: "Permanently deletes an automation and its activity. To stop it but keep its history, pause it with update_automation instead.",
+    method: "DELETE",
+    path: "/v1/automations/{automation_id}",
+    input: { properties: { automation_id: id("automation") }, required: ["automation_id"] },
+    destructive: true,
+    run: (deps, caller, input) => deleteAutomation({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, input),
+  },
+  {
+    name: "list_conversations",
+    inbox: true,
+    title: "DMs",
+    description:
+      "Lists DM conversations on the workspace's Instagram accounts and Facebook Pages, newest first: the person, the last message, unread count, and can_reply (Meta allows replies only within 24 hours of the person's last message; reply_until says until when).",
+    method: "GET",
+    path: "/v1/conversations",
+    input: { properties: { status: { type: "string", enum: ["open", "done", "archived", "all"], default: "open" }, account_id: id("connected Instagram account or Facebook Page"), ...paging } },
+    readOnly: true,
+    run: (deps, caller, input) => listConversations({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, { ...input, workspace_id: caller.workspaceId }),
+  },
+  {
+    name: "get_conversation",
+    inbox: true,
+    title: "One DM conversation",
+    description: "Shows one conversation's messages (oldest first), who sent each (the person, an automation, someone in Post Social, an AI agent, or the account in Instagram's or Facebook's own app), and whether a reply is allowed right now.",
+    method: "GET",
+    path: "/v1/conversations/{conversation_id}",
+    input: { properties: { conversation_id: id("conversation"), limit: { type: "integer", minimum: 1, maximum: 200, default: 50 } }, required: ["conversation_id"] },
+    readOnly: true,
+    run: (deps, caller, input) => getConversation({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, input),
+  },
+  {
+    name: "send_message",
+    inbox: true,
+    title: "Reply to a DM",
+    description:
+      "Sends a DM reply in a conversation. Allowed only within 24 hours of the person's last message (check can_reply first). Only send what the person asked you to send; it goes to a real person.",
+    method: "POST",
+    path: "/v1/conversations/{conversation_id}/messages",
+    input: { properties: { conversation_id: id("conversation"), text: { type: "string", maxLength: 1000 } }, required: ["conversation_id", "text"] },
+    creates: true,
+    strict: true,
+    run: (deps, caller, input) => sendMessage({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, input),
+  },
+  {
+    name: "update_conversation",
+    inbox: true,
+    title: "Mark a conversation done or archive it",
+    description: "Marks a conversation done or archived (either leaves the open list until the person writes again), or open again. Archived ones show only with status archived. Nothing is deleted on Instagram or Facebook: Meta doesn't let apps delete DMs.",
+    method: "PATCH",
+    path: "/v1/conversations/{conversation_id}",
+    input: { properties: { conversation_id: id("conversation"), status: { type: "string", enum: ["open", "done", "archived"] } }, required: ["conversation_id", "status"] },
+    strict: true,
+    run: (deps, caller, input) => setConversationStatus({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, input),
+  },
+  {
+    name: "list_comments",
+    inbox: true,
+    title: "Comments on your posts",
+    description:
+      "Lists comments on the workspace's Instagram and Facebook Page posts, newest first, with the post, whether it was replied to, DMed (can_dm: Meta allows one DM per comment, within 7 days) or hidden. filter unreplied shows the ones still waiting.",
+    method: "GET",
+    path: "/v1/comments",
+    input: {
+      properties: {
+        filter: { type: "string", enum: ["all", "unreplied", "hidden"], default: "all" },
+        account_id: id("connected Instagram account or Facebook Page"),
+        platform_post_id: { type: "string", description: "Only this post's comments." },
+        ...paging,
+      },
+    },
+    readOnly: true,
+    run: (deps, caller, input) => listComments({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, { ...input, workspace_id: caller.workspaceId }),
+  },
+  {
+    name: "reply_to_comment",
+    inbox: true,
+    title: "Reply to a comment",
+    description: "Posts a public reply under a comment, as the account. Only post what the person asked for.",
+    method: "POST",
+    path: "/v1/comments/{comment_id}/replies",
+    input: { properties: { comment_id: id("comment"), text: { type: "string", maxLength: 1000 } }, required: ["comment_id", "text"] },
+    creates: true,
+    strict: true,
+    run: (deps, caller, input) => replyToComment({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, input),
+  },
+  {
+    name: "dm_commenter",
+    inbox: true,
+    title: "DM a commenter",
+    description: "Sends the commenter a DM about their comment. Meta allows one per comment, within 7 days of it (check can_dm). Only send what the person asked for.",
+    method: "POST",
+    path: "/v1/comments/{comment_id}/dm",
+    input: { properties: { comment_id: id("comment"), text: { type: "string", maxLength: 1000 } }, required: ["comment_id", "text"] },
+    creates: true,
+    strict: true,
+    run: (deps, caller, input) => dmCommenter({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, input),
+  },
+  {
+    name: "hide_comment",
+    inbox: true,
+    title: "Hide or unhide a comment",
+    description: "Hides a comment from everyone except its writer (hidden: true), or shows it again (hidden: false). Nothing is deleted.",
+    method: "POST",
+    path: "/v1/comments/{comment_id}/hide",
+    input: { properties: { comment_id: id("comment"), hidden: { type: "boolean", default: true } }, required: ["comment_id"] },
+    strict: true,
+    run: (deps, caller, input) => hideComment({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, input),
+  },
+  {
+    name: "delete_comment",
+    inbox: true,
+    title: "Delete a comment",
+    description:
+      "Deletes a comment on an Instagram or Facebook Page post for good: someone's comment, or one of the account's own replies (listed under each comment as replies). It can't be undone. Threads doesn't allow this; hide the reply instead.",
+    method: "DELETE",
+    path: "/v1/comments/{comment_id}",
+    input: { properties: { comment_id: id("comment") }, required: ["comment_id"] },
+    strict: true,
+    destructive: true,
+    run: (deps, caller, input) => deleteComment({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, input),
+  },
+  {
+    name: "list_contacts",
+    inbox: true,
+    title: "Contacts",
+    description: "Lists people who commented on or messaged the workspace's Instagram accounts and Facebook Pages, most recent first, with their email (when captured), tags, notes, comment count and whether an automation DMed them. Search by handle, name or email; filter by tag or account.",
+    method: "GET",
+    path: "/v1/contacts",
+    input: { properties: { search: { type: "string" }, tag: { type: "string" }, account_id: id("connected Instagram account or Facebook Page"), ...paging } },
+    readOnly: true,
+    run: (deps, caller, input) => listContacts({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, { ...input, workspace_id: caller.workspaceId }),
+  },
+  {
+    name: "update_contact",
+    inbox: true,
+    title: "Edit a contact",
+    description: "Sets a contact's email, tags (replaces the list) or notes. Send only the fields to change.",
+    method: "PATCH",
+    path: "/v1/contacts/{contact_id}",
+    input: {
+      properties: {
+        contact_id: id("contact"),
+        email: { type: ["string", "null"] },
+        tags: { type: "array", maxItems: 20, items: { type: "string", maxLength: 40 } },
+        notes: { type: ["string", "null"], maxLength: 2000 },
+      },
+      required: ["contact_id"],
+    },
+    strict: true,
+    run: (deps, caller, input) => updateContact({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, input),
+  },
+];
 
 const normalized = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "");
 
@@ -602,9 +859,12 @@ export const operations: Operation[] = [
       return postId ? settled(deps, caller, read, (r) => r.results.some((d) => sending(String(d.status)))) : read();
     },
   },
+  ...automationOperations,
 ];
 
-// The operations offered in an environment: stats tools only where stats are switched on.
-export function availableOperations(deps: Pick<ApiDeps, "analyticsPlatforms">) {
-  return operations.filter((op) => !op.analytics || deps.analyticsPlatforms.length > 0);
+// The operations offered in an environment: stats tools only where stats are switched on,
+// automation tools only where automations are.
+export function availableOperations(deps: Pick<ApiDeps, "analyticsPlatforms"> & { inbox?: InboxSwitch }) {
+  const inboxHere = Boolean(deps.inbox && (deps.inbox.all || deps.inbox.workspaces.length));
+  return operations.filter((op) => (!op.analytics || deps.analyticsPlatforms.length > 0) && (!op.inbox || inboxHere));
 }
