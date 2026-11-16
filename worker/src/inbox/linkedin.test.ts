@@ -10,7 +10,7 @@ const COMMENT = "urn:li:comment:(urn:li:activity:5,77)";
 
 function deps(routes: Array<(url: URL, init: RequestInit) => Response | undefined>, rows: { comment?: Record<string, unknown> } = {}) {
   const writes: Array<{ query: string; params: unknown[] }> = [];
-  const calls: Array<{ method: string; url: URL; body: unknown }> = [];
+  const calls: Array<{ method: string; url: URL; body: unknown; headers: Headers }> = [];
   const sql = (async (query: string, params: unknown[] = []) => {
     if (query.includes("FROM public.connected_accounts a") && query.includes("organization:%")) return [PAGE];
     if (query.includes("FROM public.destinations")) return [{ platform_request_id: POST }];
@@ -20,7 +20,7 @@ function deps(routes: Array<(url: URL, init: RequestInit) => Response | undefine
   }) as unknown as Sql;
   const http = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const url = new URL(String(input));
-    calls.push({ method: init.method ?? "GET", url, body: init.body ? JSON.parse(String(init.body)) : undefined });
+    calls.push({ method: init.method ?? "GET", url, body: init.body ? JSON.parse(String(init.body)) : undefined, headers: new Headers(init.headers) });
     for (const route of routes) {
       const hit = route(url, init);
       if (hit) return hit;
@@ -80,6 +80,8 @@ describe("LinkedIn Page comments", () => {
     await sendLinkedIn(d, PAGE, { kind: "comment_reply", comment_id: "c1", text: "Thank you!" });
     expect(decodeURIComponent(calls[0].url.pathname)).toBe(`/rest/socialActions/${COMMENT}/comments`);
     expect(calls[0].body).toEqual({ actor: "urn:li:organization:101", object: POST, parentComment: COMMENT, message: { text: "Thank you!" } });
+    // LinkedIn refuses a comment's id in the address under the Rest.li 2.0 header.
+    expect(calls[0].headers.get("x-restli-protocol-version")).toBeNull();
     expect(writes.some((w) => w.query.includes("from_account") && w.params[2] === "urn:li:comment:(urn:li:activity:5,90)")).toBe(true);
     expect(writes.some((w) => w.query.includes("SET replied_at = now()"))).toBe(true);
   });

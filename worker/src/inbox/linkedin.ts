@@ -29,13 +29,15 @@ const tokenOf = (deps: InboxDeps, account: { id: string; display_name: string })
 type PageAccount = { id: string; workspace_id: string; platform: "linkedin"; display_name: string; external_account_id: string };
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
-async function linkedin(deps: InboxDeps, token: string, path: string, init: { method?: string; body?: unknown } = {}): Promise<{ body: Json; headers: Headers }> {
+// restli: false for addresses with a comment's id in them (urn:li:comment:(…,…)): with the
+// Rest.li 2.0 header LinkedIn refuses them as a "syntax exception in path variables".
+async function linkedin(deps: InboxDeps, token: string, path: string, init: { method?: string; body?: unknown; restli?: boolean } = {}): Promise<{ body: Json; headers: Headers }> {
   const response = await (deps.http ?? fetch)(`${LINKEDIN_API}${path}`, {
     method: init.method ?? "GET",
     headers: {
       Authorization: `Bearer ${token}`,
       "LinkedIn-Version": LINKEDIN_VERSION,
-      "X-Restli-Protocol-Version": "2.0.0",
+      ...(init.restli === false ? {} : { "X-Restli-Protocol-Version": "2.0.0" }),
       ...(init.body === undefined ? {} : { "Content-Type": "application/json" }),
     },
     ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
@@ -141,6 +143,7 @@ export async function sendLinkedIn(deps: InboxDeps, account: { id: string; exter
     const { body, headers } = await linkedin(deps, token, `/socialActions/${encodeURIComponent(comment.platform_comment_id)}/comments`, {
       method: "POST",
       body: { actor: page, object: comment.platform_post_id, parentComment: comment.platform_comment_id, message: { text: item.text ?? "" } },
+      restli: false,
     });
     const urn = typeof body.commentUrn === "string" ? body.commentUrn : null;
     const id = headers.get("x-restli-id");
