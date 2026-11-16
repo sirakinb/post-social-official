@@ -581,6 +581,22 @@ describe("LinkedIn", () => {
     expect(h.checkpoint.post_id).toBe("urn:li:share:123");
   });
 
+  it("posts as a Company Page, always public, with the Page owning its images", async () => {
+    let posted: Record<string, any> = {}; // eslint-disable-line @typescript-eslint/no-explicit-any
+    let owner = "";
+    const h = harness("linkedin", { kind: "linkedin", visibility: "CONNECTIONS" }, [
+      (u, i) => (li("/images")(u) && method(i) === "POST" ? ((owner = bodyOf(i).initializeUploadRequest.owner), json({ value: { uploadUrl: "https://www.linkedin.com/img", image: "urn:li:image:P1" } })) : undefined),
+      (u) => (u.hostname === "r2.example" ? new Response(new Uint8Array([1])) : undefined),
+      (u, i) => (u.hostname === "www.linkedin.com" && method(i) === "PUT" ? new Response(null, { status: 201 }) : undefined),
+      (u) => (u.pathname.startsWith("/rest/images/") ? json({ status: "AVAILABLE" }) : undefined),
+      (u, i) => (li("/posts")(u) ? ((posted = bodyOf(i)), new Response(null, { status: 201, headers: { "x-restli-id": "urn:li:share:77" } })) : undefined),
+    ], { media: [{}] });
+    h.ctx.bundle.account.externalId = "organization:101";
+    expect(await publishLinkedIn(h.ctx)).toMatchObject({ kind: "published", platformId: "urn:li:share:77" });
+    expect(owner).toBe("urn:li:organization:101");
+    expect(posted).toMatchObject({ author: "urn:li:organization:101", visibility: "PUBLIC" });
+  });
+
   it("escapes text and turns hashtags into LinkedIn hashtags", () => {
     expect(linkedinCommentary("a_b @me [x] <y> #one #two_three C#")).toBe("a\\_b \\@me \\[x\\] \\<y\\> {hashtag|\\#|one} {hashtag|\\#|two\\_three} C\\#");
     expect(linkedinCommentary("#start")).toBe("{hashtag|\\#|start}");

@@ -38,12 +38,20 @@ export async function GET(request: NextRequest) {
     body: JSON.stringify({ platform: query.get("platform"), params }),
     cache: "no-store",
   }).catch(() => null);
-  const result = (await response?.json().catch(() => null)) as { ok?: boolean; returnTo?: string | null; message?: string; platform?: string; error?: string } | null;
+  const result = (await response?.json().catch(() => null)) as { ok?: boolean; returnTo?: string | null; message?: string; platform?: string; error?: string; choose?: string } | null;
   if (!response) return fail("unreachable");
   if (!response.ok || !result) return fail("connect_failed", requestError(response.status, result?.error));
 
   // returnTo was checked against the web app's addresses when the sign-in started.
   const target = new URL(result.returnTo ?? accounts.toString());
+  // Several new accounts came back (a LinkedIn profile and Pages): the person picks which.
+  if (result.ok && result.choose && /^[0-9a-f-]{36}$/i.test(result.choose)) {
+    const choose = new URL("/beta/accounts/choose", request.nextUrl.origin);
+    choose.searchParams.set("pending", result.choose);
+    const workspace = target.searchParams.get("workspace");
+    if (workspace) choose.searchParams.set("workspace", workspace);
+    return send(choose, result.message ? { kind: "notice", text: result.message } : undefined);
+  }
   if (result.ok) {
     target.searchParams.set("connected", result.platform ?? "");
     target.searchParams.set("message", "connected");

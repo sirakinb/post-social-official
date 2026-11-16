@@ -6,7 +6,7 @@ const media = (overrides: Partial<MediaFacts> = {}): MediaFacts => ({
   size_bytes: 1_000_000, width: 1080, height: 1920, duration_seconds: 30, ...overrides,
 });
 const image = (overrides: Partial<MediaFacts> = {}) => media({ name: "photo.jpg", media_type: "image", mime_type: "image/jpeg", duration_seconds: null, width: 1080, height: 1350, ...overrides });
-const check = (options: DestinationOptions, files: MediaFacts[], caption = "Hello", capabilities?: { video_max_seconds?: number }) =>
+const check = (options: DestinationOptions, files: MediaFacts[], caption = "Hello", capabilities?: { video_max_seconds?: number; account_kind?: "profile" | "page" }) =>
   destinationProblems({ options, caption, media: files, capabilities });
 
 describe("normalizeOptions", () => {
@@ -163,6 +163,12 @@ describe("LinkedIn", () => {
     expect(normalizeOptions("linkedin", {}).options).toEqual({ kind: "linkedin", media_type: undefined, text: undefined, title: undefined, visibility: "PUBLIC" });
     expect(normalizeOptions("linkedin", { visibility: "FRIENDS" }).problems).toEqual(["Choose who can see the LinkedIn post: PUBLIC or CONNECTIONS."]);
     expect(normalizeOptions("linkedin", { media_type: "reel" }).problems).toEqual(["Choose a LinkedIn post type: text, image or video."]);
+  });
+
+  it("keeps Company Page posts public", () => {
+    expect(check({ ...linkedin, visibility: "CONNECTIONS" }, [], "Hello", { account_kind: "page" })).toEqual(["LinkedIn Company Page posts are always public; choose PUBLIC visibility."]);
+    expect(check({ ...linkedin, visibility: "PUBLIC" }, [], "Hello", { account_kind: "page" })).toEqual([]);
+    expect(check({ ...linkedin, visibility: "CONNECTIONS" }, [], "Hello", { account_kind: "profile" })).toEqual([]);
   });
 });
 
