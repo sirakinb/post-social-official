@@ -42,6 +42,15 @@ database commands and silently hits whichever environment is linked.
 
 ## Dev to prod
 
+**Releases run on GitHub Actions** (`.github/workflows/release.yml`): every push to `main`
+(the "Release to production" PR, merged with the owner's OK) backs up prod, applies the
+migrations already verified on dev, deploys the four functions, the worker and the website,
+then checks each answers. Nobody types `prod`; the merge is the confirmation. It needs two
+repository secrets, `INSFORGE_USER_API_KEY` (InsForge dashboard → Profile → API Keys) and
+`VERCEL_TOKEN`. A failed step stops the run; fix and re-run it from the Actions tab (it's
+safe to re-run: migrations already applied are skipped and deploys replace the last one).
+The commands below still work from a Mac for a manual release, and still ask for `prod`.
+
 Git is the source of truth. Schema changes are SQL files in `migrations/`, applied
 in order to dev, then to prod, exactly the same files.
 
@@ -64,10 +73,14 @@ in order to dev, then to prod, exactly the same files.
    only from a synced `main`).
    It then shows any differences between `insforge.toml` and prod's settings and asks
    again before applying them.
-5. **Deploy the web app.** Vercel builds a preview for every pull request (pointing at
-   dev). Merging to `main` does not deploy production (set in `vercel.json`).
-   Production goes out only with the owner's OK, via `npm run deploy:prod`, which
-   refuses to run unless you are on a clean `main` that matches GitHub.
+5. **Deploy the web app.** Previews point at dev and build only when someone will look at
+   them (`scripts/vercel-ignore.mjs`): `dev` builds after each merge unless nothing the
+   website uses changed (worker, migrations, functions, tests, docs); a feature branch
+   builds only when its latest commit message contains `[preview]`; `staging` never
+   builds. Vercel itself doesn't deploy production on a merge (set in `vercel.json`): the
+   release workflow does, after the backend, so the site never goes out ahead of it. By
+   hand: `npm run deploy:prod`, which refuses to run unless you are on a clean `main` that
+   matches GitHub.
 6. **Redeploy code.** Functions and the worker are deployed to each environment
    separately; deploy prod after the migration lands.
 

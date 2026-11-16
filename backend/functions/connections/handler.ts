@@ -20,8 +20,9 @@
 //   POST /meta/webhooks                 Instagram comment and message events (signed)
 import { ApiError, type Caller } from "../../lib/access";
 import { accountLimitMessage } from "../../lib/billing";
+import { trimTrailingSlashes } from "../../lib/text";
 import type { SignedInUser } from "../../lib/insforge-admin";
-import { callbackUrl, completeConnection, disconnectAccount, finishingOrigin, isPlatform, startConnection, type ConnectionDeps } from "../../lib/connections/service";
+import { callbackUrl, chooseAccounts, completeConnection, disconnectAccount, finishingOrigin, isPlatform, pendingChoices, startConnection, type ConnectionDeps } from "../../lib/connections/service";
 import { deletionStatus, handleDataDeletion, handleDeauthorize } from "../../lib/connections/meta-deletion";
 import { createProfile, deleteProfile, moveAccount, setTiktokDelivery, updateProfile } from "../../lib/connections/profiles";
 import { clientKey, clientMetadata, publicJwk } from "../../lib/connections/atproto";
@@ -36,6 +37,8 @@ export type ConnectionsHandlerDeps = ConnectionDeps & {
 };
 
 const JSON_HEADERS = { "Content-Type": "application/json", "Cache-Control": "no-store" };
+
+const MAX_PATH_LENGTH = 512;
 
 function json(status: number, body: unknown, extra: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), { status, headers: { ...JSON_HEADERS, ...extra } });
@@ -55,6 +58,8 @@ const PERSON_ACTIONS = {
   "/profiles/delete": (deps: ConnectionsHandlerDeps, caller: Caller, body: Record<string, unknown>) => deleteProfile(deps.sql, caller, body),
   "/accounts/move": (deps: ConnectionsHandlerDeps, caller: Caller, body: Record<string, unknown>) => moveAccount(deps.sql, caller, body),
   "/accounts/tiktok-delivery": (deps: ConnectionsHandlerDeps, caller: Caller, body: Record<string, unknown>) => setTiktokDelivery(deps.sql, caller, body),
+  "/accounts/pending": (deps: ConnectionsHandlerDeps, caller: Caller, body: Record<string, unknown>) => pendingChoices(deps, caller, body),
+  "/accounts/choose": (deps: ConnectionsHandlerDeps, caller: Caller, body: Record<string, unknown>) => chooseAccounts(deps, caller, body),
 };
 const isPersonAction = (path: string): path is keyof typeof PERSON_ACTIONS => Object.hasOwn(PERSON_ACTIONS, path);
 
@@ -66,7 +71,10 @@ function redirectTo(base: string, params: Record<string, string>) {
 
 export function createConnectionsHandler(deps: ConnectionsHandlerDeps) {
   return async function handle(request: Request): Promise<Response> {
-    const path = new URL(request.url).pathname.replace(/\/+$/, "");
+    const pathname = new URL(request.url).pathname;
+    // No address here is anywhere near this long; refuse before any parsing.
+    if (pathname.length > MAX_PATH_LENGTH) return json(404, { error: "Not found." });
+    const path = trimTrailingSlashes(pathname);
     const method = request.method;
 
     try {
@@ -77,7 +85,7 @@ export function createConnectionsHandler(deps: ConnectionsHandlerDeps) {
         // The web app finishes it as the signed-in person who started it.
         const query = new URL(request.url).searchParams;
         const origin = await finishingOrigin(deps, callback[1], query.get("state"));
-        if (!origin) return redirectTo(deps.webAppHome, { error: "This connection request expired or was already used. Start again." });
+        if (!origin) return redirectTo(deps.webAppHome, { error: "connect_expired" });
         const finish = new URL("/beta/connect/finish", origin);
         finish.searchParams.set("platform", callback[1]);
         query.forEach((value, key) => finish.searchParams.set(key, value));

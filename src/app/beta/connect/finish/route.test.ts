@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { GET } from "./route";
 import { GET as youtubeCallback } from "../../../oauth/youtube/callback/route";
+import { FLASH_COOKIE, readFlash } from "@/lib/beta/flash";
 
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => ({ value: "person-token" }) }) }));
 vi.mock("@insforge/sdk/ssr", () => ({ getAccessTokenCookieName: () => "access" }));
@@ -34,7 +35,41 @@ describe("finishing a social account connection", () => {
   it("shows the refusal when someone else's link was used", async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ ok: false, returnTo: null, platform: "instagram", message: "This Instagram connection request expired, was already used, or was started by someone else." })));
     const response = await GET(new NextRequest("https://www.postsocial.xyz/beta/connect/finish?platform=instagram&state=s1&code=c1"));
-    expect(new URL(response.headers.get("location")!).searchParams.get("error")).toMatch(/someone else/);
+    // The address carries only a code; the server's own words ride in a short-lived cookie.
+    expect(new URL(response.headers.get("location")!).searchParams.get("error")).toBe("connect_failed");
+    expect(response.headers.get("location")).not.toMatch(/someone/);
+    expect(readFlash(response.cookies.get(FLASH_COOKIE)?.value, "error")).toMatch(/someone else/);
+    expect(response.headers.get("set-cookie")).toMatch(/HttpOnly/i);
+  });
+
+  it("puts the success message in the cookie and only a code in the address", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ ok: true, returnTo: null, platform: "instagram", message: "Connected Test IG." })));
+    const response = await GET(new NextRequest("https://www.postsocial.xyz/beta/connect/finish?platform=instagram&state=s1&code=c1"));
+    const location = new URL(response.headers.get("location")!);
+    expect(location.searchParams.get("message")).toBe("connected");
+    expect(readFlash(response.cookies.get(FLASH_COOKIE)?.value, "notice")).toBe("Connected Test IG.");
+  });
+
+  it("sends a sign-in with several new accounts to the page that asks which to add", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ ok: true, returnTo: "https://www.postsocial.xyz/beta/accounts?workspace=w", platform: "linkedin", choose: "11111111-1111-4111-8111-111111111111", message: "Choose which LinkedIn accounts to add." })));
+    const response = await GET(new NextRequest("https://www.postsocial.xyz/beta/connect/finish?platform=linkedin&state=s1&code=c1"));
+    const location = new URL(response.headers.get("location")!);
+    expect(location.pathname).toBe("/beta/accounts/choose");
+    expect(location.searchParams.get("pending")).toBe("11111111-1111-4111-8111-111111111111");
+    expect(location.searchParams.get("workspace")).toBe("w");
+  });
+
+  it("ignores a malformed choice id", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ ok: true, returnTo: null, platform: "linkedin", choose: "../evil", message: "Connected." })));
+    const response = await GET(new NextRequest("https://www.postsocial.xyz/beta/connect/finish?platform=linkedin&state=s1&code=c1"));
+    expect(new URL(response.headers.get("location")!).pathname).toBe("/beta/accounts");
+  });
+
+  it("uses fixed codes when it can't reach the server", async () => {
+    fetchMock.mockRejectedValue(new Error("down"));
+    const response = await GET(new NextRequest("https://www.postsocial.xyz/beta/connect/finish?platform=instagram&state=s1&code=c1"));
+    expect(new URL(response.headers.get("location")!).searchParams.get("error")).toBe("unreachable");
+    expect(response.cookies.get(FLASH_COOKIE)).toBeUndefined();
   });
 
   it("YouTube's callback hands Google's answer to the finish page", () => {

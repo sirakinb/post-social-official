@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { GetStartedPanel } from "@/components/beta/get-started";
 import { GET_STARTED_HIDDEN_COOKIE, loadGetStarted, stepsDone } from "@/lib/beta/get-started";
+import { ACCOUNT_ERRORS, ACCOUNT_NOTICES, FLASH_COOKIE, noticeText, readFlash } from "@/lib/beta/flash";
 import { loadViewer } from "@/lib/beta/workspace";
 import { hideGetStarted } from "./actions";
 import { ConnectionsView, type Profile, type SocialAccount } from "./connections-view";
@@ -15,7 +16,12 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
   const COLUMNS = "id, platform, handle, display_name, avatar_url, health, health_reason, capabilities, created_at";
   const accountsQuery = (columns: string) => client.database.from("connected_accounts").select(columns).eq("workspace_id", workspace.id).order("platform").order("display_name");
   // The get-started steps: for people who can post, until all three are done or hidden.
-  const showSteps = workspace.role !== "reviewer" && !(await cookies()).get(GET_STARTED_HIDDEN_COOKIE);
+  const jar = await cookies();
+  const showSteps = workspace.role !== "reviewer" && !jar.get(GET_STARTED_HIDDEN_COOKIE);
+  // Only known codes from the address are shown, in our own words (see lib/beta/flash).
+  const flash = jar.get(FLASH_COOKIE)?.value;
+  const error = noticeText(ACCOUNT_ERRORS, params.error, readFlash(flash, "error"));
+  const notice = error ? null : noticeText(ACCOUNT_NOTICES, params.message, readFlash(flash, "notice"));
   const [accountsResult, { data: lastPosts }, profilesResult, deliveryResult, steps] = await Promise.all([
     accountsQuery(`${COLUMNS}, profile_id`),
     client.database.from("destinations").select("connected_account_id, updated_at").eq("workspace_id", workspace.id).eq("status", "published").order("updated_at", { ascending: false }).limit(200),
@@ -34,7 +40,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
   const lastPosted = new Map<string, string>();
   for (const d of (lastPosts ?? []) as Array<{ connected_account_id: string; updated_at: string }>) if (!lastPosted.has(d.connected_account_id)) lastPosted.set(d.connected_account_id, d.updated_at);
 
-  const accounts: SocialAccount[] = ((accountRows ?? []) as unknown as Array<{ id: string; platform: string; handle: string; display_name: string; avatar_url: string | null; health: string; health_reason: string | null; capabilities: { post_types?: string[] } | null; created_at: string; profile_id?: string | null }>).map((a) => ({
+  const accounts: SocialAccount[] = ((accountRows ?? []) as unknown as Array<{ id: string; platform: string; handle: string; display_name: string; avatar_url: string | null; health: string; health_reason: string | null; capabilities: { post_types?: string[]; account_kind?: "profile" | "page" } | null; created_at: string; profile_id?: string | null }>).map((a) => ({
     id: a.id,
     platform: a.platform,
     handle: a.handle,
@@ -43,6 +49,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
     health: a.health,
     reason: a.health_reason,
     postTypes: a.capabilities?.post_types ?? [],
+    accountKind: a.capabilities?.account_kind ?? null,
     connectedAt: a.created_at,
     lastPostedAt: lastPosted.get(a.id) ?? null,
     profileId: a.profile_id ?? null,
@@ -61,8 +68,8 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
       filter={params.profile ?? null}
       connectProfile={params.connect ? (params.profile ?? null) : null}
       loadError={Boolean(accountError)}
-      notice={params.message ?? null}
-      error={params.error ?? null}
+      notice={notice}
+      error={error}
       requested={params.connect ?? null}
       getStarted={steps && stepsDone(steps) < 3 ? <GetStartedPanel steps={steps} hide={hideGetStarted} /> : null}
     />

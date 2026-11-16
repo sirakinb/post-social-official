@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { BILLING_ERRORS, FLASH_COOKIE, noticeText, readFlash } from "@/lib/beta/flash";
 import { callServer, callServerResult, loadViewer } from "@/lib/beta/workspace";
 import { cn } from "@/lib/utils";
 import { FREE_ACCOUNTS, PRICE_BANDS, X_PRICES } from "@/lib/pricing";
@@ -29,7 +31,6 @@ export type BillingStatus = {
   invoices: Array<{ id: string; number: string | null; date: string | null; total: number; status: string; pdf: string | null; url: string | null }>;
 };
 
-const ordinal = (n: number) => `${n}${n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th"}`;
 const cents = (n: number) => `${Math.round(n * 100)}¢`;
 const money = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const day = (iso: string | null, opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" }) => (iso ? new Date(iso).toLocaleDateString("en-US", { ...opts, timeZone: "UTC" }) : "");
@@ -83,7 +84,9 @@ const primary = "inline-flex h-8 flex-none items-center rounded-lg bg-ps-plum px
 
 export default async function BillingPage({ searchParams }: { searchParams: Promise<{ checkout?: string; error?: string; saved?: string }> }) {
   const { workspace } = await loadViewer("/beta/billing");
-  const { checkout, error, saved } = await searchParams;
+  const { checkout, error: errorCode, saved } = await searchParams;
+  // Only known codes from the address are shown, in our own words (see lib/beta/flash).
+  const error = noticeText(BILLING_ERRORS, errorCode, readFlash((await cookies()).get(FLASH_COOKIE)?.value, "error"));
   // Back from Stripe Checkout: confirm it here so Paid turns on without waiting for Stripe.
   if (workspace && checkout) await callServer("billing_confirm", { workspace_id: workspace.id, session_id: checkout });
   const result = workspace ? await callServerResult<BillingStatus>("billing_status", { workspace_id: workspace.id }) : null;
@@ -235,15 +238,15 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
                 )}
                 {near && (
                   <p role="status" className="mt-2 text-xs text-ps-attention">
-                    {status.x.spent >= (xLimit ?? 0) ? "You've reached your X limit: new X posts won't go out until next month. Raise the limit below to keep posting." : "Close to your X limit."}
+                    {status.x.spent >= (xLimit ?? 0) ? "You've reached this month's X limit, so new X posts are paused. Raise the limit below to keep posting." : "Close to your X limit."}
                   </p>
                 )}
                 <p className="mt-3 text-xs text-ps-subtle">
                   {paying
                     ? status.x.set_cap === 0
                       ? "X posting is off: your monthly X limit is $0. Raise it to post to X."
-                      : `X posts are ${xPrice}. At your limit, new X posts don't go out until next month; everything else keeps posting.`
-                    : `Posting to X needs a card. Your plan stays $0 until your ${ordinal(status.free_accounts + 1)} account; X posts are ${xPrice}.`}
+                      : `X posts are ${xPrice}, added to your monthly bill. The monthly limit caps what X can cost: once this month's X posts reach it, new ones pause until next month or until you raise it.`
+                    : `Posting to X needs a card. X posts are ${xPrice}, added to your monthly bill.`}
                 </p>
                 {!paying && manage && (
                   <form action={addCard} data-rewardful="true" className="mt-3">

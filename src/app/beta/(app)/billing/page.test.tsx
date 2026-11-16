@@ -15,6 +15,8 @@ vi.mock("@/lib/beta/workspace", () => ({
   },
 }));
 vi.mock("./actions", () => ({ addCard: async () => {}, manageBilling: async () => {}, saveXCap: async () => {} }));
+const jar = vi.hoisted(() => ({ flash: undefined as string | undefined }));
+vi.mock("next/headers", () => ({ cookies: async () => ({ get: (name: string) => (name === "ps_flash" && jar.flash ? { value: jar.flash } : undefined) }) }));
 
 const base: BillingStatus = {
   plan: { id: "free", name: "Free", comped: false },
@@ -53,6 +55,7 @@ const paid: BillingStatus = {
 
 beforeEach(() => {
   server.calls = [];
+  jar.flash = undefined;
 });
 
 describe("BillingPage", () => {
@@ -66,7 +69,7 @@ describe("BillingPage", () => {
     const rate = within(screen.getByRole("region", { name: "Your rate" }));
     expect(rate.getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Accounts 1–2Free2 of yours", "Accounts 3–10$5/mo\u00a0", "Accounts 11–100$2.50/mo\u00a0", "Accounts 101+$1/mo\u00a0"]);
     const x = within(screen.getByRole("region", { name: "X spending" }));
-    expect(x.getByText("Posting to X needs a card. Your plan stays $0 until your 3rd account; X posts are 5¢ each (25¢ with a link).")).toBeInTheDocument();
+    expect(x.getByText("Posting to X needs a card. X posts are 5¢ each (25¢ with a link), added to your monthly bill.")).toBeInTheDocument();
     expect(x.getByRole("button", { name: "Add a card" })).toBeInTheDocument();
     expect(screen.queryByText(/paused|until next month|^limit /)).toBeNull();
     expect(screen.queryByLabelText("X monthly limit in dollars")).toBeNull();
@@ -177,5 +180,22 @@ describe("BillingPage", () => {
     expect(screen.queryByLabelText("X monthly limit in dollars")).toBeNull();
     expect(screen.getByText("Ask a workspace owner or admin to add a card.")).toBeInTheDocument();
     expect(screen.getByText("Only owners and admins can change billing.")).toBeInTheDocument();
+  });
+
+  it("shows only its own wording for an error in the address, never the address's text", async () => {
+    server.status = base;
+    render(await BillingPage({ searchParams: Promise.resolve({ error: "Your card was declined. Call 555-0100 now." }) }));
+    expect(screen.queryByText(/555-0100/)).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("maps a known error code to fixed wording, or to our server's message from the cookie", async () => {
+    server.status = base;
+    const { unmount } = render(await BillingPage({ searchParams: Promise.resolve({ error: "unreachable" }) }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Post Social couldn't be reached.");
+    unmount();
+    jar.flash = "error:" + encodeURIComponent("Only owners and admins can add a card.");
+    render(await BillingPage({ searchParams: Promise.resolve({ error: "billing_failed" }) }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Only owners and admins can add a card.");
   });
 });

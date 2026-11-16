@@ -110,7 +110,18 @@ describe("Instagram", () => {
       const h = harness("instagram", { kind: "instagram", media_type: "reel", trial_reel: "manual" }, [refuse], reelMedia);
       const error = await publishInstagram(h.ctx).catch((e: unknown) => e);
       expect(error).toMatchObject({ code: "trial_reel_not_eligible", retryable: false });
-      expect(failureMessage(error as PublishError)).toBe("This Instagram account can't post trial reels yet: Instagram only allows them for accounts with enough followers. Post it as a normal Reel instead.");
+      expect(failureMessage(error as PublishError)).toBe("This Instagram account can't post trial reels yet: Instagram only allows them for accounts with enough followers. Turn off Trial reel and post it as a normal Reel instead.");
+    });
+
+    it("recognizes the trial reel refusal by its code when Instagram words it in another language", async () => {
+      const refuse = (u: URL, i: RequestInit) =>
+        method(i) === "POST" && u.pathname.endsWith("/acct-1/media")
+          ? new Response(JSON.stringify({ error: { code: 10, message: "Аккаунт Instagram не соответствует требованию к числу подписчиков для создания пробных видео Reels." } }), { status: 400 })
+          : undefined;
+      const h = harness("instagram", { kind: "instagram", media_type: "reel", trial_reel: "auto" }, [refuse], reelMedia);
+      const error = await publishInstagram(h.ctx).catch((e: unknown) => e);
+      expect(error).toMatchObject({ code: "trial_reel_not_eligible", retryable: false });
+      expect(failureMessage(error as PublishError)).not.toMatch(/Контакт|Аккаунт|Contact support/);
     });
 
     it("sends a normal Reel without trial_params", async () => {
@@ -568,6 +579,22 @@ describe("LinkedIn", () => {
     expect(headers.get("linkedin-version")).toMatch(/^\d{6}$/);
     expect(headers.get("x-restli-protocol-version")).toBe("2.0.0");
     expect(h.checkpoint.post_id).toBe("urn:li:share:123");
+  });
+
+  it("posts as a Company Page, always public, with the Page owning its images", async () => {
+    let posted: Record<string, any> = {}; // eslint-disable-line @typescript-eslint/no-explicit-any
+    let owner = "";
+    const h = harness("linkedin", { kind: "linkedin", visibility: "CONNECTIONS" }, [
+      (u, i) => (li("/images")(u) && method(i) === "POST" ? ((owner = bodyOf(i).initializeUploadRequest.owner), json({ value: { uploadUrl: "https://www.linkedin.com/img", image: "urn:li:image:P1" } })) : undefined),
+      (u) => (u.hostname === "r2.example" ? new Response(new Uint8Array([1])) : undefined),
+      (u, i) => (u.hostname === "www.linkedin.com" && method(i) === "PUT" ? new Response(null, { status: 201 }) : undefined),
+      (u) => (u.pathname.startsWith("/rest/images/") ? json({ status: "AVAILABLE" }) : undefined),
+      (u, i) => (li("/posts")(u) ? ((posted = bodyOf(i)), new Response(null, { status: 201, headers: { "x-restli-id": "urn:li:share:77" } })) : undefined),
+    ], { media: [{}] });
+    h.ctx.bundle.account.externalId = "organization:101";
+    expect(await publishLinkedIn(h.ctx)).toMatchObject({ kind: "published", platformId: "urn:li:share:77" });
+    expect(owner).toBe("urn:li:organization:101");
+    expect(posted).toMatchObject({ author: "urn:li:organization:101", visibility: "PUBLIC" });
   });
 
   it("escapes text and turns hashtags into LinkedIn hashtags", () => {

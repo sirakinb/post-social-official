@@ -32,11 +32,26 @@ ensure_dev() {
 
 switch_to_prod() {
   trap ensure_dev EXIT
-  "${CLI[@]}" branch switch --parent >/dev/null
+  # Already on prod (a run that was stopped before switching back): switching again fails
+  # with "No parent backup found", so go straight on; the trap still returns to dev.
+  if [[ "$(linked_name)" != "$PROD_NAME" ]]; then
+    "${CLI[@]}" branch switch --parent >/dev/null
+  fi
   [[ "$(linked_name)" == "$PROD_NAME" ]] || { echo "Could not link to prod" >&2; exit 1; }
 }
 
+# The release workflow (.github/workflows/release.yml) runs on GitHub Actions from a push to
+# main: its checkout is the pushed commit (a detached HEAD), so main is checked by the ref.
+in_release_workflow() {
+  [[ "${GITHUB_ACTIONS:-}" == "true" && "${POST_SOCIAL_RELEASE:-}" == "prod" && "${GITHUB_REF:-}" == "refs/heads/main" ]]
+}
+
 require_releasable_main() {
+  if in_release_workflow; then
+    git fetch -q origin main
+    [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]] || { echo "This run is not at the latest main; a newer release runs after it." >&2; exit 1; }
+    return
+  fi
   [[ "$(git rev-parse --abbrev-ref HEAD)" == "main" ]] || { echo "Prod changes only from main." >&2; exit 1; }
   [[ -z "$(git status --porcelain)" ]] || { echo "Working tree has uncommitted changes." >&2; exit 1; }
   git fetch -q origin main
@@ -45,6 +60,12 @@ require_releasable_main() {
 
 confirm_prod() {
   local answer
+  # The release workflow is the confirmation: it only runs for a merge to main, which Aki
+  # approves in the thread (and optionally again on the run, via the production environment).
+  if in_release_workflow; then
+    echo "$1 Confirmed by the release workflow."
+    return
+  fi
   read -r -p "$1 Type 'prod' to continue: " answer
   [[ "$answer" == "prod" ]] || { echo "Cancelled." >&2; exit 1; }
 }

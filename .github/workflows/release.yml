@@ -1,0 +1,141 @@
+# Release to production. Runs on every push to main (main only changes through the
+# "Release to production" PR, merged once Aki says ship it) and can be re-run by hand.
+# It does what used to be typed on Aki's Mac, in the same order:
+#   1. database: back up prod, then apply migrations already verified on dev (db:promote)
+#   2. InsForge functions: api, connections, media, posts
+#   3. the publishing worker
+#   4. the website (Vercel, production)
+#   5. checks that each part answers
+# The scripts skip their "Type 'prod'" prompts only here (POST_SOCIAL_RELEASE=prod on GitHub
+# Actions, ref main); everywhere else they still ask.
+#
+# Secrets (Settings → Secrets and variables → Actions), added by Aki:
+#   INSFORGE_USER_API_KEY  InsForge dashboard → Profile → API Keys (a uak_ key)
+#   VERCEL_TOKEN           Vercel → Account Settings → Tokens
+# Optional: Settings → Environments → production → Required reviewers (Aki) adds an Approve
+# click on each run before anything is deployed.
+name: Release to production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One release at a time, in order; a newer push waits for the running one.
+concurrency:
+  group: prod-release
+  cancel-in-progress: false
+
+env:
+  POST_SOCIAL_RELEASE: prod
+  INSFORGE_PROJECT_ID: 33078020-21bd-4dcc-b3b5-c8033c84a097
+  INSFORGE_ORG_ID: d27676cf-6600-4e47-9fdc-efef807ff6ce
+  INSFORGE_CLI: "@insforge/cli@0.2.8"
+  FLYCTL_VERSION: 0.4.111
+  VERCEL_TEAM_ID: team_eEUXbDFXnVAXxi9YfyUl8lym
+  VERCEL_PROJECT_ID: prj_Y1Fyu6SRy4vtGwsZekrqS1EC55R6
+  GITHUB_REPO_ID: "1394110583"
+  SITE_URL: https://www.postsocial.xyz
+  API_URL: https://syydd6ck.function2.insforge.app/api/v1/openapi.json
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      - name: Check the secrets are set
+        run: |
+          missing=""
+          [[ -n "$INSFORGE_USER_API_KEY" ]] || missing="$missing INSFORGE_USER_API_KEY"
+          [[ -n "$VERCEL_TOKEN" ]] || missing="$missing VERCEL_TOKEN"
+          if [[ -n "$missing" ]]; then echo "::error::Add these repository secrets first:$missing"; exit 1; fi
+        env:
+          INSFORGE_USER_API_KEY: ${{ secrets.INSFORGE_USER_API_KEY }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      - name: Install flyctl (the worker is built with it)
+        run: |
+          curl -fsSL https://fly.io/install.sh | sh -s "$FLYCTL_VERSION"
+          echo "$HOME/.fly/bin" >> "$GITHUB_PATH"
+
+      - name: Sign in to InsForge and link the project
+        run: |
+          npx -y "$INSFORGE_CLI" login --user-api-key "$INSFORGE_USER_API_KEY"
+          npx -y "$INSFORGE_CLI" link --project-id "$INSFORGE_PROJECT_ID" --org-id "$INSFORGE_ORG_ID"
+          # The scripts expect the dev branch linked by default and switch to prod themselves.
+          npx -y "$INSFORGE_CLI" branch switch dev
+        env:
+          INSFORGE_USER_API_KEY: ${{ secrets.INSFORGE_USER_API_KEY }}
+
+      - name: Database (back up prod, then apply migrations verified on dev)
+        run: npm run db:promote
+
+      # InsForge's deploy command sometimes prints success and then never exits (on a Mac
+      # that's Ctrl+C). So each deploy runs in its own process group, counts as done once
+      # InsForge reports success, and is then stopped; no success in 4 minutes fails the run.
+      - name: Functions
+        run: |
+          for fn in api connections media posts; do
+            echo "::group::$fn"
+            log=$(mktemp)
+            setsid npm run functions:deploy -- prod "$fn" > "$log" 2>&1 &
+            pid=$!
+            ok=""
+            for _ in $(seq 1 120); do
+              if grep -qE "Function \"$fn\" (updation|creation) success" "$log"; then ok=1; break; fi
+              kill -0 "$pid" 2>/dev/null || break
+              sleep 2
+            done
+            grep -qE "Function \"$fn\" (updation|creation) success" "$log" && ok=1
+            kill -- "-$pid" 2>/dev/null || true
+            sleep 2
+            cat "$log"
+            # Stopping it can cut off its own switch back to dev; put the link back on dev.
+            npx -y "$INSFORGE_CLI" branch switch dev >/dev/null 2>&1 || true
+            echo "::endgroup::"
+            [[ -n "$ok" ]] || { echo "::error::The $fn function didn't report a successful deploy."; exit 1; }
+          done
+
+      - name: Worker
+        run: npm run worker:deploy -- prod
+
+      - name: Website (Vercel production)
+        run: |
+          body=$(printf '{"name":"post-social","project":"%s","target":"production","gitSource":{"type":"github","repoId":%s,"ref":"main","sha":"%s"}}' "$VERCEL_PROJECT_ID" "$GITHUB_REPO_ID" "$GITHUB_SHA")
+          id=$(curl -fsS -X POST "https://api.vercel.com/v13/deployments?teamId=$VERCEL_TEAM_ID" \
+            -H "Authorization: Bearer $VERCEL_TOKEN" -H "Content-Type: application/json" -d "$body" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
+          echo "Vercel deployment $id"
+          for _ in $(seq 1 60); do
+            state=$(curl -fsS "https://api.vercel.com/v13/deployments/$id?teamId=$VERCEL_TEAM_ID" -H "Authorization: Bearer $VERCEL_TOKEN" \
+              | python3 -c "import json,sys; print(json.load(sys.stdin)['readyState'])")
+            echo "$state"
+            case "$state" in
+              READY) exit 0 ;;
+              ERROR|CANCELED) echo "::error::The website deploy ended as $state"; exit 1 ;;
+            esac
+            sleep 15
+          done
+          echo "::error::The website deploy didn't finish in 15 minutes"; exit 1
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      - name: Check prod answers
+        run: |
+          curl -fsS --retry 3 --retry-delay 10 --max-time 20 -o /dev/null "$SITE_URL/"
+          curl -fsS --retry 3 --retry-delay 10 --max-time 20 -o /dev/null "$API_URL"
+          curl -fsS --retry 3 --retry-delay 10 --max-time 20 -o /dev/null "$SITE_URL/api/v1/openapi.json"
+          echo "Website, API and worker (checked by its deploy) are up."

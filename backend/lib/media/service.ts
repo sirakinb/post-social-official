@@ -13,6 +13,7 @@ import {
   partLength,
   planParts,
   safeFileName,
+  MAX_FILE_NAME_LENGTH,
   storageKey,
   uploadProblem,
 } from "./rules";
@@ -258,6 +259,7 @@ export async function importMedia(
   const url = String(input.url ?? "").trim();
   const problem = importUrlProblem(url);
   if (problem) throw new MediaError(400, problem);
+  if (typeof input.name === "string" && input.name.length > MAX_FILE_NAME_LENGTH) throw new MediaError(400, `Names can be at most ${MAX_FILE_NAME_LENGTH} characters.`);
   const member = await membership(deps, caller, workspaceId, true);
 
   const mediaId = deps.newId();

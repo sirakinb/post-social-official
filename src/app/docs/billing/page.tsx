@@ -49,7 +49,7 @@ export default function BillingDocsPage() {
         <h1 className="mt-3 text-3xl font-semibold tracking-[-0.035em] text-ink">Pricing and billing</h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-muted">
           Your first {FREE_ACCOUNTS}{" "}accounts are free, with no card needed. After that it&apos;s usage based: you pay per connected account, only while it&apos;s connected. X posts are a few cents
-          each and need a card (it stays $0 a month until your {FREE_ACCOUNTS + 1}rd account).
+          each, need a card, and are added to your monthly bill from the first one.
         </p>
 
         <Section id="accounts" title="Connected accounts">
@@ -94,7 +94,7 @@ export default function BillingDocsPage() {
             X posts are billed by use: {xPriceText()} in the text. Reading posts and stats costs you nothing.
           </p>
           <p>
-            Posting to X needs a card: add one on the Billing page (it&apos;s $0 a month until your {FREE_ACCOUNTS + 1}rd account), and your X posts are added to your monthly bill. You set a monthly X
+            Posting to X needs a card: add one on the Billing page, and every X post is added to your monthly bill, even if you only have 1 account. You set a monthly X
             limit there ({money(X_PRICES.defaultMonthlyCap)}{" "}to start), and the page warns you once you&apos;ve used 80%. At the limit, new X posts fail with a note saying so until next month (or until you
             raise it), and you can retry them; your other platforms keep posting. X follower counts in Analytics also need a card.
           </p>

@@ -4,7 +4,7 @@
 import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
 import { trackAICrawlerRequest } from "@datafast/ai-crawl";
 import { updateSession } from "@insforge/sdk/ssr/middleware";
-import { BETA_HOME, BETA_LOGIN, SIGNED_OUT_ONLY_PATHS, isPublicBetaPath } from "@/lib/insforge/auth-rules";
+import { BETA_HOME, BETA_LOGIN, isPublicBetaPath, isSignedOutOnlyPath } from "@/lib/insforge/auth-rules";
 import { botTrackingConfig } from "@/lib/analytics/bot-tracking";
 import { forwardingHeaders } from "@/lib/security/client-ip";
 import { HOME_LINKS, markdownPath, publicPath, wantsMarkdown } from "@/lib/public-pages";
@@ -34,7 +34,7 @@ export async function proxy(request: NextRequest, event?: NextFetchEvent) {
     login.searchParams.set("next", `${pathname}${search}`);
     return withCookies(NextResponse.redirect(login), response);
   }
-  if (accessToken && (SIGNED_OUT_ONLY_PATHS as readonly string[]).includes(pathname.replace(/\/+$/, ""))) {
+  if (accessToken && isSignedOutOnlyPath(pathname)) {
     return withCookies(NextResponse.redirect(new URL(BETA_HOME, request.url)), response);
   }
   return response;

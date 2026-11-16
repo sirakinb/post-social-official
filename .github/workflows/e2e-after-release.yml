@@ -1,0 +1,74 @@
+# After each production release, an AI tester (e2e.com, running on Claude Code with our
+# Claude subscription) goes through the live site as a Free test customer and checks every
+# page and the first-run journeys make sense (e2e.config.ts, e2e/journeys). It never pays,
+# posts or changes billing. Only after releases (and by hand), so it doesn't overlap with
+# the other e2e setups. A failed run is the alert (GitHub emails the repository owner).
+#
+# Secrets (Settings → Secrets and variables → Actions), added by Aki:
+#   CLAUDE_CODE_OAUTH_TOKEN  from `claude setup-token` on Aki's Mac
+#   E2E_TESTER_EMAIL         the prod test customer's sign-in email
+#   E2E_TESTER_PASSWORD      its password (the model never sees it)
+name: E2E after release
+
+on:
+  workflow_run:
+    workflows: ["Release to production"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-after-release
+  cancel-in-progress: true
+
+jobs:
+  journeys:
+    # Only after a release that succeeded (or when started by hand).
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      E2E_BASE_URL: https://www.postsocial.xyz
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      - name: Check the secrets are set
+        run: |
+          missing=""
+          [[ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]] || missing="$missing CLAUDE_CODE_OAUTH_TOKEN"
+          [[ -n "$E2E_USER_TESTER_USERNAME" ]] || missing="$missing E2E_TESTER_EMAIL"
+          [[ -n "$E2E_USER_TESTER_PASSWORD" ]] || missing="$missing E2E_TESTER_PASSWORD"
+          if [[ -n "$missing" ]]; then echo "::error::Add these repository secrets first:$missing"; exit 1; fi
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          E2E_USER_TESTER_USERNAME: ${{ secrets.E2E_TESTER_EMAIL }}
+          E2E_USER_TESTER_PASSWORD: ${{ secrets.E2E_TESTER_PASSWORD }}
+
+      - name: Install the test browser
+        run: npx @e2e-dev/web install chromium --with-deps
+
+      # A token copied from a wrapped terminal line can carry line breaks; strip them.
+      - name: Run the journeys on the live site
+        run: |
+          CLAUDE_CODE_OAUTH_TOKEN="$(printf '%s' "$RAW_CLAUDE_TOKEN" | tr -d '[:space:]')"
+          export CLAUDE_CODE_OAUTH_TOKEN
+          npx e2e run
+        env:
+          RAW_CLAUDE_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          E2E_USER_TESTER_USERNAME: ${{ secrets.E2E_TESTER_EMAIL }}
+          E2E_USER_TESTER_PASSWORD: ${{ secrets.E2E_TESTER_PASSWORD }}
+
+      - name: Keep the traces of anything that failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: .e2e/results
+          retention-days: 14

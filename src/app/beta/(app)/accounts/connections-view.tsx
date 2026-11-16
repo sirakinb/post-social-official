@@ -13,7 +13,7 @@ import { createProfile, deleteProfile, disconnect, moveAccount, setTiktokDeliver
 import { ProfileDialog, type Profile } from "./profile-dialog";
 
 export type { Profile };
-export type SocialAccount = { id: string; platform: string; handle: string; name: string; avatarUrl: string | null; health: string; reason: string | null; postTypes: string[]; connectedAt: string; lastPostedAt: string | null; profileId: string | null; tiktokDelivery?: "direct" | "inbox" | null };
+export type SocialAccount = { id: string; platform: string; handle: string; name: string; avatarUrl: string | null; health: string; reason: string | null; postTypes: string[]; connectedAt: string; lastPostedAt: string | null; profileId: string | null; tiktokDelivery?: "direct" | "inbox" | null; accountKind?: "profile" | "page" | null };
 
 // The filter: every account, one profile, or the accounts in no profile.
 type Filter = "all" | "none" | string;
@@ -30,10 +30,13 @@ const PLATFORMS = [
 ];
 const KIND: Record<string, string> = { instagram: "Instagram", facebook: "Facebook Page", threads: "Threads", youtube: "YouTube channel", tiktok: "TikTok", linkedin: "LinkedIn", bluesky: "Bluesky", x: "X" };
 
+// What the account is: the platform, or "LinkedIn Page" for a LinkedIn Company Page.
+const kindOf = (a: SocialAccount) => (a.platform === "linkedin" && a.accountKind === "page" ? "LinkedIn Page" : KIND[a.platform]);
+
 // "@handle · Platform", or just the platform where it shares no handle (as in the API).
 function handleLine(a: SocialAccount) {
   const handle = publicHandle(a.platform, a.handle);
-  return handle ? `@${handle} · ${KIND[a.platform]}` : KIND[a.platform];
+  return handle ? `@${handle} · ${kindOf(a)}` : kindOf(a);
 }
 
 
@@ -295,7 +298,7 @@ export function ConnectionsView(props: {
       {attention.map((a) => (
         <div key={a.id} role="status" className="flex flex-wrap items-center gap-2.5 rounded-[10px] border border-ps-attention/30 bg-ps-attention/[0.07] px-3.5 py-2.5 text-ps-attention-text">
           <span className="h-1.5 w-1.5 rounded-full bg-ps-attention" />
-          <span className="flex-1">{a.name} on {KIND[a.platform]} needs to be reconnected{a.reason ? `: ${a.reason}` : "."}</span>
+          <span className="flex-1">{a.name} on {kindOf(a)} needs to be reconnected{a.reason ? `: ${a.reason}` : "."}</span>
           {canEdit && <button type="button" disabled={busy !== null} onClick={() => connect(a.platform, a.platform === "bluesky" ? a.handle : undefined)} className={btn} data-attr="reconnect-account">Reconnect</button>}
         </div>
       ))}

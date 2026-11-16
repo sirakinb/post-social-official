@@ -42,6 +42,9 @@
     "undici": "^8.12.3"
   },
   "devDependencies": {
+    "@agentclientprotocol/claude-agent-acp": "^0.107.0",
+    "@e2e-dev/acp": "^0.1.2",
+    "@e2e-dev/web": "^0.16.0",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
@@ -51,6 +54,7 @@
     "@types/react-dom": "^19.0.3",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
+    "e2e": "^0.23.1",
     "esbuild": "^0.28.2",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.2.11",
@@ -62,6 +66,6 @@
   },
   "overrides": {
     "postcss": "$postcss",
-    "sharp": "0.35.3"
+    "sharp": "0.35.5"
   }
 }

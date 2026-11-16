@@ -369,6 +369,24 @@ export function rejectUnknownFields(operation: Pick<Operation, "name" | "input">
   throw new ApiError(400, `${fields}${close ? ` Did you mean "${close}"?` : ""} ${operation.name} accepts: ${known.join(", ")}.`.slice(0, 500));
 }
 
+// Refuses top-level text longer than the operation's declared maxLength, so the limits in
+// the API docs are the limits that apply (and long values never reach the services).
+export function rejectTooLong(operation: Pick<Operation, "input">, input: Record<string, unknown>) {
+  for (const [name, schema] of Object.entries(operation.input.properties)) {
+    const max = (schema as { maxLength?: unknown }).maxLength;
+    const value = Object.hasOwn(input, name) ? input[name] : undefined;
+    if (typeof max === "number" && typeof value === "string" && value.length > max) {
+      throw new ApiError(400, `${name} can be at most ${max} characters.`);
+    }
+  }
+}
+
+// How the REST API and the MCP server run an operation.
+export function runOperation(operation: Operation, deps: ApiDeps, caller: AgentCaller, input: Record<string, unknown>) {
+  rejectTooLong(operation, input);
+  return operation.run(deps, caller, input);
+}
+
 const mediaDeps = (deps: ApiDeps): MediaDeps => ({ sql: deps.sql, r2: deps.r2, newId: deps.newId });
 
 // What list_posts and get_post return for each post's media.

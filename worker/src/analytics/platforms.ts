@@ -3,6 +3,7 @@
 // are listed in `unavailable` and left out, never reported as zero.
 import { parseJson } from "../json";
 import type { Platform } from "../../../backend/lib/connections/platforms";
+import { LINKEDIN_API, LINKEDIN_VERSION, isLinkedInPage, linkedinAuthor } from "../../../backend/lib/connections/linkedin";
 
 export type Counters = { views?: number; likes?: number; comments?: number; shares?: number; saves?: number; reposts?: number; quotes?: number };
 export type MetricsResult = Counters & {
@@ -17,6 +18,7 @@ export type MetricsResult = Counters & {
 export type FetchContext = {
   platformId: string;
   mediaType?: string; // from the destination's options
+  accountExternalId?: string; // the connected account's platform id (a LinkedIn profile or Page)
   token: () => Promise<string>;
   http: typeof fetch;
 };
@@ -154,10 +156,52 @@ async function tiktok(ctx: FetchContext): Promise<MetricsResult> {
   return { views: num(video.view_count), likes: num(video.like_count), comments: num(video.comment_count), shares: num(video.share_count), extra: {}, unavailable: [], resolvedId };
 }
 
-// Reading a member's post stats needs r_member_social, which LinkedIn grants only to
-// approved partners, so none are fetched.
-async function linkedin(): Promise<MetricsResult> {
-  return { extra: {}, unavailable: ["views", "likes", "comments", "shares"] };
+// LinkedIn, through the Community Management app. A Page's post: one call to its share
+// statistics (rw_organization_admin). A member's post: one call per number to the creator
+// analytics (r_member_postAnalytics). Accounts connected through the original app have
+// neither permission, so their numbers are left to the public reads.
+const LINKEDIN_ALL: Array<keyof Counters> = ["views", "likes", "comments", "shares"];
+async function linkedin(ctx: FetchContext): Promise<MetricsResult> {
+  const token = await ctx.token();
+  const headers = { Authorization: `Bearer ${token}`, "LinkedIn-Version": LINKEDIN_VERSION, "X-Restli-Protocol-Version": "2.0.0" };
+  const urn = ctx.platformId;
+  const ugc = urn.startsWith("urn:li:ugcPost:");
+  if (!ugc && !urn.startsWith("urn:li:share:")) return { extra: {}, unavailable: LINKEDIN_ALL };
+
+  if (isLinkedInPage(ctx.accountExternalId)) {
+    const org = encodeURIComponent(linkedinAuthor(ctx.accountExternalId!));
+    const body = await tryOr(() => getJson(ctx, `${LINKEDIN_API}/organizationalEntityShareStatistics?q=organizationalEntity&organizationalEntity=${org}&${ugc ? "ugcPosts" : "shares"}=List(${encodeURIComponent(urn)})`, { headers }));
+    const stats = body?.elements?.[0]?.totalShareStatistics;
+    if (!stats) return { extra: {}, unavailable: LINKEDIN_ALL };
+    const reach = num(stats.uniqueImpressionsCount);
+    const clicks = num(stats.clickCount);
+    return {
+      views: num(stats.impressionCount),
+      likes: num(stats.likeCount),
+      comments: num(stats.commentCount),
+      shares: num(stats.shareCount),
+      extra: { ...(reach !== undefined ? { reach } : {}), ...(clicks !== undefined ? { clicks } : {}) },
+      unavailable: [],
+    };
+  }
+
+  const entity = `(${ugc ? "ugc" : "share"}:${encodeURIComponent(urn)})`;
+  const total = async (metric: string) => {
+    const body = await getJson(ctx, `${LINKEDIN_API}/memberCreatorPostAnalytics?q=entity&entity=${entity}&queryType=${metric}&aggregation=TOTAL`, { headers });
+    return num(body.elements?.[0]?.count) ?? 0;
+  };
+  // The first read tells whether this account may read its stats at all.
+  const views = await tryOr(() => total("IMPRESSION"));
+  if (views === null) return { extra: {}, unavailable: LINKEDIN_ALL };
+  const [reach, likes, comments, shares] = await Promise.all(["MEMBERS_REACHED", "REACTION", "COMMENT", "RESHARE"].map((metric) => tryOr(() => total(metric))));
+  return {
+    views,
+    likes: likes ?? undefined,
+    comments: comments ?? undefined,
+    shares: shares ?? undefined,
+    extra: reach === null ? {} : { reach },
+    unavailable: [likes === null && "likes", comments === null && "comments", shares === null && "shares"].filter(Boolean) as Array<keyof Counters>,
+  };
 }
 
 // Bluesky's public API is free and needs no permission: likes, replies, reposts, quotes

@@ -7,6 +7,7 @@ import { BLUESKY_SCOPE, publicProfile, refreshSession, revokeSession, type Blues
 import type { TokenSet } from "./crypto";
 import { xPriceText } from "../pricing";
 import { X_SCOPES, refreshX, revokeX } from "./x";
+import { LINKEDIN_PAGES_SCOPES, LinkedInError, linkedinApp, linkedinIdentities } from "./linkedin";
 
 export type Platform = "instagram" | "facebook" | "threads" | "youtube" | "tiktok" | "linkedin" | "bluesky" | "x";
 export const PLATFORMS: Platform[] = ["instagram", "facebook", "threads", "youtube", "tiktok", "linkedin", "bluesky", "x"];
@@ -34,6 +35,8 @@ export type Capabilities = {
   carousel_max_items?: number;
   image_types?: string[];
   notes?: string;
+  // What the account is where a platform has more than one kind (a LinkedIn profile or Page).
+  account_kind?: "profile" | "page";
 };
 
 export class PlatformError extends Error {
@@ -131,6 +134,8 @@ export const INBOX_SCOPES: Partial<Record<Platform, string[]>> = {
 const inboxHere = (setting: Settings, workspaceId?: string | null) => Boolean(workspaceId) && inboxOn(inboxSwitch((name) => optional(setting, name)), workspaceId!);
 
 export function scopesFor(platform: Platform, setting: Settings, workspaceId?: string | null) {
+  // The Community Management app asks for its own set, stats and comments included.
+  if (platform === "linkedin" && linkedinApp(setting).pages) return LINKEDIN_PAGES_SCOPES;
   const base = officialHere(platform, setting, workspaceId) ? [...SCOPES[platform], ...ANALYTICS_SCOPES[platform]] : SCOPES[platform];
   return INBOX_SCOPES[platform] && inboxHere(setting, workspaceId) ? [...base, ...INBOX_SCOPES[platform]!] : base;
 }
@@ -191,6 +196,7 @@ export const CAPABILITIES: Record<Platform, Capabilities> = {
     carousel_max_items: 20,
     image_types: ["image/jpeg", "image/png", "image/gif"],
     notes: "Posts to the member's own profile. Videos are MP4, 75 KB to 500 MB. Up to 20 images show as a gallery.",
+    account_kind: "profile",
   },
   bluesky: {
     post_types: ["text", "image", "video"],
@@ -208,6 +214,13 @@ export const CAPABILITIES: Record<Platform, Capabilities> = {
     image_types: ["image/jpeg", "image/png", "image/webp", "image/gif"],
     notes: `Up to 280 characters (links count as 23). Up to 4 images of up to 5 MB, or one MP4 video of up to 2 min 20 s. X posts are billed separately: ${xPriceText()}.`,
   },
+};
+
+// A LinkedIn Company Page: posts as the Page, always public.
+export const LINKEDIN_PAGE_CAPABILITIES: Capabilities = {
+  ...CAPABILITIES.linkedin,
+  notes: "Posts to the Company Page, visible to everyone. Videos are MP4, 75 KB to 500 MB. Up to 20 images show as a gallery.",
+  account_kind: "page",
 };
 
 async function json(response: Response, what: string) {
@@ -265,7 +278,7 @@ export function authorizeUrl(platform: Platform, state: string, redirectUri: str
       break;
     case "linkedin":
       url = new URL("https://www.linkedin.com/oauth/v2/authorization");
-      url.searchParams.set("client_id", setting("LINKEDIN_CLIENT_ID"));
+      url.searchParams.set("client_id", linkedinApp(setting).clientId);
       url.searchParams.set("scope", scopesFor("linkedin", setting, workspaceId).join(" "));
       break;
     case "bluesky":
@@ -422,12 +435,27 @@ export async function exchangeCode(platform: Platform, code: string, redirectUri
   }
 
   if (platform === "linkedin") {
+    const app = linkedinApp(setting);
     const token = await json(
       await http("https://www.linkedin.com/oauth/v2/accessToken", form({
-        grant_type: "authorization_code", code, redirect_uri: redirectUri, client_id: setting("LINKEDIN_CLIENT_ID"), client_secret: setting("LINKEDIN_CLIENT_SECRET"),
+        grant_type: "authorization_code", code, redirect_uri: redirectUri, client_id: app.clientId, client_secret: app.clientSecret,
       })),
       "LinkedIn sign-in",
     );
+    if (app.pages) {
+      try {
+        return await linkedinIdentities({
+          accessToken: token.access_token,
+          refreshToken: token.refresh_token,
+          scopes: String(token.scope ?? LINKEDIN_PAGES_SCOPES.join(" ")).split(/[ ,]+/).filter(Boolean),
+          accessTokenExpiresAt: inSeconds(token.expires_in),
+          refreshTokenExpiresAt: inSeconds(token.refresh_token_expires_in),
+        }, { profile: CAPABILITIES.linkedin, page: LINKEDIN_PAGE_CAPABILITIES }, http);
+      } catch (error) {
+        if (error instanceof LinkedInError) throw new PlatformError(error.message, error.code);
+        throw error;
+      }
+    }
     const profile = await json(
       await http("https://api.linkedin.com/v2/userinfo", { headers: { Authorization: `Bearer ${token.access_token}` } }),
       "Reading the LinkedIn profile",
@@ -508,7 +536,12 @@ export async function currentAvatarUrl(platform: Platform, externalAccountId: st
     return text(creator.data?.creator_avatar_url);
   }
   if (platform === "linkedin") {
-    const profile = await json(await http("https://api.linkedin.com/v2/userinfo", { headers: { Authorization: `Bearer ${accessToken}` } }), "Reading the LinkedIn picture");
+    // The Community Management app can't read the Sign In with LinkedIn profile; its
+    // pictures are kept from sign-in.
+    if (externalAccountId.startsWith("organization:")) return null;
+    const response = await http("https://api.linkedin.com/v2/userinfo", { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (response.status === 403) return null;
+    const profile = await json(response, "Reading the LinkedIn picture");
     return text(profile.picture);
   }
   return null;
@@ -542,7 +575,7 @@ export async function refreshTokens(platform: Platform, current: TokenSet, setti
       await http("https://www.linkedin.com/oauth/v2/accessToken", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: current.refreshToken, client_id: setting("LINKEDIN_CLIENT_ID"), client_secret: setting("LINKEDIN_CLIENT_SECRET") }),
+        body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: current.refreshToken, client_id: linkedinApp(setting).clientId, client_secret: linkedinApp(setting).clientSecret }),
       }),
       "Refreshing LinkedIn access",
     );
@@ -612,7 +645,7 @@ export async function revokeTokens(platform: Platform, tokens: TokenSet, setting
       response = await http("https://www.linkedin.com/oauth/v2/revoke", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ client_id: setting("LINKEDIN_CLIENT_ID"), client_secret: setting("LINKEDIN_CLIENT_SECRET"), token: tokens.accessToken }),
+        body: new URLSearchParams({ client_id: linkedinApp(setting).clientId, client_secret: linkedinApp(setting).clientSecret, token: tokens.accessToken }),
       });
     } else {
       const host = platform === "instagram" ? "https://graph.instagram.com" : platform === "threads" ? "https://graph.threads.net/v1.0" : `https://graph.facebook.com/${META_VERSION}`;
