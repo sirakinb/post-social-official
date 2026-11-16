@@ -40,7 +40,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
   const lastPosted = new Map<string, string>();
   for (const d of (lastPosts ?? []) as Array<{ connected_account_id: string; updated_at: string }>) if (!lastPosted.has(d.connected_account_id)) lastPosted.set(d.connected_account_id, d.updated_at);
 
-  const accounts: SocialAccount[] = ((accountRows ?? []) as unknown as Array<{ id: string; platform: string; handle: string; display_name: string; avatar_url: string | null; health: string; health_reason: string | null; capabilities: { post_types?: string[] } | null; created_at: string; profile_id?: string | null }>).map((a) => ({
+  const accounts: SocialAccount[] = ((accountRows ?? []) as unknown as Array<{ id: string; platform: string; handle: string; display_name: string; avatar_url: string | null; health: string; health_reason: string | null; capabilities: { post_types?: string[]; account_kind?: "profile" | "page" } | null; created_at: string; profile_id?: string | null }>).map((a) => ({
     id: a.id,
     platform: a.platform,
     handle: a.handle,
@@ -49,6 +49,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
     health: a.health,
     reason: a.health_reason,
     postTypes: a.capabilities?.post_types ?? [],
+    accountKind: a.capabilities?.account_kind ?? null,
     connectedAt: a.created_at,
     lastPostedAt: lastPosted.get(a.id) ?? null,
     profileId: a.profile_id ?? null,

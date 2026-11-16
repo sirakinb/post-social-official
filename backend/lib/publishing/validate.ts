@@ -50,7 +50,7 @@ export type MediaFacts = {
   duration_seconds: number | null;
 };
 
-export type Capabilities = { video_max_seconds?: number };
+export type Capabilities = { video_max_seconds?: number; account_kind?: "profile" | "page" };
 
 export const POST_TYPES: Record<Platform, string[]> = {
   instagram: ["image", "reel", "carousel"],
@@ -430,6 +430,7 @@ export function destinationProblems(args: {
       const length = [...caption].length;
       if (length > 3000) problems.push(`LinkedIn posts can be at most 3,000 characters; this one is ${length.toLocaleString("en-US")}.`);
       if ((options.title ?? "").length > 200) problems.push("LinkedIn video titles can be at most 200 characters.");
+      if (capabilities?.account_kind === "page" && options.visibility === "CONNECTIONS") problems.push("LinkedIn Company Page posts are always public; choose PUBLIC visibility.");
       const type = linkedinMediaType(options, media);
       if (type === "text") {
         if (!caption) problems.push("Write the text for this LinkedIn post.");

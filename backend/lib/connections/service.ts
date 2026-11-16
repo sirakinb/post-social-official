@@ -159,7 +159,8 @@ async function blueskyIdentity(deps: ConnectionDeps, pendingSealed: string | nul
 
 type StateRow = { workspace_id: string; user_id: string | null; return_to: string | null; code_verifier_encrypted: string | null; profile_id: string | null };
 
-export type CallbackResult = { returnTo: string | null; ok: boolean; message: string; platform: Platform };
+// choose: a waiting sign-in where the person picks which new accounts to add.
+export type CallbackResult = { returnTo: string | null; ok: boolean; message: string; platform: Platform; choose?: string };
 
 // Where the platform's callback should send the browser to finish: the web app the
 // sign-in started from (its address was checked when the sign-in started). Reads the state
@@ -225,11 +226,11 @@ export async function completeConnection(deps: ConnectionDeps, platform: Platfor
     return fail(error instanceof PlatformError || error instanceof AtprotoError || error instanceof XError ? error.message : `${name} sign-in failed. Try again.`);
   }
 
-  const externalIdOf = (identity: (typeof identities)[number]) => identity.externalAccountId || `workspace:${session.workspace_id}`;
+  const externalIdOf = (identity: Identity) => identity.externalAccountId || `workspace:${session.workspace_id}`;
   // One social account belongs to one workspace. A Facebook sign-in returns every Page the
   // person ever shared with Post Social, so Pages already connected in another workspace are
   // skipped and the rest connect; it fails only when nothing is left.
-  const available: typeof identities = [];
+  const available: Identity[] = [];
   const skipped: string[] = [];
   for (const identity of identities) {
     const [elsewhere] = await deps.sql<{ id: string }>(
@@ -244,11 +245,59 @@ export async function completeConnection(deps: ConnectionDeps, platform: Platfor
     return fail(`${skipped.join(", ")} ${skipped.length > 1 ? "are" : "is"} already connected to another workspace. Disconnect ${skipped.length > 1 ? "them" : "it"} there first.`);
   }
   const skippedNote = skipped.length ? ` Skipped ${skipped.join(", ")}: already connected to another workspace.` : "";
+  const target: SaveTarget = { workspaceId: session.workspace_id, userId: session.user_id, actorId: member.actor_id, profileId: session.profile_id, platform };
 
+  // A LinkedIn sign-in can bring several accounts (the profile and the member's Pages), each
+  // billed once connected. Accounts this workspace already has reconnect now; when that
+  // leaves more than one new account, the person chooses which to add.
+  if (platform === "linkedin" && available.length > 1) {
+    const known = new Set((await deps.sql<{ external_account_id: string }>(
+      `SELECT external_account_id FROM public.connected_accounts
+       WHERE workspace_id = $1 AND platform = $2 AND external_account_id = ANY($3::text[]) AND health <> 'disconnected'`,
+      [session.workspace_id, platform, available.map(externalIdOf)],
+    )).map((row) => row.external_account_id));
+    const reconnect = available.filter((identity) => known.has(externalIdOf(identity)));
+    const fresh = available.filter((identity) => !known.has(externalIdOf(identity)));
+    if (fresh.length > 1 || (fresh.length === 1 && reconnect.length > 0)) {
+      const saved = reconnect.length ? await saveIdentities(deps, target, reconnect) : { connected: [] as string[] };
+      if (saved.problem) return fail(saved.problem);
+      // Waiting sign-ins nobody finished are cleared here, so their tokens don't linger.
+      await deps.sql(`DELETE FROM public.pending_connections WHERE expires_at < now()`, []);
+      const sealed = await seal(fresh, await importKey(deps.setting("CREDENTIAL_ENCRYPTION_KEY")));
+      const [pending] = await deps.sql<{ id: string }>(
+        `INSERT INTO public.pending_connections (workspace_id, user_id, platform, profile_id, return_to, choices, encrypted_payload, initialization_vector)
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8) RETURNING id`,
+        [session.workspace_id, session.user_id, platform, session.profile_id, session.return_to, JSON.stringify(fresh.map(choiceOf)), sealed.encryptedPayload, sealed.initializationVector],
+      );
+      const refreshed = saved.connected.length ? `Reconnected ${saved.connected.join(", ")}. ` : "";
+      return { returnTo: session.return_to, ok: true, platform, choose: pending.id, message: `${refreshed}Choose which ${name} accounts to add.${skippedNote}` };
+    }
+  }
+
+  const saved = await saveIdentities(deps, target, available);
+  if (saved.problem) return fail(saved.connected.length ? `Connected ${saved.connected.join(", ")}. ${saved.problem}` : saved.problem);
+  return { returnTo: session.return_to, ok: true, platform, message: `Connected ${saved.connected.join(", ")}.${skippedNote}` };
+}
+
+// What a waiting sign-in offers to connect. No tokens.
+export type Choice = { external_id: string; name: string; kind: "profile" | "page" | null; avatar_url: string | null };
+const choiceOf = (identity: Identity): Choice => ({
+  external_id: identity.externalAccountId,
+  name: identity.displayName,
+  kind: identity.capabilities.account_kind ?? null,
+  avatar_url: identity.avatarUrl ?? null,
+});
+
+type SaveTarget = { workspaceId: string; userId: string | null; actorId: string | null; profileId: string | null; platform: Platform };
+
+// Saves signed-in accounts (new or reconnected) with their encrypted tokens. Stops at the
+// plan's account limit and says so in `problem`, keeping what was saved before it.
+async function saveIdentities(deps: ConnectionDeps, target: SaveTarget, identities: Identity[]): Promise<{ connected: string[]; problem?: string }> {
+  const name = DISPLAY_NAMES[target.platform];
   const key = await importKey(deps.setting("CREDENTIAL_ENCRYPTION_KEY"));
   const connected: string[] = [];
-  for (const identity of available) {
-    const externalId = externalIdOf(identity);
+  for (const identity of identities) {
+    const externalId = identity.externalAccountId || `workspace:${target.workspaceId}`;
     const sealed = await seal(identity.tokens, key);
     // Reconnecting updates the same row instead of creating a duplicate.
     let event: { event_type: string } | undefined;
@@ -287,34 +336,95 @@ export async function completeConnection(deps: ConnectionDeps, platform: Platfor
          FROM account
          RETURNING event_type`,
         [
-          session.workspace_id, platform, externalId, identity.ownerExternalId ?? null, identity.handle, identity.displayName,
-          identity.avatarUrl ?? null, identity.scopes, JSON.stringify(identity.capabilities), member.actor_id,
+          target.workspaceId, target.platform, externalId, identity.ownerExternalId ?? null, identity.handle, identity.displayName,
+          identity.avatarUrl ?? null, identity.scopes, JSON.stringify(identity.capabilities), target.actorId,
           sealed.encryptedPayload, sealed.initializationVector,
-          identity.accessTokenExpiresAt?.toISOString() ?? null, identity.refreshTokenExpiresAt?.toISOString() ?? null,
+          dateText(identity.accessTokenExpiresAt), dateText(identity.refreshTokenExpiresAt),
           `Connected ${name} account ${identity.displayName}`,
-          session.profile_id,
+          target.profileId,
         ],
       );
     } catch (error) {
       // Over the plan's account limit (the database refuses the new row).
       const overLimit = accountLimitMessage(error);
       if (!overLimit) throw error;
-      if (connected.length) await deps.afterAccountsChanged?.(session.workspace_id).catch(() => null);
-      return fail(connected.length ? `Connected ${connected.join(", ")}. ${overLimit}` : overLimit);
+      if (connected.length) await deps.afterAccountsChanged?.(target.workspaceId).catch(() => null);
+      return { connected, problem: overLimit };
     }
     // A step of the new-user funnel; reconnects don't count.
-    if (event?.event_type === "account.connected") trackEvent("account_connected", { platform, workspace_id: session.workspace_id }, session.user_id ?? undefined);
+    if (event?.event_type === "account.connected") trackEvent("account_connected", { platform: target.platform, workspace_id: target.workspaceId }, target.userId ?? undefined);
     connected.push(identity.displayName);
   }
-  await deps.afterAccountsChanged?.(session.workspace_id).catch(() => null);
-  return { returnTo: session.return_to, ok: true, platform, message: `Connected ${connected.join(", ")}.${skippedNote}` };
+  await deps.afterAccountsChanged?.(target.workspaceId).catch(() => null);
+  return { connected };
 }
 
-type AccountRow = { id: string; workspace_id: string; platform: Platform; display_name: string; health: string };
+// Dates come back as text after a waiting sign-in is decrypted.
+function dateText(value: Date | string | undefined) {
+  if (!value) return null;
+  return typeof value === "string" ? value : value.toISOString();
+}
+
+// The accounts a waiting sign-in offers, for the person who signed in.
+export async function pendingChoices(deps: ConnectionDeps, caller: Caller, input: { pending_id?: unknown }) {
+  // Only the person who signed in chooses; AIs never connect accounts.
+  if (isAgentCaller(caller)) throw new ApiError(403, "Accounts are connected by a person in the Post Social web app. Use a connect link.");
+  const pendingId = requireUuid(input.pending_id, "Sign-in");
+  const [pending] = await deps.sql<{ platform: Platform; choices: Choice[]; workspace_id: string }>(
+    `SELECT platform, choices, workspace_id FROM public.pending_connections WHERE id = $1 AND user_id = $2 AND expires_at > now()`,
+    [pendingId, caller.userId],
+  );
+  if (!pending) throw new ApiError(404, "This sign-in expired. Connect the account again.");
+  await membership(deps.sql, caller, pending.workspace_id, true, "Reviewers cannot connect accounts.");
+  return { platform: pending.platform, workspace_id: pending.workspace_id, choices: pending.choices };
+}
+
+// Connects the accounts the person ticked from a waiting sign-in. Single use: the sign-in is
+// removed whatever they chose, so its tokens never outlive the choice.
+export async function chooseAccounts(deps: ConnectionDeps, caller: Caller, input: { pending_id?: unknown; external_ids?: unknown }) {
+  // Only the person who signed in chooses; AIs never connect accounts.
+  if (isAgentCaller(caller)) throw new ApiError(403, "Accounts are connected by a person in the Post Social web app. Use a connect link.");
+  const pendingId = requireUuid(input.pending_id, "Sign-in");
+  const wanted = Array.isArray(input.external_ids) ? input.external_ids.filter((id): id is string => typeof id === "string").slice(0, 200) : [];
+  const [pending] = await deps.sql<{ workspace_id: string; user_id: string; platform: Platform; profile_id: string | null; return_to: string | null; encrypted_payload: string; initialization_vector: string }>(
+    `DELETE FROM public.pending_connections WHERE id = $1 AND user_id = $2 AND expires_at > now()
+     RETURNING workspace_id, user_id, platform, profile_id, return_to, encrypted_payload, initialization_vector`,
+    [pendingId, caller.userId],
+  );
+  if (!pending) throw new ApiError(404, "This sign-in expired. Connect the account again.");
+  const member = await membership(deps.sql, caller, pending.workspace_id, true, "Reviewers cannot connect accounts.");
+  const name = DISPLAY_NAMES[pending.platform];
+  if (!wanted.length) return { connected: [], return_to: pending.return_to, message: `No ${name} accounts were added.` };
+
+  const identities = await open<Identity[]>({ encryptedPayload: pending.encrypted_payload, initializationVector: pending.initialization_vector }, await importKey(deps.setting("CREDENTIAL_ENCRYPTION_KEY")));
+  const ticked = identities.filter((identity) => wanted.includes(identity.externalAccountId));
+  // One social account belongs to one workspace; one connected elsewhere meanwhile is skipped.
+  const chosen: Identity[] = [];
+  const skipped: string[] = [];
+  for (const identity of ticked) {
+    const [elsewhere] = await deps.sql<{ id: string }>(
+      `SELECT id FROM public.connected_accounts
+       WHERE platform = $1 AND external_account_id = $2 AND workspace_id <> $3 AND health <> 'disconnected'`,
+      [pending.platform, identity.externalAccountId, pending.workspace_id],
+    );
+    if (elsewhere) skipped.push(identity.displayName);
+    else chosen.push(identity);
+  }
+  const skippedNote = skipped.length ? ` Skipped ${skipped.join(", ")}: already connected to another workspace.` : "";
+  if (!chosen.length) return { connected: [], return_to: pending.return_to, message: `No ${name} accounts were added.${skippedNote}` };
+  const saved = await saveIdentities(deps, {
+    workspaceId: pending.workspace_id, userId: pending.user_id, actorId: member.actor_id ?? null, profileId: pending.profile_id, platform: pending.platform,
+  }, chosen);
+  const done = saved.connected.length ? `Connected ${saved.connected.join(", ")}.` : "";
+  if (saved.problem) throw new ApiError(402, done ? `${done} ${saved.problem}` : saved.problem);
+  return { connected: saved.connected, return_to: pending.return_to, message: `${done}${skippedNote}` };
+}
+
+type AccountRow = { id: string; workspace_id: string; platform: Platform; display_name: string; health: string; owner_external_id: string | null };
 
 export async function disconnectAccount(deps: ConnectionDeps, caller: Caller, input: { account_id?: unknown }) {
   const accountId = requireUuid(input.account_id, "Account");
-  const [account] = await deps.sql<AccountRow>(`SELECT id, workspace_id, platform, display_name, health FROM public.connected_accounts WHERE id = $1`, [accountId]);
+  const [account] = await deps.sql<AccountRow>(`SELECT id, workspace_id, platform, display_name, health, owner_external_id FROM public.connected_accounts WHERE id = $1`, [accountId]);
   if (!account) throw new ApiError(404, "That account was not found.");
   const member = await membership(deps.sql, caller, account.workspace_id, true, "Reviewers cannot disconnect accounts.").catch((error) => {
     if (error instanceof ApiError && error.status === 404) throw new ApiError(404, "That account was not found.");
@@ -324,10 +434,20 @@ export async function disconnectAccount(deps: ConnectionDeps, caller: Caller, in
 
   // Revoke at the platform first: after disconnect_account the token is gone.
   let revoked = "credential_missing";
-  const [credential] = await deps.sql<{ encrypted_payload: string; initialization_vector: string }>(
+  // A LinkedIn profile and its member's Pages share one sign-in: revoking it for one would
+  // cut off the others, so it is only revoked with the last of them.
+  const [sharing] = account.platform === "linkedin" && account.owner_external_id
+    ? await deps.sql<{ id: string }>(
+        `SELECT id FROM public.connected_accounts
+         WHERE platform = 'linkedin' AND owner_external_id = $1 AND id <> $2 AND health <> 'disconnected' LIMIT 1`,
+        [account.owner_external_id, accountId],
+      )
+    : [];
+  const [credential] = sharing ? [] : await deps.sql<{ encrypted_payload: string; initialization_vector: string }>(
     `SELECT encrypted_payload, initialization_vector FROM public.credentials WHERE connected_account_id = $1`,
     [accountId],
   );
+  if (sharing) revoked = "shared_with_other_accounts";
   if (credential) {
     try {
       const tokens = await open({ encryptedPayload: credential.encrypted_payload, initializationVector: credential.initialization_vector }, await importKey(deps.setting("CREDENTIAL_ENCRYPTION_KEY")));

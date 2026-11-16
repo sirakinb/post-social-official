@@ -143,7 +143,7 @@ function check(caption: string, media: MediaFacts[], destinations: DestinationIn
       account: account.display_name,
       account_handle: publicHandle(account.platform, account.handle),
       platform: account.platform,
-      problems: destinationProblems({ options: d.options, caption, media, capabilities: account.capabilities as { video_max_seconds?: number }, cover: d.options.cover_media_id ? covers.get(d.options.cover_media_id) : undefined }).map(
+      problems: destinationProblems({ options: d.options, caption, media, capabilities: account.capabilities as { video_max_seconds?: number; account_kind?: "profile" | "page" }, cover: d.options.cover_media_id ? covers.get(d.options.cover_media_id) : undefined }).map(
         (p) => `${DISPLAY_NAMES[account.platform]} (${account.display_name}): ${p}`,
       ),
     };
