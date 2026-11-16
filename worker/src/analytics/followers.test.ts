@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Sql } from "../../../backend/lib/access";
-import { runFollowerSweep } from "./followers";
+import { linkedinCountable, runFollowerSweep } from "./followers";
 
-type Account = { id: string; workspace_id: string; platform: string; handle: string | null; external_account_id: string; display_name?: string };
+type Account = { id: string; workspace_id: string; platform: string; handle: string | null; external_account_id: string; display_name?: string; scopes?: string[] };
 
 function fakeSql(accounts: Account[]) {
   const saved: unknown[][] = [];
@@ -98,5 +98,35 @@ describe("daily follower counts", () => {
     account.handle = "sirakinb";
     await runFollowerSweep({ sql: db.sql, platforms: [], publicPlatforms: ["youtube"], publicApiKey: "k", readPublic });
     expect(db.saved).toEqual([["acct-yt", "w", 2910, "public"]]);
+  });
+});
+
+describe("LinkedIn follower counts", () => {
+  it("reads a Page's followers and the member's own, with the Community Management permissions", async () => {
+    const db = fakeSql([
+      { id: "p", workspace_id: "w", platform: "linkedin", handle: "pentridge", external_account_id: "organization:101", scopes: ["rw_organization_admin"] },
+      { id: "m", workspace_id: "w", platform: "linkedin", handle: "Aki B", external_account_id: "m1", scopes: ["r_member_profileAnalytics"] },
+    ]);
+    const asked: string[] = [];
+    const http = (async (url: string) => {
+      asked.push(String(url));
+      return String(url).includes("networkSizes")
+        ? new Response(JSON.stringify({ firstDegreeSize: 1200 }))
+        : new Response(JSON.stringify({ elements: [{ memberFollowersCount: 345 }] }));
+    }) as unknown as typeof fetch;
+    const n = await runFollowerSweep({ sql: db.sql, platforms: ["linkedin"], publicPlatforms: [], http, token: async () => "tok" });
+    expect(n).toBe(2);
+    expect(asked[0]).toContain("/rest/networkSizes/urn%3Ali%3Aorganization%3A101?edgeType=COMPANY_FOLLOWED_BY_MEMBER");
+    expect(asked[1]).toContain("/rest/memberFollowersCount?q=me");
+    expect(db.saved.map((p) => [p[0], p[2], p[3]])).toEqual([["p", 1200, "official"], ["m", 345, "official"]]);
+    // Accounts from the original app, which can't read their count, aren't even picked.
+    expect(db.query()).toContain("'r_member_profileAnalytics' = ANY(a.scopes)");
+    expect(db.params()[3]).toBe(false);
+  });
+
+  it("knows which LinkedIn accounts can read their own count", () => {
+    expect(linkedinCountable({ external_account_id: "organization:1", scopes: ["rw_organization_admin"] })).toBe(true);
+    expect(linkedinCountable({ external_account_id: "m1", scopes: ["openid", "profile", "w_member_social"] })).toBe(false);
+    expect(linkedinCountable({ external_account_id: "m1", scopes: null })).toBe(false);
   });
 });

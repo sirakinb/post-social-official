@@ -20,7 +20,7 @@ import { ApiError, type Caller } from "../../lib/access";
 import { accountLimitMessage } from "../../lib/billing";
 import { trimTrailingSlashes } from "../../lib/text";
 import type { SignedInUser } from "../../lib/insforge-admin";
-import { callbackUrl, completeConnection, disconnectAccount, finishingOrigin, isPlatform, startConnection, type ConnectionDeps } from "../../lib/connections/service";
+import { callbackUrl, chooseAccounts, completeConnection, disconnectAccount, finishingOrigin, isPlatform, pendingChoices, startConnection, type ConnectionDeps } from "../../lib/connections/service";
 import { deletionStatus, handleDataDeletion, handleDeauthorize } from "../../lib/connections/meta-deletion";
 import { createProfile, deleteProfile, moveAccount, setTiktokDelivery, updateProfile } from "../../lib/connections/profiles";
 import { clientKey, clientMetadata, publicJwk } from "../../lib/connections/atproto";
@@ -54,6 +54,8 @@ const PERSON_ACTIONS = {
   "/profiles/delete": (deps: ConnectionsHandlerDeps, caller: Caller, body: Record<string, unknown>) => deleteProfile(deps.sql, caller, body),
   "/accounts/move": (deps: ConnectionsHandlerDeps, caller: Caller, body: Record<string, unknown>) => moveAccount(deps.sql, caller, body),
   "/accounts/tiktok-delivery": (deps: ConnectionsHandlerDeps, caller: Caller, body: Record<string, unknown>) => setTiktokDelivery(deps.sql, caller, body),
+  "/accounts/pending": (deps: ConnectionsHandlerDeps, caller: Caller, body: Record<string, unknown>) => pendingChoices(deps, caller, body),
+  "/accounts/choose": (deps: ConnectionsHandlerDeps, caller: Caller, body: Record<string, unknown>) => chooseAccounts(deps, caller, body),
 };
 const isPersonAction = (path: string): path is keyof typeof PERSON_ACTIONS => Object.hasOwn(PERSON_ACTIONS, path);
 

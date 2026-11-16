@@ -50,6 +50,21 @@ describe("finishing a social account connection", () => {
     expect(readFlash(response.cookies.get(FLASH_COOKIE)?.value, "notice")).toBe("Connected Test IG.");
   });
 
+  it("sends a sign-in with several new accounts to the page that asks which to add", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ ok: true, returnTo: "https://www.postsocial.xyz/beta/accounts?workspace=w", platform: "linkedin", choose: "11111111-1111-4111-8111-111111111111", message: "Choose which LinkedIn accounts to add." })));
+    const response = await GET(new NextRequest("https://www.postsocial.xyz/beta/connect/finish?platform=linkedin&state=s1&code=c1"));
+    const location = new URL(response.headers.get("location")!);
+    expect(location.pathname).toBe("/beta/accounts/choose");
+    expect(location.searchParams.get("pending")).toBe("11111111-1111-4111-8111-111111111111");
+    expect(location.searchParams.get("workspace")).toBe("w");
+  });
+
+  it("ignores a malformed choice id", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ ok: true, returnTo: null, platform: "linkedin", choose: "../evil", message: "Connected." })));
+    const response = await GET(new NextRequest("https://www.postsocial.xyz/beta/connect/finish?platform=linkedin&state=s1&code=c1"));
+    expect(new URL(response.headers.get("location")!).pathname).toBe("/beta/accounts");
+  });
+
   it("uses fixed codes when it can't reach the server", async () => {
     fetchMock.mockRejectedValue(new Error("down"));
     const response = await GET(new NextRequest("https://www.postsocial.xyz/beta/connect/finish?platform=instagram&state=s1&code=c1"));
