@@ -108,18 +108,18 @@ describe("LinkedIn accounts", () => {
 });
 
 // A small stand-in for the database: the rows these flows read and write.
-function fakeDb(connected: string[] = [], options: { otherSharing?: boolean; originals?: string[] } = {}) {
+function fakeDb(connected: string[] = [], options: { otherSharing?: boolean; originals?: string[]; actorId?: string } = {}) {
   const adopted: unknown[][] = [];
   const saved: string[] = [];
   const pending = new Map<string, Record<string, unknown>>();
   let revokedLookups = 0;
   const sql = (async (query: string, params: unknown[] = []) => {
     if (query.includes("UPDATE public.oauth_states")) return [{ workspace_id: "w1", user_id: "user-1", return_to: "https://app.example/beta/accounts?workspace=ws", code_verifier_encrypted: null, profile_id: null }];
-    if (query.includes("FROM public.workspace_members")) return [{ role: "owner", actor_id: "a1" }];
+    if (query.includes("FROM public.workspace_members")) return [{ role: "owner", actor_id: options.actorId ?? "a1" }];
     if (query.includes("WITH member AS")) return [{ role: "owner", actor_id: "a1" }];
     if (query.includes("workspace_id <> $3")) return [];
     if (query.includes("AND external_account_id = $2`") || query.includes("platform = 'linkedin' AND external_account_id = $2")) return connected.includes(String(params[1])) ? [{ id: "x" }] : [];
-    if (query.includes("'openid' = ANY(scopes)")) return (options.originals ?? []).map((id) => ({ id }));
+    if (query.includes("'openid' = ANY(scopes)")) return params[2] === "a1" ? (options.originals ?? []).map((id) => ({ id })) : [];
     if (query.includes("SET external_account_id = $2, owner_external_id = $2")) { adopted.push(params); connected.push(String(params[1])); return []; }
     if (query.includes("external_account_id = ANY")) return (params[2] as string[]).filter((id) => connected.includes(id)).map((id) => ({ external_account_id: id }));
     if (query.includes("INSERT INTO public.connected_accounts")) {
@@ -211,6 +211,12 @@ describe("choosing which LinkedIn accounts to connect", () => {
     // The profile now reconnects; only the Pages are offered.
     expect(db.saved).toEqual(["m1"]);
     expect(result.message).toBe("Reconnected Aki B. Choose which LinkedIn accounts to add.");
+  });
+
+  it("never takes over a profile someone else in the workspace connected", async () => {
+    const db = fakeDb([], { originals: ["old-row"], actorId: "a2" });
+    await finish(db, LINKEDIN().http);
+    expect(db.adopted).toEqual([]);
   });
 
   it("leaves profiles alone when it can't tell which one is the member's", async () => {

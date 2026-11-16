@@ -246,7 +246,7 @@ export async function completeConnection(deps: ConnectionDeps, platform: Platfor
   }
   const skippedNote = skipped.length ? ` Skipped ${skipped.join(", ")}: already connected to another workspace.` : "";
   const target: SaveTarget = { workspaceId: session.workspace_id, userId: session.user_id, actorId: member.actor_id, profileId: session.profile_id, platform };
-  if (platform === "linkedin") await adoptOriginalProfile(deps, session.workspace_id, available);
+  if (platform === "linkedin" && member.actor_id) await adoptOriginalProfile(deps, session.workspace_id, member.actor_id, available);
 
   // A LinkedIn sign-in can bring several accounts (the profile and the member's Pages), each
   // billed once connected. Accounts this workspace already has reconnect now; when that
@@ -282,9 +282,10 @@ export async function completeConnection(deps: ConnectionDeps, platform: Platfor
 
 // LinkedIn gives each app its own id for a member, so a profile connected through the
 // original app comes back from the Community Management app under a new id. When the
-// workspace has exactly one profile from the original app with the same name, that account
-// is moved to the new id, so reconnecting updates it instead of adding (and billing) a second.
-async function adoptOriginalProfile(deps: ConnectionDeps, workspaceId: string, identities: Identity[]) {
+// workspace has exactly one profile from the original app with the same name that this same
+// person connected, that account is moved to the new id, so reconnecting updates it instead of
+// adding (and billing) a second. Only their own: a name alone could match someone else's.
+async function adoptOriginalProfile(deps: ConnectionDeps, workspaceId: string, actorId: string, identities: Identity[]) {
   const profile = identities.find((identity) => identity.capabilities.account_kind === "profile");
   if (!profile?.externalAccountId) return;
   const [already] = await deps.sql<{ id: string }>(
@@ -295,8 +296,8 @@ async function adoptOriginalProfile(deps: ConnectionDeps, workspaceId: string, i
   const originals = await deps.sql<{ id: string }>(
     `SELECT id FROM public.connected_accounts
      WHERE workspace_id = $1 AND platform = 'linkedin' AND external_account_id NOT LIKE 'organization:%'
-       AND 'openid' = ANY(scopes) AND display_name = $2 AND health <> 'disconnected'`,
-    [workspaceId, profile.displayName],
+       AND 'openid' = ANY(scopes) AND display_name = $2 AND health <> 'disconnected' AND connected_by_actor_id = $3`,
+    [workspaceId, profile.displayName, actorId],
   );
   if (originals.length !== 1) return;
   await deps.sql(
