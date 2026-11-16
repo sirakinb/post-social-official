@@ -1,14 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
 import { getAccessTokenCookieName } from "@insforge/sdk/ssr";
 import { OUR_SIDE, UNREACHABLE, requestError } from "../../../../../backend/lib/support";
 import { GET_STARTED_HIDDEN_COOKIE } from "@/lib/beta/get-started";
+import { flashCookie } from "@/lib/beta/flash";
 
 // The web app uses the same `connections` function an AI client will, with the person's
 // own session, so connecting and disconnecting get the same checks and audit trail.
-type Path = "/start" | "/disconnect" | "/profiles/create" | "/profiles/update" | "/profiles/delete" | "/accounts/move" | "/accounts/tiktok-delivery";
+type Path = "/start" | "/disconnect" | "/profiles/create" | "/profiles/update" | "/profiles/delete" | "/accounts/move" | "/accounts/tiktok-delivery" | "/accounts/pending" | "/accounts/choose";
 async function callConnections<T>(path: Path, body: Record<string, unknown>): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
   const base = process.env.CONNECTIONS_BASE_URL;
   if (!base) return { ok: false, error: OUR_SIDE };
@@ -64,4 +66,35 @@ export async function setTiktokDelivery(accountId: string, delivery: "direct" | 
 export async function hideGetStarted() {
   (await cookies()).set(GET_STARTED_HIDDEN_COOKIE, "1", { path: "/", maxAge: 31536000, sameSite: "lax" });
   revalidatePath("/beta", "layout");
+}
+
+// A sign-in that brought several new accounts (a LinkedIn profile and Pages) waits for the
+// person to choose which to add.
+export type PendingChoice = { external_id: string; name: string; kind: "profile" | "page" | null; avatar_url: string | null };
+export async function loadPendingChoices(pendingId: string) {
+  return callConnections<{ platform: string; workspace_id: string; choices: PendingChoice[] }>("/accounts/pending", { pending_id: pendingId });
+}
+
+export async function chooseAccounts(formData: FormData) {
+  const pendingId = String(formData.get("pending_id") ?? "");
+  const externalIds = formData.getAll("external_id").map(String);
+  const result = await callConnections<{ message: string; return_to: string | null }>("/accounts/choose", { pending_id: pendingId, external_ids: externalIds });
+  const jar = await cookies();
+  if (result.ok) {
+    if (result.data.message) jar.set(flashCookie("notice", result.data.message));
+  } else {
+    jar.set(flashCookie("error", result.error));
+  }
+  revalidatePath("/beta/accounts");
+  // The return address was checked when the sign-in started; only its path and query are kept.
+  let target = "/beta/accounts";
+  if (result.ok && result.data.return_to) {
+    try {
+      const url = new URL(result.data.return_to);
+      if (url.pathname.startsWith("/beta/")) target = `${url.pathname}${url.search}`;
+    } catch {
+      // keep the default
+    }
+  }
+  redirect(`${target}${target.includes("?") ? "&" : "?"}${result.ok ? "message=connected" : "error=connect_failed"}`);
 }

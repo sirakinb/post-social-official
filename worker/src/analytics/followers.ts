@@ -3,11 +3,14 @@
 // public API and X's from X's API with the account's own access (a paid user read, $0.01 a
 // day per account, so only for workspaces that pay; see PAYING_WORKSPACE), where they're
 // switched on in ANALYTICS_PLATFORMS; other platforms' from their public profile page
-// through ScrapeCreators, where that's switched on. LinkedIn members have no public profile address, so their count is
-// saved from their posts' pages instead (see runner.ts).
+// through ScrapeCreators, where that's switched on. LinkedIn accounts connected through the
+// Community Management app read their own count (a Page's followers, or a member's); others
+// have no public profile address, so their count is saved from their posts' pages instead
+// (see runner.ts).
 import type { Sql } from "../../../backend/lib/access";
 import type { Platform, Settings } from "../../../backend/lib/connections/platforms";
 import { accountToken } from "../credentials";
+import { LINKEDIN_API, LINKEDIN_VERSION, isLinkedInPage, linkedinAuthor } from "../../../backend/lib/connections/linkedin";
 import { BLUESKY_APPVIEW, X_API } from "./platforms";
 import { publicFollowers, type FollowerTarget, type PublicContext } from "./public";
 
@@ -25,10 +28,15 @@ export type FollowerDeps = {
   log?: (message: string, details?: Record<string, unknown>) => void;
 };
 
-type Account = { id: string; workspace_id: string; platform: Platform; handle: string | null; external_account_id: string; display_name: string };
+type Account = { id: string; workspace_id: string; platform: Platform; handle: string | null; external_account_id: string; display_name: string; scopes: string[] | null };
 
 // Platforms whose follower count is read through their own API when switched on there.
-const OFFICIAL_FOLLOWERS: Platform[] = ["bluesky", "x"];
+const OFFICIAL_FOLLOWERS: Platform[] = ["bluesky", "x", "linkedin"];
+
+// A LinkedIn account may read its own follower count only with the Community Management
+// app's permissions; accounts from the original app go on as before.
+export const linkedinCountable = (account: Pick<Account, "external_account_id" | "scopes">) =>
+  (account.scopes ?? []).includes(isLinkedInPage(account.external_account_id) ? "rw_organization_admin" : "r_member_profileAnalytics");
 
 // SQL (for a row `a` of connected_accounts): the account's workspace pays, so its X follower
 // count (about $0.30 a month) is covered by at least one paid account ($5): a Paid plan with
@@ -50,25 +58,32 @@ export async function runFollowerSweep(deps: FollowerDeps): Promise<number> {
   const platforms = [...new Set([...publicOn, ...officialOn])];
   if (!platforms.length) return 0;
   const accounts = await deps.sql<Account>(
-    `SELECT a.id, a.workspace_id, a.platform, nullif(a.handle, '') AS handle, a.external_account_id, a.display_name
+    `SELECT a.id, a.workspace_id, a.platform, nullif(a.handle, '') AS handle, a.external_account_id, a.display_name, a.scopes
      FROM public.connected_accounts a JOIN public.workspaces w ON w.id = a.workspace_id
      WHERE a.platform = ANY($1::text[]) AND a.health <> 'disconnected'
        AND (CASE WHEN $2::uuid IS NULL THEN NOT w.publishing_paused ELSE a.workspace_id = $2 END)
        AND NOT EXISTS (SELECT 1 FROM public.account_follower_days f WHERE f.connected_account_id = a.id AND f.day = (now() AT TIME ZONE 'UTC')::date)
        AND (a.platform <> 'x' OR NOT $3::boolean OR ${PAYING_WORKSPACE})
+       -- LinkedIn accounts that can't read their own count wait for the public reads, if on.
+       AND (a.platform <> 'linkedin' OR $4::boolean
+            OR (a.external_account_id LIKE 'organization:%' AND 'rw_organization_admin' = ANY(a.scopes))
+            OR (a.external_account_id NOT LIKE 'organization:%' AND 'r_member_profileAnalytics' = ANY(a.scopes)))
      ORDER BY a.created_at LIMIT 40`,
-    [platforms, deps.onlyWorkspace ?? null, officialOn.includes("x")],
+    [platforms, deps.onlyWorkspace ?? null, officialOn.includes("x"), publicOn.includes("linkedin")],
   );
   let saved = 0;
   for (const account of accounts) {
     if (now() - (lastFailure.get(account.id) ?? -Infinity) < 6 * HOUR) continue;
     try {
-      const official = officialOn.includes(account.platform);
+      const official = officialOn.includes(account.platform) && (account.platform !== "linkedin" || linkedinCountable(account));
+      if (!official && !publicOn.includes(account.platform)) continue;
       const followers = !official
         ? await (deps.readPublic ?? publicFollowers)({ apiKey: deps.publicApiKey!, http: deps.http ?? fetch }, { platform: account.platform, handle: account.handle, externalId: account.external_account_id })
         : account.platform === "bluesky"
           ? await blueskyFollowers(deps.http ?? fetch, account.external_account_id)
-          : await xFollowers(deps.http ?? fetch, await tokenFor(deps, account));
+          : account.platform === "linkedin"
+            ? await linkedinFollowers(deps.http ?? fetch, await tokenFor(deps, account), account.external_account_id)
+            : await xFollowers(deps.http ?? fetch, await tokenFor(deps, account));
       // Can't be looked up yet (nothing was read): try again on the next sweep, since what's
       // missing (such as a YouTube channel's handle) can be learned at any time.
       if (followers === null) continue;
@@ -102,6 +117,20 @@ export async function xFollowers(http: typeof fetch, token: string): Promise<num
   if (!response.ok) throw new Error(`X profile: HTTP ${response.status}`);
   const body = (await response.json()) as { data?: { public_metrics?: { followers_count?: unknown } } };
   const n = Number(body.data?.public_metrics?.followers_count);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+// LinkedIn: a Page's follower count (its network size), or the member's own followers.
+export async function linkedinFollowers(http: typeof fetch, token: string, externalId: string): Promise<number | null> {
+  const headers = { Authorization: `Bearer ${token}`, "LinkedIn-Version": LINKEDIN_VERSION, "X-Restli-Protocol-Version": "2.0.0" };
+  const page = isLinkedInPage(externalId);
+  const url = page
+    ? `${LINKEDIN_API}/networkSizes/${encodeURIComponent(linkedinAuthor(externalId))}?edgeType=COMPANY_FOLLOWED_BY_MEMBER`
+    : `${LINKEDIN_API}/memberFollowersCount?q=me`;
+  const response = await http(url, { headers });
+  if (!response.ok) throw new Error(`LinkedIn followers: HTTP ${response.status}`);
+  const body = (await response.json()) as { firstDegreeSize?: unknown; elements?: Array<{ memberFollowersCount?: unknown }> };
+  const n = Number(page ? body.firstDegreeSize : body.elements?.[0]?.memberFollowersCount);
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 

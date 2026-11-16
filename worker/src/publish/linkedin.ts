@@ -1,9 +1,10 @@
-// LinkedIn member posts (Share on LinkedIn): text, images (2 to 20 show as a gallery) and
-// videos. Media is uploaded first: images one by one, videos in the parts LinkedIn asks
+// LinkedIn posts, as the member (Share on LinkedIn) or as a Company Page they post for
+// (Community Management API): text, images (2 to 20 show as a gallery) and videos. Media is uploaded first: images one by one, videos in the parts LinkedIn asks
 // for, streamed from storage. Every finished upload is saved, so a retry carries on where
 // it stopped. The post itself is a single call; its start is saved first, and since this
 // permission can't read posts back, an interrupted post is reported rather than repeated.
 import { captionFor, linkedinMediaType, type CoverOptions, type LinkedInOptions } from "../../../backend/lib/publishing/validate";
+import { isLinkedInPage, linkedinAuthor } from "../../../backend/lib/connections/linkedin";
 import { PublishError, type Adapter, type StepContext } from "./types";
 
 const API = "https://api.linkedin.com/rest";
@@ -171,12 +172,14 @@ async function videoReady(ctx: StepContext, urn: string) {
 
 export const publishLinkedIn: Adapter = async (ctx) => {
   const options = ctx.bundle.options as LinkedInOptions & CoverOptions;
-  const owner = `urn:li:person:${ctx.bundle.account.externalId}`;
+  const page = isLinkedInPage(ctx.bundle.account.externalId);
+  // Media is owned by, and the post made as, the profile or the Page.
+  const owner = linkedinAuthor(ctx.bundle.account.externalId);
   const liveUrl = (urn: string) => `https://www.linkedin.com/feed/update/${urn}/`;
 
   if (ctx.checkpoint.post_id) return { kind: "published", platformId: String(ctx.checkpoint.post_id), liveUrl: liveUrl(String(ctx.checkpoint.post_id)) };
   if (ctx.checkpoint.publish_started_at) {
-    throw new PublishError("unconfirmed", "Posting to LinkedIn was interrupted. Check the LinkedIn profile before posting it again.");
+    throw new PublishError("unconfirmed", `Posting to LinkedIn was interrupted. Check the LinkedIn ${page ? "Page" : "profile"} before posting it again.`);
   }
 
   const type = linkedinMediaType(options, ctx.bundle.media);
@@ -191,12 +194,13 @@ export const publishLinkedIn: Adapter = async (ctx) => {
     content = { media: { id: urn, ...(options.title?.trim() ? { title: options.title.trim() } : {}) } };
   }
 
-  await ctx.reserve("member_post", POSTS_PER_DAY, 24 * 3600);
+  await ctx.reserve(page ? "page_post" : "member_post", POSTS_PER_DAY, 24 * 3600);
   await ctx.save({ publish_started_at: new Date(ctx.now()).toISOString() });
   const response = await rest(ctx, "POST", "/posts", {
     author: owner,
     commentary: linkedinCommentary(captionFor(options, ctx.bundle.caption)),
-    visibility: options.visibility ?? "PUBLIC",
+    // Page posts are always public; LinkedIn refuses connections-only for a Page.
+    visibility: page ? "PUBLIC" : (options.visibility ?? "PUBLIC"),
     distribution: { feedDistribution: "MAIN_FEED", targetEntities: [], thirdPartyDistributionChannels: [] },
     ...(content ? { content } : {}),
     lifecycleState: "PUBLISHED",

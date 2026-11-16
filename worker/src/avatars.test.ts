@@ -33,6 +33,17 @@ function setup(rows: Row[], pictures: Record<string, { type: string; body: Uint8
 const row = (over: Partial<Row>): Row => ({ id: "acct", workspace_id: "ws", platform: "instagram", external_account_id: "ext", display_name: "Aki", avatar_url: null, avatar_key: null, ...over });
 
 describe("profile picture copies", () => {
+  it("reads a LinkedIn Page's name and logo again each week", async () => {
+    const { deps, updates, put } = setup(
+      [row({ platform: "linkedin", external_account_id: "organization:101", display_name: "Old name" })],
+      { "https://media.licdn.com/logo.png": { type: "image/png", body: new Uint8Array([4, 5]) } },
+      (url) => (url.includes("/rest/organizations/101") ? { localizedName: "Pentridge Media", vanityName: "pentridge", logoV2: { original: "urn:li:digitalmediaAsset:L1" } } : url.includes("/rest/images/") ? { downloadUrl: "https://media.licdn.com/logo.png" } : {}),
+    );
+    expect(await syncAvatars(deps)).toBe(1);
+    expect(updates.find((u) => String(u[0]).includes("SET display_name"))?.slice(1)).toEqual(["acct", "Pentridge Media", "pentridge"]);
+    expect(put).toHaveBeenCalledTimes(1);
+  });
+
   it("asks the platform for a fresh picture, saves our copy and points the account at our address", async () => {
     const { deps, updates, put } = setup(
       [row({ avatar_url: "https://cdn.example/expired.jpg" })],
