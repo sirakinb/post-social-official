@@ -89,6 +89,47 @@ export default function PrivacyPage() {
 
             <section>
               <h2 className="font-display text-xl font-semibold text-ink">
+                LinkedIn data
+              </h2>
+              <p className="mt-2 text-sm leading-relaxed">
+                When you connect LinkedIn, you sign in on LinkedIn&apos;s own page and
+                choose which of your accounts to add: your profile, and any Company
+                Pages you can post for. Post Social uses LinkedIn&apos;s APIs only to do
+                what you ask:
+              </p>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-relaxed">
+                <li>
+                  <strong className="text-ink">Posting:</strong> publishes the posts
+                  you compose to your profile or Page.
+                </li>
+                <li>
+                  <strong className="text-ink">Stats:</strong> reads the views,
+                  reach, reactions, comments and reposts of posts you published
+                  through Post Social, and your profile&apos;s or Page&apos;s follower
+                  count, to show them on your Analytics page.
+                </li>
+                <li>
+                  <strong className="text-ink">Page comments:</strong> shows comments
+                  on your Page&apos;s posts in your Post Social inbox so you can reply
+                  to or delete them as the Page.
+                </li>
+              </ul>
+              <p className="mt-2 text-sm leading-relaxed">
+                We store your LinkedIn member ID, name and photo, your Pages&apos; IDs,
+                names and logos (refreshed regularly), your encrypted access tokens,
+                and the stats above. We keep comments other LinkedIn members leave on
+                your Page&apos;s posts for no more than 48 hours, and we never store a
+                commenter&apos;s name, photo or other profile details: the inbox shows
+                them as a LinkedIn member. LinkedIn data is shown only to members of
+                your workspace, is never sold, used for advertising, used to train AI
+                models, or shared with other third parties. Your LinkedIn tokens are
+                deleted as soon as you disconnect LinkedIn, and everything else when you
+                delete your workspace.
+              </p>
+            </section>
+
+            <section>
+              <h2 className="font-display text-xl font-semibold text-ink">
                 Google user data and YouTube API Services
               </h2>
               <p className="mt-2 text-sm leading-relaxed">

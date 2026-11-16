@@ -4,6 +4,7 @@
 // copied within minutes; every copy is refreshed weekly so a changed picture shows up.
 import { createHash } from "node:crypto";
 import type { Sql } from "../../backend/lib/access";
+import { isLinkedInPage, linkedinPageProfile } from "../../backend/lib/connections/linkedin";
 import { currentAvatarUrl, type Platform, type Settings } from "../../backend/lib/connections/platforms";
 import type { R2 } from "../../backend/lib/media/r2";
 import { accountToken } from "./credentials";
@@ -61,7 +62,14 @@ async function syncOne(deps: AvatarDeps, account: Due) {
   let source: string | null = null;
   try {
     const token = await accountToken({ sql: deps.sql, setting: deps.setting, http: deps.http }, { id: account.id, platform: account.platform, displayName: account.display_name });
-    source = await currentAvatarUrl(account.platform, account.external_account_id, token, deps.http);
+    if (account.platform === "linkedin" && isLinkedInPage(account.external_account_id)) {
+      // A Page's name and logo are read again each week (LinkedIn allows keeping them eight weeks).
+      const page = await linkedinPageProfile(deps.http ?? fetch, token, account.external_account_id);
+      if (page.name) await deps.sql(`UPDATE public.connected_accounts SET display_name = $2, handle = $3 WHERE id = $1`, [account.id, page.name, page.handle]);
+      source = page.logo;
+    } else {
+      source = await currentAvatarUrl(account.platform, account.external_account_id, token, deps.http);
+    }
   } catch (error) {
     if (!isPlatformLink(account.avatar_url)) throw error;
   }
