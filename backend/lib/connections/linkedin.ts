@@ -45,9 +45,11 @@ function optional(setting: Settings, name: string) {
 }
 
 // The app this environment signs in with. Tokens are refreshed and revoked with the same app.
+// Both keys must be set: with only one, the original app keeps working.
 export function linkedinApp(setting: Settings): LinkedInApp {
   const id = optional(setting, "LINKEDIN_PAGES_CLIENT_ID");
-  if (id) return { clientId: id, clientSecret: setting("LINKEDIN_PAGES_CLIENT_SECRET"), pages: true };
+  const secret = optional(setting, "LINKEDIN_PAGES_CLIENT_SECRET");
+  if (id && secret) return { clientId: id, clientSecret: secret, pages: true };
   return { clientId: setting("LINKEDIN_CLIENT_ID"), clientSecret: setting("LINKEDIN_CLIENT_SECRET"), pages: false };
 }
 

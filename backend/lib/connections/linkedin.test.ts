@@ -61,6 +61,7 @@ describe("LinkedIn accounts", () => {
   it("uses the Community Management app only where it is set up", () => {
     expect(linkedinApp(settingFrom(base))).toEqual({ clientId: "old-client", clientSecret: "old-secret", pages: false });
     expect(linkedinApp(settingFrom(pages))).toEqual({ clientId: "pages-client", clientSecret: "pages-secret", pages: true });
+    expect(linkedinApp(settingFrom({ ...base, LINKEDIN_PAGES_CLIENT_ID: "pages-client" })).pages).toBe(false);
     const url = new URL(authorizeUrl("linkedin", "s", "https://cb", settingFrom(pages)));
     expect(url.searchParams.get("client_id")).toBe("pages-client");
     expect(url.searchParams.get("scope")).toBe(LINKEDIN_PAGES_SCOPES.join(" "));
