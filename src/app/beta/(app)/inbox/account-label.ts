@@ -1,4 +1,4 @@
-const NAMES: Record<string, string> = { instagram: "Instagram", facebook: "Facebook", threads: "Threads" };
+const NAMES: Record<string, string> = { instagram: "Instagram", facebook: "Facebook", threads: "Threads", linkedin: "LinkedIn" };
 
 // "@handle · Facebook": which account, and on which platform, for the inbox's lists.
 export function accountLabel(account: { platform?: string | null; handle: string | null; display_name: string }) {

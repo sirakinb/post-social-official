@@ -19,6 +19,7 @@ type Comment = {
   dm_sent_at: string | null;
   can_dm: boolean;
   can_delete: boolean;
+  can_hide?: boolean;
   replies: Array<{ id: string; text: string | null; created_at: string }> | null;
   created_at: string;
   post_caption: string | null;
@@ -53,7 +54,8 @@ export default async function CommentsPage({ searchParams }: { searchParams: Pro
       <div className="mt-5 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="m-0 text-lg font-medium">Comments</h1>
-          <p className="mt-1 text-ps-muted">Comments and replies on your Instagram, Facebook and Threads posts. Reply, DM the commenter, hide it or delete it.</p>
+          <p className="mt-1 text-ps-muted">Comments and replies on your Instagram, Facebook and Threads posts, and your LinkedIn Pages&apos; posts. Reply, DM the commenter, hide it or delete it.</p>
+          <p className="mt-1 text-xs text-ps-subtle">LinkedIn comments stay here for 48 hours, without the commenter&apos;s profile, as LinkedIn&apos;s rules require.</p>
         </div>
         <nav aria-label="Filter" className="flex gap-1 rounded-lg border border-ps-line bg-ps-surface p-1 text-xs">
           {FILTERS.map((f) => (
@@ -69,7 +71,7 @@ export default async function CommentsPage({ searchParams }: { searchParams: Pro
           {data.comments.map((c) => (
             <article key={c.id} className={cn("px-4 py-3", c.hidden && "opacity-60")}>
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                <span className="font-medium">{c.commenter_username ? `@${c.commenter_username}` : "Someone"}</span>
+                <span className="font-medium">{c.commenter_username ? `@${c.commenter_username}` : c.account.platform === "linkedin" ? "LinkedIn member" : "Someone"}</span>
                 <span className="text-xs text-ps-subtle">{when(c.created_at)} · on {c.post_url ? <a href={c.post_url} target="_blank" rel="noopener noreferrer" className="hover:underline">{c.post_caption?.slice(0, 50) || "a post"}</a> : c.post_caption?.slice(0, 50) || "a post"} · {accountLabel(c.account)}</span>
                 <span className="ml-auto flex gap-1.5">
                   {c.replied_at && <Status tone="live" label="Replied" />}
@@ -90,7 +92,7 @@ export default async function CommentsPage({ searchParams }: { searchParams: Pro
                   {canAct && c.can_delete && <span className="text-xs"><DeleteButton commentId={r.id} label="Delete reply" /></span>}
                 </div>
               ))}
-              {canAct && <CommentActions commentId={c.id} canDm={c.can_dm} canDelete={c.can_delete} hidden={c.hidden} replied={Boolean(c.replied_at)} />}
+              {canAct && <CommentActions commentId={c.id} canDm={c.can_dm} canDelete={c.can_delete} canHide={c.can_hide !== false} hidden={c.hidden} replied={Boolean(c.replied_at)} />}
             </article>
           ))}
         </Card>

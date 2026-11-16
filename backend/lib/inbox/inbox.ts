@@ -141,8 +141,10 @@ export async function listComments(deps: InboxDeps, caller: Caller, input: { wor
   const { limit, offset } = page(input);
   const comments = await deps.sql(
     `SELECT c.id, c.platform_comment_id, c.platform_post_id, c.commenter_username, c.text, c.hidden, c.replied_at, c.dm_sent_at, c.created_at, c.contact_id,
-            (a.platform <> 'threads' AND c.dm_sent_at IS NULL AND c.created_at > now() - interval '${PRIVATE_REPLY_DAYS} days') AS can_dm,
+            (a.platform NOT IN ('threads', 'linkedin') AND c.dm_sent_at IS NULL AND c.created_at > now() - interval '${PRIVATE_REPLY_DAYS} days') AS can_dm,
             (a.platform <> 'threads') AS can_delete,
+            -- LinkedIn has no hiding for apps; its comments can be deleted instead.
+            (a.platform <> 'linkedin') AS can_hide,
             (SELECT jsonb_agg(jsonb_build_object('id', r.id, 'text', r.text, 'created_at', r.created_at) ORDER BY r.created_at)
              FROM public.inbox_comments r WHERE r.connected_account_id = c.connected_account_id AND r.parent_comment_id = c.platform_comment_id
                AND r.from_account AND r.deleted_at IS NULL) AS replies,
@@ -180,8 +182,12 @@ async function queueForComment(deps: InboxDeps, caller: Caller, kind: string, in
     const [{ n }] = await deps.sql<{ n: number }>(`SELECT count(*)::int AS n FROM public.inbox_outbox WHERE comment_id = $1 AND kind = 'delete_comment' AND status = 'queued'`, [id]);
     if (n) throw new ApiError(409, "This comment is already being deleted.");
   }
+  if ((kind === "hide_comment" || kind === "unhide_comment") && comment.platform === "linkedin") {
+    throw new ApiError(409, "LinkedIn doesn't let apps hide comments. Delete it instead.");
+  }
   if (kind === "private_reply") {
     if (comment.platform === "threads") throw new ApiError(409, "Threads has no DMs. Reply publicly instead.");
+    if (comment.platform === "linkedin") throw new ApiError(409, "LinkedIn doesn't let apps send DMs from a Page. Reply publicly instead.");
     if (comment.dm_sent_at) throw new ApiError(409, "This commenter already got a DM for this comment. Meta allows one per comment.");
     if (Date.now() - Date.parse(comment.created_at) > PRIVATE_REPLY_DAYS * 86_400_000) throw new ApiError(409, `Meta only allows a DM to a commenter within ${PRIVATE_REPLY_DAYS} days of the comment.`);
     const [{ n }] = await deps.sql<{ n: number }>(`SELECT count(*)::int AS n FROM public.inbox_outbox WHERE comment_id = $1 AND kind = 'private_reply' AND status = 'queued'`, [id]);

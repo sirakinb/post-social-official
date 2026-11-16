@@ -15,8 +15,11 @@ type Client = Awaited<ReturnType<typeof import("@/lib/beta/workspace").loadViewe
 
 // The workspace's Instagram accounts, Facebook Pages and Threads accounts, and the one picked in ?account= (null means all of them).
 export async function inboxAccounts(client: Client, workspaceId: string, picked?: string) {
-  const { data } = await client.database.from("connected_accounts").select("id, platform, handle, display_name").eq("workspace_id", workspaceId).in("platform", ["instagram", "facebook", "threads"]).neq("health", "disconnected").order("display_name");
-  const accounts = (data ?? []) as AccountOption[];
+  const { data } = await client.database.from("connected_accounts").select("id, platform, handle, display_name, external_account_id").eq("workspace_id", workspaceId).in("platform", ["instagram", "facebook", "threads", "linkedin"]).neq("health", "disconnected").order("display_name");
+  // LinkedIn: Company Pages only (their comments); a member profile has no inbox.
+  const accounts = ((data ?? []) as Array<AccountOption & { external_account_id: string }>)
+    .filter((a) => a.platform !== "linkedin" || a.external_account_id.startsWith("organization:"))
+    .map(({ external_account_id: _, ...a }) => a as AccountOption);
   return { accounts, account: accounts.some((a) => a.id === picked) ? picked! : null };
 }
 

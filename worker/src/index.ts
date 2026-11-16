@@ -21,6 +21,7 @@ import { PLATFORMS, statsPreview, type Platform } from "../../backend/lib/connec
 import { createTelemetry } from "../../backend/lib/telemetry";
 import { runInboxSweep, subscribeAccounts } from "./inbox/runner";
 import { catchUpThreadsReplies, fillContactProfiles, runOutbox } from "./inbox/inbox";
+import { catchUpLinkedInComments, purgeLinkedInComments } from "./inbox/linkedin";
 
 function setting(name: string, fallback?: string) {
   const value = process.env[name] ?? fallback;
@@ -171,4 +172,7 @@ if (inboxOnHere && linkBase) {
   void every(4 * 1000, "inbox sweep", async () => (await runInboxSweep(inboxDeps)) + (await runOutbox(inboxDeps)));
   void every(60 * 1000, "inbox subscribe", async () => (await subscribeAccounts(inboxDeps)) + (await fillContactProfiles(inboxDeps)));
   void every(6 * 3600 * 1000, "threads replies catch-up", () => catchUpThreadsReplies(inboxDeps));
+  // LinkedIn Pages send no webhooks: their comments are read every 5 minutes, and leave the
+  // inbox after 48 hours (LinkedIn's storage rule).
+  void every(5 * 60 * 1000, "linkedin comments", async () => (await catchUpLinkedInComments(inboxDeps)) + (await purgeLinkedInComments(inboxDeps.sql)));
 }

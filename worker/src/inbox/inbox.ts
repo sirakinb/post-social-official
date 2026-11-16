@@ -1,6 +1,7 @@
 // The inbox side of Meta's webhooks (backend/lib/inbox/inbox.ts): stores every comment and DM
 // with the person behind it, and sends the replies people queue in Post Social (a DM, a
 // public comment reply, a DM to a commenter, hiding a comment).
+import { sendLinkedIn } from "./linkedin";
 import { accountFor, fromAccount, graph, GraphError, META, PLATFORM_NAME, threadsComment, threadsReply, tokenFor, type Account, type CommentValue, type InboxDeps, type InboxPlatform } from "./runner";
 
 const REPLY_WINDOW_MS = 24 * 60 * 60 * 1000; // Meta: reply within 24 hours of their last message
@@ -222,6 +223,8 @@ async function sendOne(deps: InboxDeps, item: Outbox) {
     [item.connected_account_id],
   );
   if (!account) throw new GraphError("The account is no longer connected.");
+  // LinkedIn Pages have their own API (inbox/linkedin.ts).
+  if ((account.platform as string) === "linkedin") return sendLinkedIn(deps, account, item);
   const token = await tokenFor(deps, account);
   const platform = account.platform;
   const name = PLATFORM_NAME[platform] ?? "Instagram";

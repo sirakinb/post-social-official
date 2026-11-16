@@ -36,7 +36,7 @@ export function DeleteButton(props: { commentId: string; label?: string }) {
 }
 
 // Reply publicly, DM the commenter (one per comment, within 7 days), hide or delete, for one comment.
-export function CommentActions(props: { commentId: string; canDm: boolean; canDelete: boolean; hidden: boolean; replied: boolean }) {
+export function CommentActions(props: { commentId: string; canDm: boolean; canDelete: boolean; canHide?: boolean; hidden: boolean; replied: boolean }) {
   const router = useRouter();
   const [mode, setMode] = useState<"reply" | "dm" | null>(null);
   const [text, setText] = useState("");
@@ -63,7 +63,9 @@ export function CommentActions(props: { commentId: string; canDm: boolean; canDe
         ) : (
           <span className="text-ps-subtle">DM not available</span>
         )}
-        <button type="button" disabled={busy} onClick={() => run(() => hideComment(props.commentId, !props.hidden))} className="text-ps-muted hover:text-ps-text">{props.hidden ? "Unhide" : "Hide"}</button>
+        {props.canHide !== false && (
+          <button type="button" disabled={busy} onClick={() => run(() => hideComment(props.commentId, !props.hidden))} className="text-ps-muted hover:text-ps-text">{props.hidden ? "Unhide" : "Hide"}</button>
+        )}
         {props.canDelete && <DeleteButton commentId={props.commentId} />}
         {error && <span role="alert" className="text-ps-failed-text">{error}</span>}
       </div>
