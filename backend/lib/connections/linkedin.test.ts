@@ -46,8 +46,9 @@ const LINKEDIN = (extra: Array<[RegExp, unknown, number?]> = []) => fakeHttp([
     { role: "ADMINISTRATOR", state: "REQUESTED", organization: "urn:li:organization:404" },
   ] }],
   ...extra,
-  [/organizations\/101/, { id: 101, localizedName: "Pentridge Media", vanityName: "pentridge" }],
-  [/organizations\/202/, { id: 202, localizedName: "Post Social" }],
+  [/images\/urn%3Ali%3Aimage%3ALOGO1/, { downloadUrl: "https://media.licdn.com/logo1.png" }],
+  [/organizations\/101$/, { id: 101, localizedName: "Pentridge Media", vanityName: "pentridge", logoV2: { original: "urn:li:digitalmediaAsset:LOGO1" } }],
+  [/organizations\/202$/, { id: 202, localizedName: "Post Social" }],
 ]);
 
 describe("LinkedIn accounts", () => {
@@ -78,6 +79,9 @@ describe("LinkedIn accounts", () => {
       ["organization:202", "Post Social", "Post Social", "page"],
     ]);
     expect(identities[0].avatarUrl).toBe("https://media.licdn.com/large.jpg");
+    expect(identities[1].avatarUrl).toBe("https://media.licdn.com/logo1.png");
+    // LinkedIn refuses a field list on this endpoint.
+    expect(calls.filter((c) => c.url.includes("/organizations/")).every((c) => !c.url.includes("projection"))).toBe(true);
     // One member sign-in: every account shares its token and owner.
     expect(new Set(identities.map((i) => i.tokens.accessToken))).toEqual(new Set(["member-token"]));
     expect(new Set(identities.map((i) => i.ownerExternalId))).toEqual(new Set(["m1"]));
@@ -85,7 +89,7 @@ describe("LinkedIn accounts", () => {
   });
 
   it("leaves out a Page that can't be read instead of failing the sign-in", async () => {
-    const { http } = LINKEDIN([[/organizations\/202/, { message: "Not enough permissions" }, 403]]);
+    const { http } = LINKEDIN([[/organizations\/202$/, { message: "Not enough permissions" }, 403]]);
     const identities = await exchangeCode("linkedin", "code", "https://cb", settingFrom(pages), http);
     expect(identities.map((i) => i.externalAccountId)).toEqual(["m1", "organization:101"]);
   });
@@ -104,7 +108,8 @@ describe("LinkedIn accounts", () => {
 });
 
 // A small stand-in for the database: the rows these flows read and write.
-function fakeDb(connected: string[] = [], options: { otherSharing?: boolean } = {}) {
+function fakeDb(connected: string[] = [], options: { otherSharing?: boolean; originals?: string[] } = {}) {
+  const adopted: unknown[][] = [];
   const saved: string[] = [];
   const pending = new Map<string, Record<string, unknown>>();
   let revokedLookups = 0;
@@ -113,6 +118,9 @@ function fakeDb(connected: string[] = [], options: { otherSharing?: boolean } = 
     if (query.includes("FROM public.workspace_members")) return [{ role: "owner", actor_id: "a1" }];
     if (query.includes("WITH member AS")) return [{ role: "owner", actor_id: "a1" }];
     if (query.includes("workspace_id <> $3")) return [];
+    if (query.includes("AND external_account_id = $2`") || query.includes("platform = 'linkedin' AND external_account_id = $2")) return connected.includes(String(params[1])) ? [{ id: "x" }] : [];
+    if (query.includes("'openid' = ANY(scopes)")) return (options.originals ?? []).map((id) => ({ id }));
+    if (query.includes("SET external_account_id = $2, owner_external_id = $2")) { adopted.push(params); connected.push(String(params[1])); return []; }
     if (query.includes("external_account_id = ANY")) return (params[2] as string[]).filter((id) => connected.includes(id)).map((id) => ({ external_account_id: id }));
     if (query.includes("INSERT INTO public.connected_accounts")) {
       saved.push(String(params[2]));
@@ -138,7 +146,7 @@ function fakeDb(connected: string[] = [], options: { otherSharing?: boolean } = 
     if (query.includes("disconnect_account")) return [{ cancelled: 0 }];
     return [];
   }) as unknown as Sql;
-  return { sql, saved, pending, revokedLookups: () => revokedLookups };
+  return { sql, saved, pending, adopted, revokedLookups: () => revokedLookups };
 }
 
 const person = { userId: "user-1", displayName: "Aki", entryPoint: "ui" as const };
@@ -157,7 +165,7 @@ describe("choosing which LinkedIn accounts to connect", () => {
     // What the person chooses from carries no tokens.
     const offered = await pendingChoices({ sql: db.sql, setting: settingFrom(pages), allowedReturnOrigins: [] }, person, { pending_id: result.choose });
     expect(offered.choices).toEqual([
-      { external_id: "organization:101", name: "Pentridge Media", kind: "page", avatar_url: null },
+      { external_id: "organization:101", name: "Pentridge Media", kind: "page", avatar_url: "https://media.licdn.com/logo1.png" },
       { external_id: "organization:202", name: "Post Social", kind: "page", avatar_url: null },
     ]);
     expect(JSON.stringify(offered)).not.toContain("member-token");
@@ -194,6 +202,21 @@ describe("choosing which LinkedIn accounts to connect", () => {
     expect(result.choose).toBeUndefined();
     expect(db.saved).toEqual(["m1"]);
     expect(result.message).toBe("Connected Aki B.");
+  });
+
+  it("takes over the one profile connected through the original app instead of adding a second", async () => {
+    const db = fakeDb([], { originals: ["old-row"] });
+    const result = await finish(db, LINKEDIN().http);
+    expect(db.adopted).toEqual([["old-row", "m1"]]);
+    // The profile now reconnects; only the Pages are offered.
+    expect(db.saved).toEqual(["m1"]);
+    expect(result.message).toBe("Reconnected Aki B. Choose which LinkedIn accounts to add.");
+  });
+
+  it("leaves profiles alone when it can't tell which one is the member's", async () => {
+    const db = fakeDb([], { originals: ["a", "b"] });
+    await finish(db, LINKEDIN().http);
+    expect(db.adopted).toEqual([]);
   });
 
   it("keeps the shared sign-in when another account still uses it", async () => {
