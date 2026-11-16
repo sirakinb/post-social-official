@@ -110,7 +110,18 @@ describe("Instagram", () => {
       const h = harness("instagram", { kind: "instagram", media_type: "reel", trial_reel: "manual" }, [refuse], reelMedia);
       const error = await publishInstagram(h.ctx).catch((e: unknown) => e);
       expect(error).toMatchObject({ code: "trial_reel_not_eligible", retryable: false });
-      expect(failureMessage(error as PublishError)).toBe("This Instagram account can't post trial reels yet: Instagram only allows them for accounts with enough followers. Post it as a normal Reel instead.");
+      expect(failureMessage(error as PublishError)).toBe("This Instagram account can't post trial reels yet: Instagram only allows them for accounts with enough followers. Turn off Trial reel and post it as a normal Reel instead.");
+    });
+
+    it("recognizes the trial reel refusal by its code when Instagram words it in another language", async () => {
+      const refuse = (u: URL, i: RequestInit) =>
+        method(i) === "POST" && u.pathname.endsWith("/acct-1/media")
+          ? new Response(JSON.stringify({ error: { code: 10, message: "Аккаунт Instagram не соответствует требованию к числу подписчиков для создания пробных видео Reels." } }), { status: 400 })
+          : undefined;
+      const h = harness("instagram", { kind: "instagram", media_type: "reel", trial_reel: "auto" }, [refuse], reelMedia);
+      const error = await publishInstagram(h.ctx).catch((e: unknown) => e);
+      expect(error).toMatchObject({ code: "trial_reel_not_eligible", retryable: false });
+      expect(failureMessage(error as PublishError)).not.toMatch(/Контакт|Аккаунт|Contact support/);
     });
 
     it("sends a normal Reel without trial_params", async () => {

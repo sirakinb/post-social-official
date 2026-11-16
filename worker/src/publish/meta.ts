@@ -113,9 +113,11 @@ async function createContainer(ctx: StepContext, flavor: Flavor) {
     }
   }
   const container = await call(ctx, flavor, "POST", flavor.containerPath(userId), params, `Uploading to ${flavor.name}`).catch((error: unknown) => {
-    // Instagram limits trial reels to accounts with enough followers and says so in the error.
-    if (params.trial_params && error instanceof PublishError && /trial reel/i.test(error.message)) {
-      throw new PublishError("trial_reel_not_eligible", "This Instagram account can't post trial reels yet: Instagram only allows them for accounts with enough followers. Post it as a normal Reel instead.");
+    // Instagram limits trial reels to accounts with enough followers and refuses with a
+    // permission error (code 10). Its wording comes in the account's language (it has arrived
+    // in Russian), so the code decides, with the English wording as a backstop.
+    if (params.trial_params && error instanceof PublishError && (error.code === "meta_10" || /trial reel/i.test(error.message))) {
+      throw new PublishError("trial_reel_not_eligible", "This Instagram account can't post trial reels yet: Instagram only allows them for accounts with enough followers. Turn off Trial reel and post it as a normal Reel instead.");
     }
     throw error;
   });

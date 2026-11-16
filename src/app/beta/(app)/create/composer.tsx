@@ -530,7 +530,8 @@ function PlatformOptions({ account, choice, media, caption, onChange, creator, c
           </div>
           {choice.trialReel && (
             <p className="m-0 text-xs text-ps-muted">
-              {choice.trialReel === "manual" ? "Shown to non-followers first. Share it with your followers from the Instagram app." : "Shown to non-followers first. Instagram shares it with your followers if it does well."}
+              {choice.trialReel === "manual" ? "Shown to non-followers first. Share it with your followers from the Instagram app." : "Shown to non-followers first. Instagram shares it with your followers if it does well."}{" "}
+              Instagram only offers trial reels to accounts that meet its follower minimum.
             </p>
           )}
         </div>
