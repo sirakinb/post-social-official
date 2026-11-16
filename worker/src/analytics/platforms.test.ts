@@ -188,3 +188,42 @@ describe("public refresh schedule", () => {
     expect(nextFetchAt(now - 31 * 24 * h, now, "public")).toBeNull();
   });
 });
+
+describe("LinkedIn stats", () => {
+  const page = (platformId: string, routes: Route[]) => ({ ...ctx(platformId, routes), accountExternalId: "organization:101" });
+  const member = (platformId: string, routes: Route[]) => ({ ...ctx(platformId, routes), accountExternalId: "m1" });
+
+  it("reads a Page post's share statistics", async () => {
+    let asked: URL | null = null;
+    const c = page("urn:li:share:9", [
+      (u) => (u.pathname === "/rest/organizationalEntityShareStatistics" ? ((asked = u), json({ elements: [{ totalShareStatistics: { impressionCount: 500, uniqueImpressionsCount: 320, likeCount: 12, commentCount: 3, shareCount: 2, clickCount: 40 } }] })) : undefined),
+    ]);
+    expect(await FETCHERS.linkedin(c)).toEqual({ views: 500, likes: 12, comments: 3, shares: 2, extra: { reach: 320, clicks: 40 }, unavailable: [] });
+    expect(asked!.searchParams.get("organizationalEntity")).toBe("urn:li:organization:101");
+    expect(asked!.search).toContain("shares=List(urn%3Ali%3Ashare%3A9)");
+  });
+
+  it("reads a member's post one number at a time, video posts by their ugcPost id", async () => {
+    const counts: Record<string, number> = { IMPRESSION: 900, MEMBERS_REACHED: 610, REACTION: 25, COMMENT: 4, RESHARE: 1 };
+    const entities = new Set<string>();
+    const c = member("urn:li:ugcPost:7", [
+      (u) => {
+        if (u.pathname !== "/rest/memberCreatorPostAnalytics") return undefined;
+        entities.add(u.searchParams.get("entity")!);
+        return json({ elements: [{ count: counts[u.searchParams.get("queryType")!], metricType: u.searchParams.get("queryType") }] });
+      },
+    ]);
+    expect(await FETCHERS.linkedin(c)).toEqual({ views: 900, likes: 25, comments: 4, shares: 1, extra: { reach: 610 }, unavailable: [] });
+    expect([...entities]).toEqual(["(ugc:urn:li:ugcPost:7)"]);
+  });
+
+  it("leaves the numbers to the public reads for accounts without the permission", async () => {
+    const c = member("urn:li:share:9", [(u) => (u.pathname.startsWith("/rest/") ? json({ message: "Not enough permissions to access" }, 403) : undefined)]);
+    expect(await FETCHERS.linkedin(c)).toEqual({ extra: {}, unavailable: ["views", "likes", "comments", "shares"] });
+  });
+
+  it("stops on expired access instead of reporting nothing", async () => {
+    const c = page("urn:li:share:9", [(u) => (u.pathname.startsWith("/rest/") ? json({ message: "Invalid access token" }, 401) : undefined)]);
+    await expect(FETCHERS.linkedin(c)).rejects.toMatchObject({ expired: true });
+  });
+});
