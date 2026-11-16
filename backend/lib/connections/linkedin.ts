@@ -99,6 +99,21 @@ function largestImage(decorated: Json | undefined): string | undefined {
   return typeof best === "string" && best.startsWith("https://") ? best : undefined;
 }
 
+// A Page's name, public address and logo link. The organizations endpoint takes no field
+// list, and gives the logo as an image id that the images endpoint turns into a link.
+async function readPage(http: Http, token: string, organizationId: string) {
+  const page = await get(http, `${LINKEDIN_API}/organizations/${organizationId}`, token, "Reading a LinkedIn Page");
+  const name = typeof page.localizedName === "string" && page.localizedName.trim() ? page.localizedName.trim() : null;
+  let logo: string | null = null;
+  const asset = typeof page.logoV2?.original === "string" ? page.logoV2.original : "";
+  if (asset) {
+    const image = asset.replace("urn:li:digitalmediaAsset:", "urn:li:image:");
+    const found = await get(http, `${LINKEDIN_API}/images/${encodeURIComponent(image)}`, token, "Reading a LinkedIn Page logo").catch(() => null);
+    if (typeof found?.downloadUrl === "string" && found.downloadUrl.startsWith("https://")) logo = found.downloadUrl;
+  }
+  return { name, vanityName: typeof page.vanityName === "string" && page.vanityName ? page.vanityName : null, logo };
+}
+
 export type LinkedInToken = { accessToken: string; refreshToken?: string; scopes: string[]; accessTokenExpiresAt?: Date; refreshTokenExpiresAt?: Date };
 
 // The member's profile and the Pages they can post for, each as its own account.
@@ -143,17 +158,16 @@ export async function linkedinIdentities(token: LinkedInToken, capabilities: { p
   }
 
   for (const id of organizationIds) {
-    const page = await get(http, `${LINKEDIN_API}/organizations/${id}?projection=(id,localizedName,vanityName,logoV2(original~:playableStreams))`, token.accessToken, "Reading a LinkedIn Page")
-      // A Page that can't be read is left out rather than failing the whole sign-in.
-      .catch(() => null);
+    // A Page that can't be read is left out rather than failing the whole sign-in.
+    const page = await readPage(http, token.accessToken, id).catch(() => null);
     if (!page) continue;
-    const pageName = (typeof page.localizedName === "string" && page.localizedName.trim()) || `LinkedIn Page ${id}`;
+    const pageName = page.name ?? `LinkedIn Page ${id}`;
     identities.push({
       ...shared,
       externalAccountId: linkedinPageExternalId(id),
-      handle: typeof page.vanityName === "string" && page.vanityName ? page.vanityName : pageName,
+      handle: page.vanityName ?? pageName,
       displayName: pageName,
-      avatarUrl: largestImage(page.logoV2?.["original~"]),
+      avatarUrl: page.logo ?? undefined,
       capabilities: capabilities.page,
     });
   }
@@ -163,8 +177,6 @@ export async function linkedinIdentities(token: LinkedInToken, capabilities: { p
 // A Page's current name, public address and logo. LinkedIn lets apps keep a connected Page's
 // profile for eight weeks, so it is read again every week (worker/src/avatars.ts).
 export async function linkedinPageProfile(http: Http, token: string, externalId: string) {
-  const id = externalId.slice(PAGE_PREFIX.length);
-  const page = await get(http, `${LINKEDIN_API}/organizations/${id}?projection=(id,localizedName,vanityName,logoV2(original~:playableStreams))`, token, "Reading the LinkedIn Page");
-  const name = typeof page.localizedName === "string" && page.localizedName.trim() ? page.localizedName.trim() : null;
-  return { name, handle: typeof page.vanityName === "string" && page.vanityName ? page.vanityName : name, logo: largestImage(page.logoV2?.["original~"]) ?? null };
+  const page = await readPage(http, token, externalId.slice(PAGE_PREFIX.length));
+  return { name: page.name, handle: page.vanityName ?? page.name, logo: page.logo };
 }

@@ -37,7 +37,7 @@ describe("profile picture copies", () => {
     const { deps, updates, put } = setup(
       [row({ platform: "linkedin", external_account_id: "organization:101", display_name: "Old name" })],
       { "https://media.licdn.com/logo.png": { type: "image/png", body: new Uint8Array([4, 5]) } },
-      (url) => (url.includes("/rest/organizations/101") ? { localizedName: "Pentridge Media", vanityName: "pentridge", logoV2: { "original~": { elements: [{ identifiers: [{ identifier: "https://media.licdn.com/logo.png" }] }] } } } : {}),
+      (url) => (url.includes("/rest/organizations/101") ? { localizedName: "Pentridge Media", vanityName: "pentridge", logoV2: { original: "urn:li:digitalmediaAsset:L1" } } : url.includes("/rest/images/") ? { downloadUrl: "https://media.licdn.com/logo.png" } : {}),
     );
     expect(await syncAvatars(deps)).toBe(1);
     expect(updates.find((u) => String(u[0]).includes("SET display_name"))?.slice(1)).toEqual(["acct", "Pentridge Media", "pentridge"]);
