@@ -9,9 +9,14 @@ import { chooseAccounts, loadPendingChoices } from "../actions";
 export const metadata = { title: "Choose accounts · Post Social" };
 
 const KIND = { profile: "Your profile", page: "Company Page" } as const;
+// What each choice is, under its name: LinkedIn says profile or Company Page; Facebook
+// choices are always Pages.
+const kindLabel = (platform: string, kind: keyof typeof KIND | null, name: string) =>
+  kind ? KIND[kind] : platform === "facebook" ? "Facebook Page" : name;
 
 // After a sign-in that brought several new accounts (a LinkedIn profile and the Pages its
-// member can post for), the person ticks the ones to add. Each added account is billed, so
+// member can post for, or Facebook Pages the person shared with Post Social at any time),
+// the person ticks the ones to add. Each added account is billed, so
 // nothing new is connected without a tick. Accounts already connected were refreshed already.
 export default async function ChooseAccountsPage({ searchParams }: { searchParams: Promise<{ pending?: string; workspace?: string }> }) {
   const { pending: pendingId = "" } = await searchParams;
@@ -50,7 +55,7 @@ export default async function ChooseAccountsPage({ searchParams }: { searchParam
                   <PlatformMark platform={platform} size={32} className="rounded-full" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm text-ps-text">{choice.name}</span>
-                    <span className="block text-xs text-ps-subtle">{choice.kind ? KIND[choice.kind] : name}</span>
+                    <span className="block text-xs text-ps-subtle">{kindLabel(platform, choice.kind, name)}</span>
                   </span>
                 </label>
               </li>

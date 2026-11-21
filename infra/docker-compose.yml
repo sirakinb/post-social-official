@@ -1,0 +1,195 @@
+# Post Social: the services we run today, written as one Compose file.
+#
+# This file describes the production setup for migration planning (for example, moving off
+# InsForge to AWS) and as a map for local work. It is NOT how we deploy today:
+#   - web          -> Vercel (Next.js), project post-social, domain www.postsocial.xyz
+#   - postgres     -> InsForge managed Postgres (also provides auth, row-level security)
+#   - functions-*  -> InsForge edge functions (Deno): api, posts, media, connections
+#   - worker       -> InsForge Compute (always-on container, built from worker/Dockerfile)
+#   - object store -> Cloudflare R2 (S3-compatible, private bucket); MinIO stands in here
+# Full inventory, sizes and AWS mapping: infra/README.md.
+#
+# Values are never stored in the repo. Each ${NAME} comes from the environment (InsForge
+# secrets and Vercel environment variables today).
+
+name: post-social
+
+x-platform-keys: &platform-keys
+  META_APP_ID: ${META_APP_ID}
+  META_APP_SECRET: ${META_APP_SECRET}
+  META_LOGIN_CONFIG_ID: ${META_LOGIN_CONFIG_ID}
+  META_STATS_LOGIN_CONFIG_ID: ${META_STATS_LOGIN_CONFIG_ID}
+  META_INBOX_LOGIN_CONFIG_ID: ${META_INBOX_LOGIN_CONFIG_ID}
+  META_WEBHOOK_VERIFY_TOKEN: ${META_WEBHOOK_VERIFY_TOKEN}
+  INSTAGRAM_APP_ID: ${INSTAGRAM_APP_ID}
+  INSTAGRAM_APP_SECRET: ${INSTAGRAM_APP_SECRET}
+  THREADS_APP_ID: ${THREADS_APP_ID}
+  THREADS_APP_SECRET: ${THREADS_APP_SECRET}
+  TIKTOK_CLIENT_KEY: ${TIKTOK_CLIENT_KEY}
+  TIKTOK_CLIENT_SECRET: ${TIKTOK_CLIENT_SECRET}
+  TIKTOK_REDIRECT_URI: ${TIKTOK_REDIRECT_URI}
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+  GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI}
+  LINKEDIN_CLIENT_ID: ${LINKEDIN_CLIENT_ID}
+  LINKEDIN_CLIENT_SECRET: ${LINKEDIN_CLIENT_SECRET}
+  LINKEDIN_PAGES_CLIENT_ID: ${LINKEDIN_PAGES_CLIENT_ID}
+  LINKEDIN_PAGES_CLIENT_SECRET: ${LINKEDIN_PAGES_CLIENT_SECRET}
+  X_CLIENT_ID: ${X_CLIENT_ID}
+  X_CLIENT_SECRET: ${X_CLIENT_SECRET}
+  BLUESKY_CLIENT_JWK: ${BLUESKY_CLIENT_JWK}
+
+x-backend-env: &backend-env
+  APP_ENV: ${APP_ENV:-production}
+  INSFORGE_BASE_URL: ${INSFORGE_BASE_URL}
+  API_KEY: ${API_KEY}
+  DATABASE_URL: postgres://postsocial:${POSTGRES_PASSWORD}@postgres:5432/postsocial
+  CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY}
+  EMAIL_LINK_SECRET: ${EMAIL_LINK_SECRET}
+  CONNECTIONS_BASE_URL: ${CONNECTIONS_BASE_URL}
+  WEB_APP_HOME: ${WEB_APP_HOME}
+  WEB_APP_ORIGINS: ${WEB_APP_ORIGINS}
+  INTERNAL_PROXY_SECRET: ${INTERNAL_PROXY_SECRET}
+  R2_ACCOUNT_ID: ${R2_ACCOUNT_ID}
+  R2_BUCKET: ${R2_BUCKET}
+  R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
+  R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
+  STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+  STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+  RESEND_API_KEY: ${RESEND_API_KEY}
+  ALERT_EMAIL: ${ALERT_EMAIL}
+  POSTHOG_KEY: ${POSTHOG_KEY}
+  SCRAPECREATORS_API_KEY: ${SCRAPECREATORS_API_KEY}
+  ANALYTICS_PLATFORMS: ${ANALYTICS_PLATFORMS:-}
+  ANALYTICS_PUBLIC_PLATFORMS: ${ANALYTICS_PUBLIC_PLATFORMS:-}
+  INBOX_WORKSPACES: ${INBOX_WORKSPACES:-}
+
+x-function: &function
+  image: denoland/deno:2.1.4
+  working_dir: /app
+  volumes:
+    - ../:/app:ro
+  depends_on:
+    postgres:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  # Managed Postgres 15 (InsForge). Holds app data, auth users and row-level security
+  # policies. Schema lives in migrations/ (applied in order). Prod size: micro.
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: postsocial
+      POSTGRES_USER: postsocial
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postsocial -d postsocial"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Private media bucket. Production uses Cloudflare R2 (S3 API); browsers upload directly
+  # with signed links, up to 1 GB per file.
+  object-store:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${R2_ACCESS_KEY_ID}
+      MINIO_ROOT_PASSWORD: ${R2_SECRET_ACCESS_KEY}
+    volumes:
+      - media-data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+  # Edge functions (Deno, HTTP). Each exports a fetch handler from backend/functions/<name>.
+  # api: REST /v1, MCP /mcp, OAuth for AI apps, API keys, billing webhooks.
+  functions-api:
+    <<: *function
+    command: ["deno", "serve", "--allow-net", "--allow-env", "--allow-read", "--port", "8001", "backend/functions/api/index.ts"]
+    environment:
+      <<: [*backend-env, *platform-keys]
+    ports:
+      - "8001:8001"
+
+  # posts: the web app's post, approval and schedule routes.
+  functions-posts:
+    <<: *function
+    command: ["deno", "serve", "--allow-net", "--allow-env", "--allow-read", "--port", "8002", "backend/functions/posts/index.ts"]
+    environment:
+      <<: *backend-env
+    ports:
+      - "8002:8002"
+
+  # media: signed upload and view links for the media bucket.
+  functions-media:
+    <<: *function
+    command: ["deno", "serve", "--allow-net", "--allow-env", "--allow-read", "--port", "8003", "backend/functions/media/index.ts"]
+    environment:
+      <<: *backend-env
+    ports:
+      - "8003:8003"
+
+  # connections: social account sign-in (OAuth callbacks for every platform), Meta webhooks
+  # (Inbox comments and DMs), Meta data-deletion and deauthorize callbacks, Bluesky client id.
+  functions-connections:
+    <<: *function
+    command: ["deno", "serve", "--allow-net", "--allow-env", "--allow-read", "--port", "8004", "backend/functions/connections/index.ts"]
+    environment:
+      <<: [*backend-env, *platform-keys]
+    ports:
+      - "8004:8004"
+
+  # Always-on Node 24 container (ffmpeg included). Publishes scheduled posts (3 slots),
+  # checks and imports media, refreshes platform tokens every 5 minutes, collects stats,
+  # processes Inbox webhooks and comment automations, and runs hourly/6-hourly sweeps.
+  # Production: InsForge Compute, 1 instance. Build the bundle first with worker/build.sh.
+  worker:
+    build:
+      context: ../worker
+      dockerfile: Dockerfile
+    environment:
+      <<: [*backend-env, *platform-keys]
+      PORT: "8080"
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-3}
+      MEDIA_RETENTION_DAYS: ${MEDIA_RETENTION_DAYS:-30}
+      PUBLISH_ALLOWLIST: ${PUBLISH_ALLOWLIST:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  # Next.js website and web app (landing, /beta app, /docs). Production: Vercel.
+  # Rewrites /api/v1, /mcp, /oauth/* and /.well-known/* to the api function.
+  web:
+    image: node:24-slim
+    working_dir: /app
+    command: ["sh", "-c", "npm ci && npm run build && npm run start -- -p 3333"]
+    volumes:
+      - ../:/app
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_APP_ENV: ${NEXT_PUBLIC_APP_ENV:-production}
+      NEXT_PUBLIC_INSFORGE_URL: ${INSFORGE_BASE_URL}
+      NEXT_PUBLIC_POSTHOG_KEY: ${POSTHOG_KEY}
+      API_BASE_URL: http://functions-api:8001
+      CONNECTIONS_BASE_URL: ${CONNECTIONS_BASE_URL}
+      INTERNAL_PROXY_SECRET: ${INTERNAL_PROXY_SECRET}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      ANALYTICS_PLATFORMS: ${ANALYTICS_PLATFORMS:-}
+      ANALYTICS_PUBLIC_PLATFORMS: ${ANALYTICS_PUBLIC_PLATFORMS:-}
+    depends_on:
+      - functions-api
+    ports:
+      - "3333:3333"
+
+volumes:
+  postgres-data:
+  media-data:
