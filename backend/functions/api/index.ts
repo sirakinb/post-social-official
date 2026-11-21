@@ -7,6 +7,7 @@ import { statsPlatforms } from "../../lib/connections/platforms";
 import { createR2 } from "../../lib/media/r2";
 import { createStripe } from "../../lib/billing";
 import { createApiHandler } from "./handler";
+import { inboxSwitch } from "../../lib/inbox/automations";
 
 declare const Deno: { env: { get(name: string): string | undefined } };
 
@@ -30,6 +31,7 @@ export default withReporting("api", (name) => Deno.env.get(name), createApiHandl
   newId: () => crypto.randomUUID(),
   webAppUrl,
   analyticsPlatforms: statsPlatforms(setting),
+  inbox: inboxSwitch((name) => Deno.env.get(name)),
   setting,
   publicApiUrl: `${webAppUrl}/api`,
   callerForKey,
