@@ -26,7 +26,7 @@ import { callbackUrl, chooseAccounts, completeConnection, disconnectAccount, fin
 import { deletionStatus, handleDataDeletion, handleDeauthorize } from "../../lib/connections/meta-deletion";
 import { createProfile, deleteProfile, moveAccount, setTiktokDelivery, updateProfile } from "../../lib/connections/profiles";
 import { clientKey, clientMetadata, publicJwk } from "../../lib/connections/atproto";
-import { receiveWebhook, verifyWebhook } from "../../lib/inbox/webhooks";
+import { receiveWebhook, verifyWebhook, type WebhookForward } from "../../lib/inbox/webhooks";
 
 export type ConnectionsHandlerDeps = ConnectionDeps & {
   userForToken: (token: string | null) => Promise<SignedInUser | null>;
@@ -34,6 +34,7 @@ export type ConnectionsHandlerDeps = ConnectionDeps & {
   metaAppSecrets: string[];
   selfBaseUrl: string; // public base URL of this function, for the deletion status link
   metaWebhookVerifyToken?: string | null; // our answer to Meta's webhook address check
+  metaWebhookForward?: WebhookForward | null; // prod only: our test accounts' events passed on to dev
 };
 
 const JSON_HEADERS = { "Content-Type": "application/json", "Cache-Control": "no-store" };
@@ -114,7 +115,7 @@ export function createConnectionsHandler(deps: ConnectionsHandlerDeps) {
         return challenge === null ? json(403, { error: "Verification failed." }) : new Response(challenge, { status: 200, headers: { "Content-Type": "text/plain" } });
       }
       if (path === "/meta/webhooks" && method === "POST") {
-        const { status } = await receiveWebhook({ sql: deps.sql, appSecrets: deps.metaAppSecrets }, request);
+        const { status } = await receiveWebhook({ sql: deps.sql, appSecrets: deps.metaAppSecrets, forward: deps.metaWebhookForward ?? null }, request);
         return json(status, status === 200 ? { received: true } : { error: "Not accepted." });
       }
 

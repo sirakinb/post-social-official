@@ -13,19 +13,27 @@ export function verifyWebhook(params: URLSearchParams, verifyToken: string | nul
 
 const hex = (bytes: ArrayBuffer) => [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, "0")).join("");
 
+async function hmacHex(secret: string, body: string) {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body)));
+}
+
 // X-Hub-Signature-256 is "sha256=" + the HMAC of the raw body with the app's secret. Any of
-// our Meta apps' secrets may have signed it.
-export async function signatureValid(rawBody: string, header: string | null, secrets: string[]) {
+// our Meta apps' secrets may have signed it; returns the one that did.
+async function signingSecret(rawBody: string, header: string | null, secrets: string[]) {
   const sent = header?.startsWith("sha256=") ? header.slice(7).toLowerCase() : null;
-  if (!sent || !/^[0-9a-f]{64}$/.test(sent)) return false;
+  if (!sent || !/^[0-9a-f]{64}$/.test(sent)) return null;
   for (const secret of secrets) {
-    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-    const expected = hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(rawBody)));
+    const expected = await hmacHex(secret, rawBody);
     let diff = 0;
     for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ sent.charCodeAt(i);
-    if (diff === 0) return true;
+    if (diff === 0) return secret;
   }
-  return false;
+  return null;
+}
+
+export async function signatureValid(rawBody: string, header: string | null, secrets: string[]) {
+  return (await signingSecret(rawBody, header, secrets)) !== null;
 }
 
 export type StoredEvent = { platform: "instagram" | "facebook" | "threads"; entryId: string; field: string; payload: unknown };
@@ -75,17 +83,67 @@ export async function storeEvents(sql: Sql, events: StoredEvent[]) {
   return events.length;
 }
 
-// The whole POST: signed by Meta, then stored. Unsigned or badly signed deliveries are
-// refused without storing anything.
-export async function receiveWebhook(deps: { sql: Sql; appSecrets: string[] }, request: Request) {
+// Each Meta app sends its webhooks to one address: prod's. So dev keeps getting live events
+// for our own test accounts, prod passes those on to dev (META_WEBHOOK_FORWARD_URL, for the
+// account ids in META_WEBHOOK_FORWARD_IDS). Meta can batch several accounts into one
+// delivery, so dev gets a copy holding only the listed accounts, signed again with the same
+// app secret: no other account's comments or messages ever reach dev.
+export type WebhookForward = { url: string; ids: string[] };
+
+export function forwardSettings(read: (name: string) => string | undefined): WebhookForward | null {
+  const url = (read("META_WEBHOOK_FORWARD_URL") ?? "").trim();
+  const ids = (read("META_WEBHOOK_FORWARD_IDS") ?? "").split(",").map((id) => id.trim()).filter(Boolean);
+  return /^https:\/\//.test(url) && ids.length ? { url, ids } : null;
+}
+
+// The part of a delivery about the listed accounts, in Meta's own shape; null when none.
+export function onlyAccounts(body: unknown, ids: string[]): unknown | null {
+  const wanted = new Set(ids);
+  const delivery = (body ?? {}) as { object?: string; entry?: unknown; values?: unknown };
+  if (Array.isArray(body) || delivery.values) {
+    const kept = (Array.isArray(body) ? body : [body]).filter((d) => threadsEvents(d).some((e) => wanted.has(e.entryId)));
+    return kept.length ? (Array.isArray(body) ? kept : kept[0]) : null;
+  }
+  if (!Array.isArray(delivery.entry)) return null;
+  const entry = delivery.entry.filter((e) => wanted.has(String((e as { id?: unknown })?.id ?? "")));
+  return entry.length ? { ...delivery, entry } : null;
+}
+
+async function forwardToDev(forward: WebhookForward, body: unknown, secret: string, http: typeof fetch) {
+  const part = onlyAccounts(body, forward.ids);
+  if (part === null) return false;
+  const raw = JSON.stringify(part);
+  try {
+    // Prod's answer to Meta must not wait long on dev: a short limit, and a failure is ignored.
+    await http(forward.url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Hub-Signature-256": `sha256=${await hmacHex(secret, raw)}` },
+      body: raw,
+      signal: AbortSignal.timeout(3000),
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// The whole POST: signed by Meta, then stored (and our test accounts' part passed to dev).
+// Unsigned or badly signed deliveries are refused without storing anything.
+export async function receiveWebhook(
+  deps: { sql: Sql; appSecrets: string[]; forward?: WebhookForward | null; http?: typeof fetch },
+  request: Request,
+) {
   const raw = await request.text();
-  if (raw.length > 1_000_000) return { status: 413, stored: 0 };
-  if (!(await signatureValid(raw, request.headers.get("x-hub-signature-256"), deps.appSecrets))) return { status: 401, stored: 0 };
+  if (raw.length > 1_000_000) return { status: 413, stored: 0, forwarded: false };
+  const secret = await signingSecret(raw, request.headers.get("x-hub-signature-256"), deps.appSecrets);
+  if (!secret) return { status: 401, stored: 0, forwarded: false };
   let body: unknown;
   try {
     body = JSON.parse(raw);
   } catch {
-    return { status: 400, stored: 0 };
+    return { status: 400, stored: 0, forwarded: false };
   }
-  return { status: 200, stored: await storeEvents(deps.sql, eventsIn(body)) };
+  const stored = await storeEvents(deps.sql, eventsIn(body));
+  const forwarded = deps.forward ? await forwardToDev(deps.forward, body, secret, deps.http ?? fetch) : false;
+  return { status: 200, stored, forwarded };
 }
