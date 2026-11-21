@@ -32,6 +32,11 @@ type Account = { id: string; workspace_id: string; platform: Platform; handle: s
 
 // Platforms whose follower count is read through their own API when switched on there.
 const OFFICIAL_FOLLOWERS: Platform[] = ["bluesky", "x", "linkedin"];
+// Read officially by the whole-account sweep (account.ts) with every account's basic access,
+// so they never cost a public read where their stats are switched on. Threads' count needs
+// its insights permission, which older connections lack, so its public read stays as the
+// fallback (the official count replaces it for the day when there is one).
+const COUNTED_BY_ACCOUNT_SWEEP: Platform[] = ["instagram", "facebook"];
 
 // A LinkedIn account may read its own follower count only with the Community Management
 // app's permissions; accounts from the original app go on as before.
@@ -53,7 +58,7 @@ const lastFailure = new Map<string, number>();
 
 export async function runFollowerSweep(deps: FollowerDeps): Promise<number> {
   const now = deps.now ?? Date.now;
-  const publicOn = deps.publicApiKey ? deps.publicPlatforms : [];
+  const publicOn = (deps.publicApiKey ? deps.publicPlatforms : []).filter((p) => !(COUNTED_BY_ACCOUNT_SWEEP.includes(p) && deps.platforms.includes(p)));
   const officialOn = OFFICIAL_FOLLOWERS.filter((p) => deps.platforms.includes(p));
   const platforms = [...new Set([...publicOn, ...officialOn])];
   if (!platforms.length) return 0;

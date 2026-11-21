@@ -31,11 +31,17 @@ export type PostRow = {
   reach?: number | string | null; // people who saw it, where the platform's own API reports it
   fetched_at: string | null;
   next_fetch_at: string | null;
+  // Posted on the account outside Post Social (whole-account analytics, account_posts).
+  outside?: boolean;
 } & Partial<Record<Counter, number | string | null>>;
 
 export type AccountRow = { id: string; platform: Platform; display_name: string; handle: string | null; avatar_url: string | null };
 export type FollowerRow = { connected_account_id: string; day: string; followers: number | string; source: "official" | "public" };
 export type DayRow = { destination_id: string; day: string } & Partial<Record<Counter, number | string | null>>;
+// One day of an account's own numbers, and its latest audience (whole-account analytics).
+export type InsightRow = { connected_account_id: string; day: string; views: number | string | null; reach: number | string | null; profile_views: number | string | null; interactions: number | string | null; engaged: number | string | null };
+export type Breakdown = Array<{ label: string; value: number }>;
+export type AudienceRow = { connected_account_id: string; breakdowns: Partial<Record<"age" | "gender" | "country" | "city", Breakdown>>; fetched_at: string };
 
 const DAY = 86_400_000;
 const round = (n: number, digits = 4) => Math.round(n * 10 ** digits) / 10 ** digits;
@@ -80,6 +86,8 @@ export function buildDashboard(input: {
   refreshesUsed: number;
   // Platforms whose follower counts need a card here (X: paid reads, so paying workspaces only).
   followersNeedCard?: Platform[];
+  insights?: InsightRow[]; // each account's daily numbers in the period
+  audiences?: AudienceRow[];
 }) {
   const { now, days } = input;
   const since = now - days * DAY;
@@ -124,6 +132,7 @@ export function buildDashboard(input: {
         engagements,
         engagement_rate: rate === null ? null : round(rate),
         source: (p.source ?? "official") as Source,
+        outside: Boolean(p.outside),
       };
     })
     .sort((a, b) => Date.parse(b.published_at) - Date.parse(a.published_at));
@@ -191,6 +200,9 @@ export function buildDashboard(input: {
       engagement_rate: myRates.length ? round(mean(myRates)!) : null,
       source: list.at(-1)?.source ?? (mine[0]?.source ?? null),
       history: list.filter((point) => point.day >= isoDay(since)).map((point) => ({ day: point.day, followers: point.followers })),
+      insights: accountInsights((input.insights ?? []).filter((d) => d.connected_account_id === a.id && d.day >= isoDay(since))),
+      audience: input.audiences?.find((au) => au.connected_account_id === a.id)?.breakdowns ?? null,
+      outside_posts: mine.filter((p) => p.outside).length,
     };
   });
   const followersTotal = accounts.reduce((t, a) => t + (a.followers ?? 0), 0);
@@ -292,6 +304,28 @@ export function buildUpCurve(posts: Array<{ destination_id: string; published_at
   return shares.every((list) => list.length) ? BUILD_UP_DAYS.map((n, i) => ({ day: n, share: round(mean(shares[i])!, 3) })) : null;
 }
 
+// An account's own numbers over the period: totals of what the platform counted each day,
+// and reach as a daily average (people reached on different days can be the same people, so
+// adding days up would overcount). null when the account has no such numbers.
+export function accountInsights(days: InsightRow[]) {
+  if (!days.length) return null;
+  const total = (key: keyof Omit<InsightRow, "connected_account_id" | "day">) => {
+    const values = days.map((d) => d[key]).filter((v) => v !== null && v !== undefined).map(Number);
+    return values.length ? values.reduce((a, b) => a + b, 0) : null;
+  };
+  const reachDays = days.filter((d) => d.reach !== null && d.reach !== undefined);
+  const result = {
+    days: days.length,
+    views: total("views"),
+    profile_views: total("profile_views"),
+    interactions: total("interactions"),
+    engaged: total("engaged"),
+    reach_per_day: reachDays.length ? Math.round(reachDays.reduce((t, d) => t + Number(d.reach), 0) / reachDays.length) : null,
+    since: [...days].sort((a, b) => a.day.localeCompare(b.day))[0].day,
+  };
+  return [result.views, result.profile_views, result.interactions, result.engaged, result.reach_per_day].some((v) => v !== null) ? result : null;
+}
+
 export type Dashboard = ReturnType<typeof buildDashboard>;
 
 export async function analyticsDashboard(sql: Sql, caller: Caller, platforms: Platform[], input: { workspace_id: string; period?: unknown; platform?: unknown }) {
@@ -304,7 +338,7 @@ export async function analyticsDashboard(sql: Sql, caller: Caller, platforms: Pl
   const days = DASHBOARD_PERIODS[period];
 
   // The reads don't depend on each other (followers only on the accounts), so they run at once.
-  const [posts, { accounts, followers }, history, [{ used }]] = await Promise.all([
+  const [ours, outside, insights, audiences, { accounts, followers }, history, [{ used }]] = await Promise.all([
     sql<PostRow>(
       `SELECT m.destination_id, m.post_id, m.platform, m.connected_account_id, m.published_at, m.views, m.likes, m.comments, m.shares,
          m.saves, m.reposts, m.quotes, m.source, m.fetched_at, m.next_fetch_at, left(p.caption, 200) AS caption, d.live_url,
@@ -323,6 +357,24 @@ export async function analyticsDashboard(sql: Sql, caller: Caller, platforms: Pl
        ORDER BY m.published_at DESC LIMIT 3000`,
       [input.workspace_id, enabled, platform, days],
     ),
+    // Posts on the same accounts made outside Post Social (read through the platform's own API).
+    sql<PostRow>(
+      `SELECT 'outside:' || o.id AS destination_id, '' AS post_id, o.platform, o.connected_account_id, o.published_at, o.views, o.likes, o.comments,
+         o.shares, o.saves, o.reposts, o.quotes, o.source, o.fetched_at, NULL AS next_fetch_at, o.caption, o.permalink AS live_url, o.reach,
+         a.display_name AS account, o.format, true AS outside
+       FROM public.account_posts o
+       JOIN public.connected_accounts a ON a.id = o.connected_account_id
+       WHERE o.workspace_id = $1 AND o.platform = ANY($2::text[]) AND ($3::text IS NULL OR o.platform = $3) AND a.health <> 'disconnected'
+         AND o.published_at >= now() - make_interval(days => $4)
+       ORDER BY o.published_at DESC LIMIT 3000`,
+      [input.workspace_id, enabled, platform, days],
+    ),
+    sql<InsightRow>(
+      `SELECT connected_account_id, to_char(day, 'YYYY-MM-DD') AS day, views, reach, profile_views, interactions, engaged
+       FROM public.account_insight_days WHERE workspace_id = $1 AND day >= (now() - make_interval(days => $2))::date`,
+      [input.workspace_id, days],
+    ),
+    sql<AudienceRow>(`SELECT connected_account_id, breakdowns, fetched_at FROM public.account_audiences WHERE workspace_id = $1`, [input.workspace_id]),
     (async () => {
       const accounts = await sql<AccountRow>(
         `SELECT id, platform, display_name, nullif(handle, '') AS handle, avatar_url FROM public.connected_accounts
@@ -363,7 +415,8 @@ export async function analyticsDashboard(sql: Sql, caller: Caller, platforms: Pl
       )
     : [];
   const followersNeedCard: Platform[] = enabled.includes("x") && (await xNeedsCard(sql, input.workspace_id)) ? ["x"] : [];
-  const dashboard = buildDashboard({ now: Date.now(), days, posts, accounts, followers, history: [], refreshesUsed: Number(used), followersNeedCard });
+  const posts = [...ours, ...outside];
+  const dashboard = buildDashboard({ now: Date.now(), days, posts, accounts, followers, history: [], refreshesUsed: Number(used), followersNeedCard, insights, audiences });
   dashboard.build_up = buildUpCurve(older.map((o) => ({ ...o, published_at: new Date(o.published_at).toISOString() })), history);
   return { period, platforms: platforms.map((p) => ({ platform: p, platform_name: DISPLAY_NAMES[p] })), ...dashboard };
 }

@@ -170,3 +170,46 @@ describe("Analytics page", () => {
     expect(screen.getByText(/Your best slot so far is/)).toBeInTheDocument();
   });
 });
+
+describe("whole-account analytics on the Analytics page", () => {
+  const whole = buildDashboard({
+    now: NOW, days: 30, refreshesUsed: 0, history: [],
+    accounts: [
+      { id: "ig", platform: "instagram", display_name: "Maker IG", handle: "maker", avatar_url: null },
+      { id: "x", platform: "x", display_name: "Maker X", handle: "makerx", avatar_url: null },
+    ],
+    followers: [{ connected_account_id: "ig", day: "2026-10-16", followers: 1000, source: "official" }],
+    posts: [row("outside:1", { post_id: "", caption: "Made in the app", likes: 12, source: "official", outside: true })],
+    insights: [
+      { connected_account_id: "ig", day: "2026-10-15", views: 2500, reach: 800, profile_views: 41, interactions: 120, engaged: null },
+      { connected_account_id: "ig", day: "2026-10-14", views: 1500, reach: 600, profile_views: 9, interactions: 30, engaged: null },
+    ],
+    audiences: [{ connected_account_id: "ig", breakdowns: { country: [{ label: "US", value: 300 }, { label: "NG", value: 100 }], gender: [{ label: "F", value: 3 }, { label: "M", value: 1 }] }, fetched_at: "2026-10-15T00:00:00Z" }],
+  });
+  const wholeData: AnalyticsData = { ...whole, period: "last_30_days", platforms: [{ platform: "instagram", platform_name: "Instagram" }, { platform: "x", platform_name: "X" }] };
+  const show = (tab: Tab) => render(<AnalyticsView data={{ ...wholeData, posts: [] }} postCount={wholeData.posts.length} tab={tab} query={{ tab }} posts={wholeData.posts} topPosts={wholeData.posts} showSources={false} />);
+
+  it("marks posts made outside Post Social", () => {
+    show("posts");
+    expect(screen.getByText(/Posted outside Post Social/)).toBeTruthy();
+  });
+
+  it("shows each account's own activity, only for accounts that have it", () => {
+    show("overview");
+    const card = screen.getByText("Account activity").closest("section, div")!.parentElement!;
+    const table = within(card).getByRole("table");
+    expect(within(table).getByText("Maker IG")).toBeTruthy();
+    expect(within(table).queryByText("Maker X")).toBeNull();
+    expect(within(table).getByText("4,000")).toBeTruthy(); // views added up
+    expect(within(table).getByText("700")).toBeTruthy(); // reach per day, averaged
+    expect(within(table).getByText("50")).toBeTruthy(); // profile visits
+  });
+
+  it("shows the audience on the Growth tab", () => {
+    show("growth");
+    expect(screen.getByText("Audience")).toBeTruthy();
+    expect(screen.getByText("Top countries")).toBeTruthy();
+    expect(screen.getAllByText("75%")).toHaveLength(2); // US, and women
+    expect(screen.getByText("Women")).toBeTruthy();
+  });
+});
