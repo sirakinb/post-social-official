@@ -248,8 +248,8 @@ describe("refresh and revoke", () => {
 });
 
 describe("finishing a Facebook connection", () => {
-  // Two Pages come back; p2 is already connected in another workspace.
-  async function finish(elsewhere: string[]) {
+  // Two Pages come back. `elsewhere`: connected in another workspace; `here`: already in this one.
+  async function finish(elsewhere: string[], here: string[] = []) {
     const { http } = fakeHttp([
       [/redirect_uri/, { access_token: "short" }],
       [/fb_exchange_token/, { access_token: "user-long" }],
@@ -260,17 +260,51 @@ describe("finishing a Facebook connection", () => {
       ] }],
     ]);
     const inserted: string[] = [];
+    const offered: Array<{ choices: unknown; sealed: string }> = [];
     const sql = (async (query: string, params: unknown[] = []) => {
       if (query.includes("UPDATE public.oauth_states")) return [{ workspace_id: "w1", user_id: "user-1", return_to: "/beta/accounts", code_verifier_encrypted: null, profile_id: null }];
       if (query.includes("FROM public.workspace_members")) return [{ role: "owner", actor_id: "a1" }];
       if (query.includes("workspace_id <> $3")) return elsewhere.includes(String(params[1])) ? [{ id: "other" }] : [];
+      if (query.includes("external_account_id = ANY")) return (params[2] as string[]).filter((id) => here.includes(id)).map((id) => ({ external_account_id: id }));
+      if (query.includes("INSERT INTO public.pending_connections")) { offered.push({ choices: JSON.parse(String(params[5])), sealed: String(params[6]) }); return [{ id: "pending-1" }]; }
       if (query.includes("INSERT INTO public.connected_accounts")) { inserted.push(String(params[2])); return [{ event_type: "account.reconnected" }]; }
       return [];
     }) as unknown as Sql;
     const withKey = (name: string) => (name === "CREDENTIAL_ENCRYPTION_KEY" ? randomBytes(32).toString("base64") : setting(name));
     const result = await completeConnection({ sql, setting: withKey, allowedReturnOrigins: [], http }, "facebook", new URLSearchParams({ state: "s", code: "c" }), "user-1");
-    return { result, inserted };
+    return { result, inserted, offered };
   }
+
+  it("adds no Page until the person chooses when several new Pages come back", async () => {
+    const { result, inserted, offered } = await finish([]);
+    expect(inserted).toEqual([]);
+    expect(result.ok).toBe(true);
+    expect(result.choose).toBe("pending-1");
+    expect(result.message).toBe("Choose which Facebook Pages to add.");
+    expect(offered).toHaveLength(1);
+    expect(offered[0].choices).toEqual([
+      { external_id: "p1", name: "Test Page", kind: null, avatar_url: null },
+      { external_id: "p2", name: "Real Page", kind: null, avatar_url: null },
+    ]);
+    // Page tokens are sealed, never stored in the choices.
+    expect(JSON.stringify(offered[0].choices)).not.toMatch(/"t1"|"t2"/);
+    expect(offered[0].sealed).not.toContain('"t1"');
+  });
+
+  it("reconnects Pages this workspace already has and offers only the new one", async () => {
+    const { result, inserted, offered } = await finish([], ["p1"]);
+    expect(inserted).toEqual(["p1"]);
+    expect(result.choose).toBe("pending-1");
+    expect(result.message).toBe("Reconnected Test Page. Choose which Facebook Pages to add.");
+    expect(offered[0].choices).toEqual([{ external_id: "p2", name: "Real Page", kind: null, avatar_url: null }]);
+  });
+
+  it("reconnects without asking when every Page is already in this workspace", async () => {
+    const { result, inserted, offered } = await finish([], ["p1", "p2"]);
+    expect(inserted).toEqual(["p1", "p2"]);
+    expect(offered).toEqual([]);
+    expect(result.choose).toBeUndefined();
+  });
 
   it("skips Pages connected in another workspace and connects the rest", async () => {
     const { result, inserted } = await finish(["p2"]);

@@ -2,6 +2,7 @@
 // (its oauth, token lifecycle and revocation code); runtime-neutral (fetch
 // only). Scopes are exactly those in the PRD, section 6. Bluesky's sign-in is different
 // (pushed requests and DPoP-bound tokens) and lives in atproto.ts.
+import { inboxOn, inboxSwitch } from "../inbox/automations";
 import { BLUESKY_SCOPE, publicProfile, refreshSession, revokeSession, type BlueskySession } from "./atproto";
 import type { TokenSet } from "./crypto";
 import { xPriceText } from "../pricing";
@@ -121,18 +122,32 @@ export function statsPlatforms(setting: Settings): Platform[] {
 const officialHere = (platform: Platform, setting: Settings, workspaceId?: string | null) =>
   officialPlatformsFor(analyticsPlatforms(setting), statsPreview(setting), workspaceId).includes(platform);
 
+// The inbox (backend/lib/inbox) needs each platform's comment and message permissions, asked
+// for only where it is switched on (INBOX_WORKSPACES). Facebook's also come from a Meta login
+// configuration (META_INBOX_LOGIN_CONFIG_ID, see facebookLoginConfig).
+export const INBOX_SCOPES: Partial<Record<Platform, string[]>> = {
+  instagram: ["instagram_business_manage_comments", "instagram_business_manage_messages"],
+  facebook: ["pages_messaging", "pages_manage_engagement", "pages_read_user_content", "pages_manage_metadata"],
+  threads: ["threads_read_replies", "threads_manage_replies"],
+};
+
+const inboxHere = (setting: Settings, workspaceId?: string | null) => Boolean(workspaceId) && inboxOn(inboxSwitch((name) => optional(setting, name)), workspaceId!);
+
 export function scopesFor(platform: Platform, setting: Settings, workspaceId?: string | null) {
-  // The Community Management app asks for its own set, stats included.
+  // The Community Management app asks for its own set, stats and comments included.
   if (platform === "linkedin" && linkedinApp(setting).pages) return LINKEDIN_PAGES_SCOPES;
-  return officialHere(platform, setting, workspaceId) ? [...SCOPES[platform], ...ANALYTICS_SCOPES[platform]] : SCOPES[platform];
+  const base = officialHere(platform, setting, workspaceId) ? [...SCOPES[platform], ...ANALYTICS_SCOPES[platform]] : SCOPES[platform];
+  return INBOX_SCOPES[platform] && inboxHere(setting, workspaceId) ? [...base, ...INBOX_SCOPES[platform]!] : base;
 }
 
-// Facebook's permissions come from a Meta login configuration. Where its stats are read
-// officially, a second configuration that adds read_insights is used when one is set
-// (META_STATS_LOGIN_CONFIG_ID); everyone else keeps the one without it.
+// Facebook's permissions come from a Meta login configuration. Where the inbox is on, one with
+// the Page messaging and comment permissions (and stats) is used when set
+// (META_INBOX_LOGIN_CONFIG_ID). Where its stats are read officially, one that adds
+// read_insights (META_STATS_LOGIN_CONFIG_ID); everyone else keeps the basic one.
 export function facebookLoginConfig(setting: Settings, workspaceId?: string | null) {
+  const inbox = inboxHere(setting, workspaceId) ? optional(setting, "META_INBOX_LOGIN_CONFIG_ID") : "";
   const stats = officialHere("facebook", setting, workspaceId) ? optional(setting, "META_STATS_LOGIN_CONFIG_ID") : "";
-  return stats || setting("META_LOGIN_CONFIG_ID");
+  return inbox || stats || setting("META_LOGIN_CONFIG_ID");
 }
 
 export const DISPLAY_NAMES: Record<Platform, string> = {

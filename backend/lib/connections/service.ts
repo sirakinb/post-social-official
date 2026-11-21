@@ -229,7 +229,7 @@ export async function completeConnection(deps: ConnectionDeps, platform: Platfor
   const externalIdOf = (identity: Identity) => identity.externalAccountId || `workspace:${session.workspace_id}`;
   // One social account belongs to one workspace. A Facebook sign-in returns every Page the
   // person ever shared with Post Social, so Pages already connected in another workspace are
-  // skipped and the rest connect; it fails only when nothing is left.
+  // skipped and the rest are offered; it fails only when nothing is left.
   const available: Identity[] = [];
   const skipped: string[] = [];
   for (const identity of identities) {
@@ -248,10 +248,11 @@ export async function completeConnection(deps: ConnectionDeps, platform: Platfor
   const target: SaveTarget = { workspaceId: session.workspace_id, userId: session.user_id, actorId: member.actor_id, profileId: session.profile_id, platform };
   if (platform === "linkedin" && member.actor_id) await adoptOriginalProfile(deps, session.workspace_id, member.actor_id, available);
 
-  // A LinkedIn sign-in can bring several accounts (the profile and the member's Pages), each
-  // billed once connected. Accounts this workspace already has reconnect now; when that
-  // leaves more than one new account, the person chooses which to add.
-  if (platform === "linkedin" && available.length > 1) {
+  // A LinkedIn sign-in can bring several accounts (the profile and the member's Pages), and a
+  // Facebook sign-in brings every Page the person ever shared with Post Social, not only the
+  // ones ticked this time. Each is billed once connected. Accounts this workspace already has
+  // reconnect now; when that leaves more than one new account, the person chooses which to add.
+  if ((platform === "linkedin" || platform === "facebook") && available.length > 1) {
     const known = new Set((await deps.sql<{ external_account_id: string }>(
       `SELECT external_account_id FROM public.connected_accounts
        WHERE workspace_id = $1 AND platform = $2 AND external_account_id = ANY($3::text[]) AND health <> 'disconnected'`,
@@ -271,7 +272,8 @@ export async function completeConnection(deps: ConnectionDeps, platform: Platfor
         [session.workspace_id, session.user_id, platform, session.profile_id, session.return_to, JSON.stringify(fresh.map(choiceOf)), sealed.encryptedPayload, sealed.initializationVector],
       );
       const refreshed = saved.connected.length ? `Reconnected ${saved.connected.join(", ")}. ` : "";
-      return { returnTo: session.return_to, ok: true, platform, choose: pending.id, message: `${refreshed}Choose which ${name} accounts to add.${skippedNote}` };
+      const what = platform === "facebook" ? name : `${name} accounts`; // "Facebook Pages", "LinkedIn accounts"
+      return { returnTo: session.return_to, ok: true, platform, choose: pending.id, message: `${refreshed}Choose which ${what} to add.${skippedNote}` };
     }
   }
 
