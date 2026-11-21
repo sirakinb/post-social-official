@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDashboard, buildUpCurve, cadenceBucket, weekStart, type AccountRow, type FollowerRow, type PostRow } from "./analytics-dashboard";
+import { accountInsights, buildDashboard, buildUpCurve, cadenceBucket, weekStart, type AccountRow, type FollowerRow, type InsightRow, type PostRow } from "./analytics-dashboard";
 
 const NOW = Date.parse("2026-10-16T12:00:00Z"); // a Friday
 const DAY = 86_400_000;
@@ -136,5 +136,57 @@ describe("buildUpCurve", () => {
 
   it("is empty until a post has 30 days of numbers", () => {
     expect(buildUpCurve([{ destination_id: "x", published_at: "2026-10-10T00:00:00Z" }], [{ destination_id: "x", day: "2026-10-10", likes: 1 }])).toBeNull();
+  });
+});
+
+describe("whole-account analytics", () => {
+  const insight = (day: string, over: Partial<InsightRow>): InsightRow => ({ connected_account_id: "ig", day, views: null, reach: null, profile_views: null, interactions: null, engaged: null, ...over });
+
+  it("adds posts made outside Post Social to the totals and marks them", () => {
+    const dash = buildDashboard({
+      now: NOW,
+      days: 30,
+      accounts,
+      followers,
+      history: [],
+      refreshesUsed: 0,
+      posts: [post("ours", { likes: 10 }), post("outside:1", { post_id: "", likes: 30, source: "official", outside: true, live_url: "https://instagram.com/p/1" })],
+    });
+    expect(dash.posts.map((p) => [p.destination_id, p.outside])).toEqual([["ours", false], ["outside:1", true]]);
+    expect(dash.summary.posts).toBe(2);
+    expect(dash.summary.engagements).toBe(40);
+    expect(dash.accounts.find((a) => a.id === "ig")).toMatchObject({ posts: 2, outside_posts: 1 });
+  });
+
+  it("totals an account's own numbers and averages its reach per day", () => {
+    expect(accountInsights([])).toBeNull();
+    expect(accountInsights([insight("2026-10-14", {})])).toBeNull();
+    expect(accountInsights([insight("2026-10-15", { views: 100, reach: 40, profile_views: 3, interactions: "12" }), insight("2026-10-14", { views: "50", reach: 20 })])).toEqual({
+      days: 2,
+      views: 150,
+      profile_views: 3,
+      interactions: 12,
+      engaged: null,
+      reach_per_day: 30,
+      since: "2026-10-14",
+    });
+  });
+
+  it("gives each account its insights for the period and its audience", () => {
+    const dash = buildDashboard({
+      now: NOW,
+      days: 7,
+      accounts,
+      followers,
+      history: [],
+      refreshesUsed: 0,
+      posts: [],
+      insights: [insight("2026-10-15", { views: 100 }), insight("2026-09-01", { views: 999 })],
+      audiences: [{ connected_account_id: "ig", breakdowns: { country: [{ label: "US", value: 5 }] }, fetched_at: "2026-10-15T00:00:00Z" }],
+    });
+    const ig = dash.accounts.find((a) => a.id === "ig")!;
+    expect(ig.insights).toMatchObject({ days: 1, views: 100 });
+    expect(ig.audience).toEqual({ country: [{ label: "US", value: 5 }] });
+    expect(dash.accounts.find((a) => a.id === "li")).toMatchObject({ insights: null, audience: null });
   });
 });
