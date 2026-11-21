@@ -129,4 +129,12 @@ describe("LinkedIn follower counts", () => {
     expect(linkedinCountable({ external_account_id: "m1", scopes: ["openid", "profile", "w_member_social"] })).toBe(false);
     expect(linkedinCountable({ external_account_id: "m1", scopes: null })).toBe(false);
   });
+
+  it("leaves Instagram and Facebook to the whole-account sweep where their stats are official, so they cost no public read", async () => {
+    const db = fakeSql([]);
+    await runFollowerSweep({ sql: db.sql, platforms: ["instagram", "facebook", "threads"], publicPlatforms: ["instagram", "facebook", "threads", "tiktok"], publicApiKey: "k" });
+    expect(db.asked()).toEqual(["threads", "tiktok"]);
+    await runFollowerSweep({ sql: db.sql, platforms: [], publicPlatforms: ["instagram", "facebook"], publicApiKey: "k" });
+    expect(db.asked()).toEqual(["instagram", "facebook"]);
+  });
 });
