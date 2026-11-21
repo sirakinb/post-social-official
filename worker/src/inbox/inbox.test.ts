@@ -1,0 +1,159 @@
+import { describe, expect, it } from "vitest";
+import type { Sql } from "../../../backend/lib/access";
+import { catchUpThreadsReplies, recordMessage, runOutbox } from "./inbox";
+import type { InboxDeps } from "./runner";
+
+const account = { id: "acc", workspace_id: "w1", platform: "instagram", display_name: "Maker", external_account_id: "app-scoped", webhook_id: "1784" };
+const HOUR = 3600_000;
+
+// A stand-in database: one account, one conversation; records writes.
+function fakeSql(state: { lastInbound?: number | null; outbox?: unknown[]; comment?: Record<string, unknown> } = {}) {
+  const writes: Array<{ query: string; params: unknown[] }> = [];
+  const sql = (async (query: string, params: unknown[]) => {
+    if (query.includes("FROM public.connected_accounts a LEFT JOIN public.inbox_accounts")) return [account];
+    if (query.includes("INSERT INTO public.contacts")) return (writes.push({ query, params }), [{ id: "ct1" }]);
+    if (query.includes("INSERT INTO public.conversations")) return [{ id: "cv1" }];
+    if (query.includes("INSERT INTO public.messages")) return (writes.push({ query, params }), [{ id: "m1" }]);
+    if (query.includes("claim_inbox_outbox")) return state.outbox ?? [];
+    if (query.includes("FROM public.conversations cv JOIN public.contacts ct")) {
+      return [{ platform_user_id: "fan", username: "jay", last_inbound_at: state.lastInbound === null ? null : new Date(state.lastInbound ?? Date.now() - HOUR).toISOString() }];
+    }
+    if (query.includes("FROM public.inbox_comments WHERE id")) return state.comment ? [state.comment] : [];
+    writes.push({ query, params });
+    return [];
+  }) as Sql;
+  return { sql, writes };
+}
+
+function fakeGraph() {
+  const calls: Array<{ url: string; method: string; body: unknown }> = [];
+  const http = (async (url: string, init: RequestInit = {}) => {
+    calls.push({ url: String(url), method: init.method ?? "GET", body: init.body ? JSON.parse(String(init.body)) : null });
+    return new Response(JSON.stringify({ message_id: "mid9", success: true }));
+  }) as typeof fetch;
+  return { http, calls };
+}
+
+const deps = (db: ReturnType<typeof fakeSql>, graph: ReturnType<typeof fakeGraph>): InboxDeps => ({ sql: db.sql, http: graph.http, setting: () => "", token: async () => "tok", linkBase: "https://x" });
+const item = (r: Record<string, unknown>) => ({ id: "o1", workspace_id: "w1", connected_account_id: "acc", conversation_id: "cv1", comment_id: "cm1", text: "Thanks!", sent_by: "person", actor_id: "act", ...r });
+const status = (db: ReturnType<typeof fakeSql>) => db.writes.find((w) => w.query.includes("UPDATE public.inbox_outbox SET status"))!;
+
+describe("inbox: storing DMs", () => {
+  it("keeps a person's DM as inbound, with its contact", async () => {
+    const db = fakeSql();
+    await recordMessage(deps(db, fakeGraph()), "1784", { sender: { id: "fan" }, recipient: { id: "1784" }, timestamp: 1_700_000_000_000, message: { mid: "m-1", text: "hey!" } });
+    const msg = db.writes.find((w) => w.query.includes("INSERT INTO public.messages"))!;
+    expect(msg.params.slice(2, 7)).toEqual(["in", "m-1", "hey!", "[]", "contact"]);
+    const conv = db.writes.find((w) => w.query.includes("UPDATE public.conversations SET last_message_at"))!;
+    expect(conv.params[3]).toBe("in");
+  });
+
+  it("keeps the account's own reply from Instagram's app as outgoing", async () => {
+    const db = fakeSql();
+    await recordMessage(deps(db, fakeGraph()), "1784", { sender: { id: "1784" }, recipient: { id: "fan" }, message: { mid: "m-2", text: "hi", is_echo: true } });
+    const contact = db.writes.find((w) => w.query.includes("INSERT INTO public.contacts"))!;
+    expect(contact.params[2]).toBe("fan");
+    const msg = db.writes.find((w) => w.query.includes("INSERT INTO public.messages"))!;
+    expect(msg.params.slice(2, 7)).toEqual(["out", "m-2", "hi", "[]", "instagram"]);
+  });
+});
+
+describe("inbox: sending", () => {
+  it("sends a DM reply inside the 24-hour window and logs it", async () => {
+    const db = fakeSql({ outbox: [item({ kind: "message" })] });
+    const graph = fakeGraph();
+    expect(await runOutbox(deps(db, graph))).toBe(1);
+    expect(graph.calls[0].url).toBe("https://graph.instagram.com/v25.0/me/messages");
+    expect(graph.calls[0].body).toEqual({ recipient: { id: "fan" }, message: { text: "Thanks!" } });
+    const msg = db.writes.find((w) => w.query.includes("INSERT INTO public.messages"))!;
+    expect(msg.params.slice(2, 8)).toEqual(["out", "mid9", "Thanks!", "[]", "person", "act"]);
+    expect(status(db).query).toContain("status = 'sent'");
+  });
+
+  it("refuses a DM reply after the window closes, with Instagram's rule", async () => {
+    const db = fakeSql({ outbox: [item({ kind: "message" })], lastInbound: Date.now() - 25 * HOUR });
+    const graph = fakeGraph();
+    expect(await runOutbox(deps(db, graph))).toBe(0);
+    expect(graph.calls).toHaveLength(0);
+    expect(status(db).params[1]).toMatch(/24 hours/);
+  });
+
+  it("lets a person reply up to 7 days later with the Human Agent tag, where it's approved", async () => {
+    const late = (sentBy: string, setting = "instagram") => {
+      const db = fakeSql({ outbox: [item({ kind: "message", sent_by: sentBy })], lastInbound: Date.now() - 3 * 24 * HOUR });
+      const graph = fakeGraph();
+      return { db, graph, deps: { ...deps(db, graph), setting: (name: string) => (name === "INBOX_HUMAN_AGENT" ? setting : "") } };
+    };
+    const person = late("person");
+    expect(await runOutbox(person.deps)).toBe(1);
+    expect(person.graph.calls[0].body).toEqual({ recipient: { id: "fan" }, message: { text: "Thanks!" }, messaging_type: "MESSAGE_TAG", tag: "HUMAN_AGENT" });
+    const agent = late("agent");
+    expect(await runOutbox(agent.deps)).toBe(0);
+    const off = late("person", "");
+    expect(await runOutbox(off.deps)).toBe(0);
+    expect(off.graph.calls).toHaveLength(0);
+  });
+
+  it("DMs a commenter once, by comment, within 7 days", async () => {
+    const fresh = { platform_comment_id: "c9", commenter_id: "fan", commenter_username: "jay", created_at: new Date().toISOString(), dm_sent_at: null };
+    const db = fakeSql({ outbox: [item({ kind: "private_reply" })], comment: fresh });
+    const graph = fakeGraph();
+    expect(await runOutbox(deps(db, graph))).toBe(1);
+    expect(graph.calls[0].body).toEqual({ recipient: { comment_id: "c9" }, message: { text: "Thanks!" } });
+
+    const again = fakeSql({ outbox: [item({ kind: "private_reply" })], comment: { ...fresh, dm_sent_at: new Date().toISOString() } });
+    expect(await runOutbox(deps(again, fakeGraph()))).toBe(0);
+    expect(status(again).params[1]).toMatch(/already got a DM/);
+  });
+
+  it("deletes a comment and marks it deleted, but never on Threads", async () => {
+    const comment = { platform_comment_id: "c9", commenter_id: null, commenter_username: null, created_at: new Date().toISOString(), dm_sent_at: null };
+    const db = fakeSql({ outbox: [item({ kind: "delete_comment", text: null })], comment });
+    const graph = fakeGraph();
+    expect(await runOutbox(deps(db, graph))).toBe(1);
+    expect(graph.calls[0]).toMatchObject({ url: "https://graph.instagram.com/v25.0/c9", method: "DELETE" });
+    expect(db.writes.find((w) => w.query.includes("SET deleted_at"))!.params).toEqual(["cm1"]);
+  });
+
+  it("treats a comment that's already gone as deleted, and keeps other refusals", async () => {
+    const comment = { platform_comment_id: "c9", commenter_id: null, commenter_username: null, created_at: new Date().toISOString(), dm_sent_at: null };
+    const refusing = (message: string) => (async () => new Response(JSON.stringify({ error: { message, code: 100 } }), { status: 400 })) as unknown as typeof fetch;
+    const gone = fakeSql({ outbox: [item({ kind: "delete_comment", text: null })], comment });
+    expect(await runOutbox({ ...deps(gone, fakeGraph()), http: refusing("Unsupported post request. Object with ID 'c9' does not exist") })).toBe(1);
+    expect(gone.writes.some((w) => w.query.includes("SET deleted_at"))).toBe(true);
+    const other = fakeSql({ outbox: [item({ kind: "delete_comment", text: null })], comment });
+    expect(await runOutbox({ ...deps(other, fakeGraph()), http: refusing("Invalid parameter") })).toBe(0);
+    expect(other.writes.some((w) => w.query.includes("SET deleted_at"))).toBe(false);
+  });
+
+  it("hides a comment", async () => {
+    const db = fakeSql({ outbox: [item({ kind: "hide_comment", text: null })], comment: { platform_comment_id: "c9", commenter_id: null, commenter_username: null, created_at: new Date().toISOString(), dm_sent_at: null } });
+    const graph = fakeGraph();
+    expect(await runOutbox(deps(db, graph))).toBe(1);
+    expect(graph.calls[0].url).toBe("https://graph.instagram.com/v25.0/c9?hide=true");
+    expect(db.writes.find((w) => w.query.includes("SET hidden"))!.params).toEqual(["cm1", true]);
+  });
+});
+
+describe("inbox: Threads replies catch-up", () => {
+  it("reads replies on the account's latest posts and records them", async () => {
+    const threadsAccount = { ...account, platform: "threads", external_account_id: "t1", webhook_id: "t1", handle: "maker" };
+    const writes: string[] = [];
+    const sql = (async (query: string) => {
+      if (query.includes("a.platform = 'threads'")) return [threadsAccount];
+      if (query.includes("FROM public.connected_accounts a LEFT JOIN public.inbox_accounts")) return [threadsAccount];
+      if (query.includes("INSERT INTO public.contacts")) return [{ id: "ct1" }];
+      writes.push(query);
+      return [];
+    }) as Sql;
+    const calls: string[] = [];
+    const http = (async (url: string) => {
+      calls.push(String(url).split("?")[0]);
+      if (String(url).includes("/t1/threads")) return new Response(JSON.stringify({ data: [{ id: "post1" }] }));
+      return new Response(JSON.stringify({ data: [{ id: "r1", text: "GUIDE", username: "jay", root_post: { id: "post1" }, replied_to: { id: "post1" } }] }));
+    }) as typeof fetch;
+    expect(await catchUpThreadsReplies({ sql, http, setting: () => "", token: async () => "tok", linkBase: "https://x" })).toBe(1);
+    expect(calls).toEqual(["https://graph.threads.net/v1.0/t1/threads", "https://graph.threads.net/v1.0/post1/replies"]);
+    expect(writes.some((q) => q.includes("INSERT INTO public.inbox_comments"))).toBe(true);
+  });
+});

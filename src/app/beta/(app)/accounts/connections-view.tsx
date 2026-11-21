@@ -224,6 +224,9 @@ export function ConnectionsView(props: {
         <section id="connect" aria-labelledby="connect-h" className="scroll-mt-6 rounded-xl border border-ps-line bg-ps-surface">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-ps-fg/[0.05] px-4 py-3">
             <h2 id="connect-h" className="m-0 text-sm font-medium">Connect an account</h2>
+            <span className="text-xs text-ps-subtle">
+              2 free, then $5/mo each with a card. X needs a card. <Link href="/beta/billing" className="text-ps-plum-soft hover:text-ps-text">Billing</Link>
+            </span>
             <span className="flex-1" />
             {props.profilesReady && props.profiles.length > 0 && (
               <label className="flex items-center gap-2 text-xs text-ps-subtle">
