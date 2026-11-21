@@ -13,6 +13,7 @@ import { makePosters } from "./posters";
 import { syncAvatars } from "./avatars";
 import { runNextPublishJob } from "./publish/runner";
 import { runFollowerSweep } from "./analytics/followers";
+import { runAccountSweep } from "./analytics/account";
 import { runMetricsSweep } from "./analytics/runner";
 import { runStatsHealthCheck } from "./analytics/health";
 import { createAdminAlert } from "./alerts";
@@ -131,6 +132,9 @@ log("analytics", { official: analyticsPlatforms, public: publicApiKey ? publicPl
 if (analyticsPlatforms.length || preview.platforms.length || (publicApiKey && publicPlatforms.length)) {
   void every(2 * 60 * 1000, "stats sweep", () => runMetricsSweep({ sql, setting: (name) => setting(name), platforms: analyticsPlatforms, preview, publicPlatforms, publicApiKey, log }));
   void every(10 * 60 * 1000, "follower sweep", () => runFollowerSweep({ sql, setting: (name) => setting(name), platforms: analyticsPlatforms, publicPlatforms, publicApiKey, log }));
+  // Whole-account numbers (each account's own posts, account insights, audience), about twice
+  // a day per account, for the platforms read through their own API.
+  void every(5 * 60 * 1000, "account stats sweep", () => runAccountSweep({ sql, setting: (name) => setting(name), platforms: analyticsPlatforms, log }));
 }
 // Daily stats health check for every switched-on platform, alerting only the admin
 // (ALERT_EMAIL, plus PostHog). First run 10 minutes after start, so a deploy is checked.

@@ -138,6 +138,13 @@ function Overview({ data, topPosts, showSources }: { data: AnalyticsData; topPos
         {data.accounts.length ? <AccountTable accounts={data.accounts} showSources={showSources} /> : <Empty>No accounts connected for these platforms.</Empty>}
       </Card>
 
+      {data.accounts.some((a) => a.insights) && (
+        <Card>
+          <CardHeader title="Account activity" />
+          <AccountActivity accounts={data.accounts.filter((a) => a.insights)} days={data.days} />
+        </Card>
+      )}
+
       {topPosts.length > 0 && (
         <Card>
           <CardHeader title="Top posts" />
@@ -306,6 +313,96 @@ export function AccountTable({ accounts, showSources }: { accounts: Account[]; s
   );
 }
 
+// What each account did as a whole over the period, from the platform's own account numbers:
+// views and interactions added up, reach as a daily average, and profile visits.
+function AccountActivity({ accounts, days }: { accounts: Account[]; days: number }) {
+  const shown = (key: "views" | "reach_per_day" | "profile_views" | "interactions") => accounts.some((a) => a.insights?.[key] !== null && a.insights?.[key] !== undefined);
+  const columns = ([
+    { key: "views", label: "Views", title: "Times the account's posts and profile were seen" },
+    { key: "reach_per_day", label: "Reach per day", title: "People reached on an average day" },
+    { key: "profile_views", label: "Profile visits", title: "Visits to the account's profile" },
+    { key: "interactions", label: "Interactions", title: "Likes, comments, shares, saves and replies on everything the account posted" },
+  ] as const).filter((c) => shown(c.key));
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[560px] text-[13px]">
+        <thead>
+          <tr className="text-left text-xs text-ps-subtle">
+            <th className="px-4 py-2 font-medium">Account</th>
+            {columns.map((c) => <th key={c.key} className="px-3 py-2 text-right font-medium" title={c.title}>{c.label}</th>)}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-ps-fg/[0.06]">
+          {accounts.map((a) => (
+            <tr key={a.id}>
+              <td className="px-4 py-2.5">
+                <div className="flex items-center gap-2">
+                  <PlatformCardIcon platform={a.platform} size="sm" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-ps-text">{a.name}</span>
+                    {a.insights && a.insights.days < days && <span className="block text-[11px] text-ps-subtle">Since {day(a.insights.since)}</span>}
+                  </span>
+                </div>
+              </td>
+              {columns.map((c) => {
+                const value = a.insights?.[c.key];
+                return <td key={c.key} className="px-3 py-2.5 text-right tabular-nums text-ps-text">{value !== null && value !== undefined ? count(value) : ""}</td>;
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="px-4 pb-3 pt-1 text-[11px] text-ps-subtle">Everything the account posted, including posts made outside Post Social. Counted by each platform.</p>
+    </div>
+  );
+}
+
+const AUDIENCE_PARTS = [
+  { key: "country", label: "Top countries" },
+  { key: "city", label: "Top cities" },
+  { key: "age", label: "Age" },
+  { key: "gender", label: "Gender" },
+] as const;
+const GENDERS: Record<string, string> = { F: "Women", M: "Men", U: "Not shared" };
+
+// Who follows the account, as the platform reports it (Instagram and Threads, for accounts
+// with at least 100 followers).
+function AudienceCard({ account: a }: { account: Account }) {
+  const parts = AUDIENCE_PARTS.filter((p) => a.audience?.[p.key]?.length);
+  return (
+    <li className="bg-ps-surface p-4">
+      <div className="flex items-center gap-2">
+        <PlatformCardIcon platform={a.platform} size="sm" />
+        <span className="min-w-0 flex-1 truncate text-ps-text">{a.name}</span>
+      </div>
+      <div className="mt-3 grid gap-4 sm:grid-cols-2">
+        {parts.map((p) => {
+          const list = a.audience![p.key]!.slice(0, 5);
+          const total = a.audience![p.key]!.reduce((t, r) => t + r.value, 0);
+          return (
+            <div key={p.key}>
+              <p className="text-[11px] text-ps-subtle">{p.label}</p>
+              <ul className="mt-1.5 space-y-1">
+                {list.map((r) => (
+                  <li key={r.label} className="text-[12px]">
+                    <div className="flex justify-between gap-2">
+                      <span className="truncate text-ps-text">{p.key === "gender" ? GENDERS[r.label] ?? r.label : r.label}</span>
+                      <span className="tabular-nums text-ps-muted">{total ? percent(r.value / total) : count(r.value)}</span>
+                    </div>
+                    <div className="mt-0.5 h-1 rounded-full bg-ps-segment">
+                      <div className="h-1 rounded-full" style={{ width: `${total ? Math.max(2, (r.value / total) * 100) : 0}%`, background: PLATFORM_COLORS[a.platform] }} />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
+    </li>
+  );
+}
+
 // ---------- Posts ----------
 
 function PostsTab({ total, posts, sort, href, showSources }: { total: number; posts: Post[]; sort: string; href: (next: Record<string, string | null>) => string; showSources: boolean }) {
@@ -342,6 +439,7 @@ export function PostRow({ post, showSources }: { post: Post; showSources: boolea
         <p className="truncate text-ps-text">{post.caption || `${FORMAT_LABELS[post.format]} post`}</p>
         <p className="mt-0.5 text-[11px] text-ps-subtle">
           {post.account} · {day(post.published_at)} · {FORMAT_LABELS[post.format]}
+          {post.outside && <> · Posted outside Post Social</>}
           {post.live_url && <> · <a className="text-ps-plum-soft hover:underline" href={post.live_url} target="_blank" rel="noreferrer">View post</a></>}
           {showSources ? <> · {SOURCE_LABELS[post.source]}</> : post.source && post.source !== "public" && <> · From {PLATFORM_SOURCES[post.platform]}</>}
         </p>
@@ -388,6 +486,14 @@ function Growth({ data }: { data: AnalyticsData }) {
           </Empty>
         )}
       </Card>
+      {data.accounts.some((a) => a.audience) && (
+        <Card>
+          <CardHeader title="Audience" />
+          <ul className="grid gap-px bg-ps-fg/[0.06] lg:grid-cols-2">
+            {data.accounts.filter((a) => a.audience).map((a) => <AudienceCard key={a.id} account={a} />)}
+          </ul>
+        </Card>
+      )}
       {data.build_up && (
         <Card>
           <CardHeader title="How engagement builds up after posting" />
