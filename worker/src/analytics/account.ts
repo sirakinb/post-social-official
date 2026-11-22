@@ -67,7 +67,10 @@ async function getJson(http: typeof fetch, url: string, init: RequestInit = {}):
   const error = body.error && typeof body.error === "object" && body.error.code !== "ok" ? body.error : null;
   if (!response.ok || error) {
     const message = String(error?.message ?? `HTTP ${response.status}`);
-    throw Object.assign(new Error(message), { status: response.status, expired: response.status === 401 || error?.code === 190 || error?.code === "access_token_invalid" });
+    // TikTok answers a permission the account never granted with HTTP 401 too
+    // (scope_not_authorized): that's a missing permission, not a login that stopped working.
+    const missingPermission = error?.code === "scope_not_authorized";
+    throw Object.assign(new Error(message), { status: response.status, expired: !missingPermission && (response.status === 401 || error?.code === 190 || error?.code === "access_token_invalid") });
   }
   return body;
 }

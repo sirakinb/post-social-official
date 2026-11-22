@@ -299,6 +299,27 @@ describe("finishing a Facebook connection", () => {
     expect(offered[0].choices).toEqual([{ external_id: "p2", name: "Real Page", kind: null, avatar_url: null }]);
   });
 
+  it("has a reconnect re-read the account's whole-account numbers on the next sweep", async () => {
+    const queries: string[] = [];
+    const { http } = fakeHttp([
+      [/redirect_uri/, { access_token: "short" }],
+      [/fb_exchange_token/, { access_token: "user-long" }],
+      [/\/me\?fields=id/, { id: "u" }],
+      [/me\/accounts/, { data: [{ id: "p1", name: "Test Page", access_token: "t1" }] }],
+    ]);
+    const sql = (async (query: string) => {
+      queries.push(query);
+      if (query.includes("UPDATE public.oauth_states")) return [{ workspace_id: "w1", user_id: "user-1", return_to: "/beta/accounts", code_verifier_encrypted: null, profile_id: null }];
+      if (query.includes("FROM public.workspace_members")) return [{ role: "owner", actor_id: "a1" }];
+      if (query.includes("INSERT INTO public.connected_accounts")) return [{ event_type: "account.reconnected" }];
+      return [];
+    }) as unknown as Sql;
+    const withKey = (name: string) => (name === "CREDENTIAL_ENCRYPTION_KEY" ? randomBytes(32).toString("base64") : setting(name));
+    await completeConnection({ sql, setting: withKey, allowedReturnOrigins: [], http }, "facebook", new URLSearchParams({ state: "s", code: "c" }), "user-1");
+    const save = queries.find((q) => q.includes("INSERT INTO public.connected_accounts"))!;
+    expect(save).toContain("UPDATE public.account_stats_syncs SET next_sync_at = now()");
+  });
+
   it("reconnects without asking when every Page is already in this workspace", async () => {
     const { result, inserted, offered } = await finish([], ["p1", "p2"]);
     expect(inserted).toEqual(["p1", "p2"]);
