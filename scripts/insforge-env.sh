@@ -147,6 +147,16 @@ case "$target" in
       # A restore point right before the change: InsForge keeps only the latest nightly
       # backup, so a bad migration must not be able to outlive the only good copy. If the
       # backup fails, set -e stops here and nothing is applied.
+      # InsForge keeps only a few manual backups: make room by deleting the oldest one a
+      # release made (never one made by hand, a nightly, or one in KEEP_BACKUPS); see
+      # scripts/lib/backup-rotation.ts. If there's still no room, the backup below fails and
+      # nothing is applied.
+      backup_list="$("${CLI[@]}" backups list --json)"
+      oldest="$(printf '%s' "$backup_list" | node --no-warnings scripts/lib/backup-rotation.ts)"
+      if [[ -n "$oldest" ]]; then
+        echo "Deleting the oldest release backup ($oldest) to make room ..."
+        "${CLI[@]}" backups delete "$oldest" --yes
+      fi
       backup_name="before-promote-$(date -u +%Y%m%d-%H%M)-$(git rev-parse --short HEAD)"
       echo "Backing up prod as $backup_name ..."
       "${CLI[@]}" backups create --name "$backup_name" --wait
