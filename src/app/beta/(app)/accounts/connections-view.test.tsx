@@ -93,3 +93,36 @@ describe("Accounts with the same name", () => {
     expect(screen.getByTestId("account-handle-l1").textContent).toBe("LinkedIn");
   });
 });
+
+describe("asking older accounts to reconnect for the Inbox and stats", () => {
+  const older = (id: string, platform: string, name: string, gains: string[] | null): SocialAccount => ({ ...account(id, name, null), platform, gains });
+  const accounts = [older("ig", "instagram", "Maker IG", ["Inbox", "official stats"]), older("tt", "tiktok", "Maker TT", ["video stats"]), older("x1", "x", "Maker X", null), older("ig2", "instagram", "Second IG", null)];
+
+  it("lists only accounts a reconnect would upgrade, with what each gains", () => {
+    render(<ConnectionsView {...base} accounts={accounts} filter={null} />);
+    const card = screen.getByRole("region", { name: "Turn on the Inbox and official stats" });
+    expect(within(card).getByText("Maker IG")).toBeTruthy();
+    expect(within(card).getByText(/Adds Inbox and official stats/)).toBeTruthy();
+    expect(within(card).getByText(/Adds video stats/)).toBeTruthy();
+    expect(within(card).queryByText("Maker X")).toBeNull();
+    expect(within(card).queryByText("Second IG")).toBeNull();
+    // Two Instagram accounts: say which one to sign in as.
+    expect(within(card).getByText(/use the account you’re reconnecting/)).toBeTruthy();
+  });
+
+  it("reconnects through the platform's sign-in", () => {
+    render(<ConnectionsView {...base} accounts={accounts} filter={null} />);
+    const card = screen.getByRole("region", { name: "Turn on the Inbox and official stats" });
+    fireEvent.click(within(card).getAllByRole("button", { name: "Reconnect" })[1]);
+    expect(startConnection).toHaveBeenCalled();
+    expect((startConnection.mock.calls.at(-1) as unknown[])).toContain("tiktok");
+  });
+
+  it("shows nothing when no account needs it, and nothing to reviewers", () => {
+    const { unmount } = render(<ConnectionsView {...base} filter={null} />);
+    expect(screen.queryByText("Turn on the Inbox and official stats")).toBeNull();
+    unmount();
+    render(<ConnectionsView {...base} role="reviewer" accounts={accounts} filter={null} />);
+    expect(screen.queryByText("Turn on the Inbox and official stats")).toBeNull();
+  });
+});

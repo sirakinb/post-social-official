@@ -4,6 +4,7 @@ import { GET_STARTED_HIDDEN_COOKIE, loadGetStarted, stepsDone } from "@/lib/beta
 import { ACCOUNT_ERRORS, ACCOUNT_NOTICES, FLASH_COOKIE, noticeText, readFlash } from "@/lib/beta/flash";
 import { loadViewer } from "@/lib/beta/workspace";
 import { hideGetStarted } from "./actions";
+import { reconnectGains } from "../../../../../backend/lib/connections/upgrades";
 import { ConnectionsView, type Profile, type SocialAccount } from "./connections-view";
 
 export const metadata = { title: "Accounts · Post Social" };
@@ -23,7 +24,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
   const error = noticeText(ACCOUNT_ERRORS, params.error, readFlash(flash, "error"));
   const notice = error ? null : noticeText(ACCOUNT_NOTICES, params.message, readFlash(flash, "notice"));
   const [accountsResult, { data: lastPosts }, profilesResult, deliveryResult, steps] = await Promise.all([
-    accountsQuery(`${COLUMNS}, profile_id`),
+    accountsQuery(`${COLUMNS}, profile_id, scopes, last_connected_at`),
     client.database.from("destinations").select("connected_account_id, updated_at").eq("workspace_id", workspace.id).eq("status", "published").order("updated_at", { ascending: false }).limit(200),
     client.database.from("profiles").select("id, name, description, color, timezone").eq("workspace_id", workspace.id).order("name"),
     // Before the TikTok delivery migration reaches an environment, this fails and the setting stays hidden.
@@ -40,7 +41,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
   const lastPosted = new Map<string, string>();
   for (const d of (lastPosts ?? []) as Array<{ connected_account_id: string; updated_at: string }>) if (!lastPosted.has(d.connected_account_id)) lastPosted.set(d.connected_account_id, d.updated_at);
 
-  const accounts: SocialAccount[] = ((accountRows ?? []) as unknown as Array<{ id: string; platform: string; handle: string; display_name: string; avatar_url: string | null; health: string; health_reason: string | null; capabilities: { post_types?: string[]; account_kind?: "profile" | "page" } | null; created_at: string; profile_id?: string | null }>).map((a) => ({
+  const accounts: SocialAccount[] = ((accountRows ?? []) as unknown as Array<{ id: string; platform: string; handle: string; display_name: string; avatar_url: string | null; health: string; health_reason: string | null; capabilities: { post_types?: string[]; account_kind?: "profile" | "page" } | null; created_at: string; profile_id?: string | null; scopes?: string[] | null; last_connected_at?: string | null }>).map((a) => ({
     id: a.id,
     platform: a.platform,
     handle: a.handle,
@@ -54,6 +55,8 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
     lastPostedAt: lastPosted.get(a.id) ?? null,
     profileId: a.profile_id ?? null,
     tiktokDelivery: deliveryResult.error ? null : (delivery.get(a.id) ?? null),
+    // What a reconnect would turn on (Inbox, official stats); unknown before the migration.
+    gains: a.last_connected_at === undefined ? null : reconnectGains({ platform: a.platform, health: a.health, scopes: a.scopes ?? null, lastConnectedAt: a.last_connected_at }),
   }));
 
 

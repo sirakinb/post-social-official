@@ -13,7 +13,7 @@ import { createProfile, deleteProfile, disconnect, moveAccount, setTiktokDeliver
 import { ProfileDialog, type Profile } from "./profile-dialog";
 
 export type { Profile };
-export type SocialAccount = { id: string; platform: string; handle: string; name: string; avatarUrl: string | null; health: string; reason: string | null; postTypes: string[]; connectedAt: string; lastPostedAt: string | null; profileId: string | null; tiktokDelivery?: "direct" | "inbox" | null; accountKind?: "profile" | "page" | null };
+export type SocialAccount = { id: string; platform: string; handle: string; name: string; avatarUrl: string | null; health: string; reason: string | null; postTypes: string[]; connectedAt: string; lastPostedAt: string | null; profileId: string | null; tiktokDelivery?: "direct" | "inbox" | null; accountKind?: "profile" | "page" | null; gains?: string[] | null };
 
 // The filter: every account, one profile, or the accounts in no profile.
 type Filter = "all" | "none" | string;
@@ -73,6 +73,8 @@ export function ConnectionsView(props: {
   const active = props.accounts.filter((a) => a.health !== "disconnected");
   const past = props.accounts.filter((a) => a.health === "disconnected");
   const attention = active.filter((a) => a.health === "needs_attention");
+  // Connected before the Inbox and official stats existed: one reconnect turns them on.
+  const upgradable = active.filter((a) => a.health !== "needs_attention" && a.gains?.length);
 
   const profileById = new Map(props.profiles.map((p) => [p.id, p]));
   const filter: Filter = props.filter === "none" || (props.filter && profileById.has(props.filter)) ? props.filter : "all";
@@ -302,6 +304,32 @@ export function ConnectionsView(props: {
           {canEdit && <button type="button" disabled={busy !== null} onClick={() => connect(a.platform, a.platform === "bluesky" ? a.handle : undefined)} className={btn} data-attr="reconnect-account">Reconnect</button>}
         </div>
       ))}
+
+      {canEdit && upgradable.length > 0 && (
+        <section aria-labelledby="reconnect-title" className="rounded-[10px] border border-ps-plum/30 bg-ps-plum/[0.06]">
+          <div className="px-3.5 pt-3">
+            <h2 id="reconnect-title" className="m-0 text-sm font-medium text-ps-text">Turn on the Inbox and official stats</h2>
+            <p className="mt-1 text-xs text-ps-muted">
+              {upgradable.length === 1 ? "This account was" : "These accounts were"} connected before Post Social could read comments, messages and official numbers. Reconnect once to turn them on; posting keeps working either way.
+            </p>
+          </div>
+          <ul className="mt-2 divide-y divide-ps-fg/[0.06]">
+            {upgradable.map((a) => (
+              <li key={a.id} className="flex flex-wrap items-center gap-3 px-3.5 py-2.5">
+                <AccountMark platform={a.platform} avatarUrl={a.avatarUrl} size={28} badge={14} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-ps-text">{a.name}</span>
+                  <span className="block truncate text-[11px] text-ps-subtle">{handleLine(a)} · Adds {a.gains!.join(" and ")}</span>
+                </span>
+                <button type="button" disabled={busy !== null} onClick={() => connect(a.platform, a.platform === "bluesky" ? a.handle : undefined)} className={btn} data-attr="reconnect-for-features">Reconnect</button>
+              </li>
+            ))}
+          </ul>
+          {upgradable.some((a) => upgradable.filter((b) => b.platform === a.platform).length > 1 || active.filter((b) => b.platform === a.platform).length > 1) && (
+            <p className="m-0 px-3.5 pb-3 text-[11px] text-ps-subtle">Several accounts on one platform? When the platform asks you to sign in, use the account you&rsquo;re reconnecting (a private window makes switching easy).</p>
+          )}
+        </section>
+      )}
 
       {/* The profile filter is always shown, so grouping is easy to find before any profile exists. */}
       {props.profilesReady ? (
