@@ -335,14 +335,14 @@ async function saveIdentities(deps: ConnectionDeps, target: SaveTarget, identiti
         `WITH account AS (
            INSERT INTO public.connected_accounts
              (workspace_id, platform, external_account_id, owner_external_id, handle, display_name, avatar_url,
-              scopes, capabilities, health, health_reason, connected_by_actor_id, last_verified_at, disconnected_at, profile_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, 'connected', NULL, $10, now(), NULL,
+              scopes, capabilities, health, health_reason, connected_by_actor_id, last_verified_at, last_connected_at, disconnected_at, profile_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, 'connected', NULL, $10, now(), now(), NULL,
                    -- The chosen profile, unless it was deleted while the person was signing in.
                    (SELECT id FROM public.profiles WHERE id = $16::uuid AND workspace_id = $1))
            ON CONFLICT (workspace_id, platform, external_account_id) DO UPDATE SET
              owner_external_id = EXCLUDED.owner_external_id, handle = EXCLUDED.handle, display_name = EXCLUDED.display_name,
              avatar_url = EXCLUDED.avatar_url, avatar_synced_at = NULL, avatar_attempted_at = NULL, scopes = EXCLUDED.scopes, capabilities = EXCLUDED.capabilities,
-             health = 'connected', health_reason = NULL, last_verified_at = now(), disconnected_at = NULL,
+             health = 'connected', health_reason = NULL, last_verified_at = now(), last_connected_at = now(), disconnected_at = NULL,
              -- Reconnecting keeps the account's profile; one chosen now applies only if it had none.
              profile_id = coalesce(connected_accounts.profile_id, EXCLUDED.profile_id)
            RETURNING id, (xmax = 0) AS created
