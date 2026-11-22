@@ -71,6 +71,10 @@ in order to dev, then to prod, exactly the same files.
    applied. InsForge keeps only the latest nightly backup, so this restore point is what
    protects us from a bad migration. `npm run db:backup:prod` takes one by hand (also
    only from a synced `main`).
+   InsForge allows 5 manual backups, so promote first deletes the oldest `before-promote-`
+   backup when all 5 are taken. Backups made by hand, nightly ones and the Nov 16, 2026
+   incident restore point (`KEEP_BACKUPS` in `scripts/lib/backup-rotation.ts`) are never
+   deleted.
    It then shows any differences between `insforge.toml` and prod's settings and asks
    again before applying them.
 5. **Deploy the web app.** Previews point at dev and build only when someone will look at
