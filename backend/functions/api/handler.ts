@@ -35,10 +35,9 @@ import {
 import { usageReport } from "../../lib/usage";
 import { provisionWorkspace } from "../../lib/signup";
 import { optOut, validLinkToken } from "../../lib/nudges";
-import { billingActions, handleStripeEvent, verifyStripeSignature, type Stripe } from "../../lib/billing";
+import { billingActions, handleStripeEvent, verifyStripeSignature } from "../../lib/billing";
 import { mediaLinks } from "../../lib/media/links";
 import { tiktokCreatorInfo } from "../../lib/connections/tiktok-creator";
-import type { Settings } from "../../lib/connections/platforms";
 import { listAnalytics, postAnalytics, refreshAnalytics } from "../../lib/analytics";
 import { analyticsDashboard } from "../../lib/analytics-dashboard";
 import { deleteComment, dmCommenter, getConversation, hideComment, listComments, listContacts, listConversations, replyToComment, sendMessage, setConversationStatus, updateContact } from "../../lib/inbox/inbox";
@@ -54,11 +53,8 @@ export type ApiHandlerDeps = ApiDeps & {
   userForToken: (token: string | null) => Promise<SignedInUser | null>;
   allowedOrigins: string[];
   publicApiUrl: string; // where developers reach the API, e.g. https://www.postsocial.xyz/api
-  setting?: Settings; // secrets, for reading a connected account's live settings (TikTok)
   // Shared with our website, which forwards visitors' addresses (rate limits per address).
   proxySecret?: string | null;
-  // Billing: off (null) where Stripe isn't set up.
-  stripe?: Stripe | null;
   stripeWebhookSecret?: string | null;
 };
 

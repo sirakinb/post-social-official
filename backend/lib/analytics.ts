@@ -32,6 +32,8 @@ function shape(row: Row) {
   const missing = row.unavailable ?? [];
   return {
     post_id: row.post_id,
+    // Posted on the account outside Post Social (no post_id; read through the platform's own API).
+    ...(row.outside ? { outside: true } : {}),
     destination_id: row.destination_id,
     platform: row.platform,
     platform_name: DISPLAY_NAMES[row.platform],
@@ -52,7 +54,7 @@ export async function listAnalytics(
   sql: Sql,
   caller: Caller,
   platforms: Platform[],
-  input: { workspace_id: string; platform?: unknown; period?: unknown; sort?: unknown; limit?: unknown; offset?: unknown },
+  input: { workspace_id: string; platform?: unknown; period?: unknown; sort?: unknown; limit?: unknown; offset?: unknown; include_outside?: unknown },
 ) {
   await membership(sql, caller, input.workspace_id, false);
   const { limit, offset } = page(input);
@@ -64,28 +66,51 @@ export async function listAnalytics(
   if (platform && !platforms.includes(platform as Platform)) throw new ApiError(400, `Stats are available for: ${platforms.map((p) => DISPLAY_NAMES[p]).join(", ")}.`);
   const days = { last_7_days: 7, last_30_days: 30, last_90_days: 90, all: 36500 }[period];
 
-  const where = `m.workspace_id = $1 AND m.platform = ANY($2::text[]) AND ($3::text IS NULL OR m.platform = $3)
-                 AND m.published_at >= now() - make_interval(days => $4)`;
+  const outside = input.include_outside !== false && input.include_outside !== "false";
+
+  // Posts made through Post Social, and (unless left out) the same accounts' posts made
+  // outside it, which the whole-account sweep reads through each platform's own API.
+  const rowsSql = `
+    SELECT m.post_id::text AS post_id, m.destination_id::text AS destination_id, m.platform, m.published_at,
+      ${COUNTERS.map((c) => `m.${c}`).join(", ")}, m.extra, m.unavailable, m.source, m.fetched_at, m.last_error,
+      left(p.caption, 200) AS caption, d.live_url, a.display_name AS account, false AS outside
+    FROM public.post_metrics m
+    JOIN public.posts p ON p.id = m.post_id
+    JOIN public.destinations d ON d.id = m.destination_id
+    JOIN public.connected_accounts a ON a.id = m.connected_account_id
+    WHERE m.workspace_id = $1 AND m.platform = ANY($2::text[]) AND ($3::text IS NULL OR m.platform = $3)
+      AND m.published_at >= now() - make_interval(days => $4)
+    UNION ALL
+    SELECT NULL, NULL, o.platform, o.published_at,
+      ${COUNTERS.map((c) => `o.${c}`).join(", ")},
+      CASE WHEN o.reach IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('reach', o.reach) END, '{}'::text[], o.source, o.fetched_at, NULL,
+      left(o.caption, 200), o.permalink, a.display_name, true
+    FROM public.account_posts o
+    JOIN public.connected_accounts a ON a.id = o.connected_account_id
+    WHERE $5::boolean AND o.workspace_id = $1 AND o.platform = ANY($2::text[]) AND ($3::text IS NULL OR o.platform = $3)
+      AND a.health <> 'disconnected' AND o.published_at >= now() - make_interval(days => $4)`;
+  const params = [input.workspace_id, enabledOrEmpty(platforms), platform, days, outside];
   const rows = await sql<Row>(
-    `SELECT m.*, left(p.caption, 200) AS caption, d.live_url, a.display_name AS account
-     FROM public.post_metrics m
-     JOIN public.posts p ON p.id = m.post_id
-     JOIN public.destinations d ON d.id = m.destination_id
-     JOIN public.connected_accounts a ON a.id = m.connected_account_id
-     WHERE ${where}
-     ORDER BY ${sort === "published_at" ? "m.published_at" : `m.${sort}`} DESC NULLS LAST, m.destination_id
-     LIMIT $5 OFFSET $6`,
-    [input.workspace_id, enabledOrEmpty(platforms), platform, days, limit + 1, offset],
+    `SELECT * FROM (${rowsSql}) u
+     ORDER BY ${sort === "published_at" ? "u.published_at" : `u.${sort}`} DESC NULLS LAST, u.published_at DESC, u.destination_id
+     LIMIT $6 OFFSET $7`,
+    [...params, limit + 1, offset],
   );
-  const totals = await sql<Record<string, unknown> & { platform: Platform; posts: string }>(
-    `SELECT m.platform, count(*) AS posts, ${COUNTERS.map((c) => `sum(m.${c}) AS ${c}`).join(", ")}
-     FROM public.post_metrics m WHERE ${where} GROUP BY m.platform ORDER BY m.platform`,
-    [input.workspace_id, enabledOrEmpty(platforms), platform, days],
+  const totals = await sql<Record<string, unknown> & { platform: Platform; posts: string; outside_posts: string }>(
+    `SELECT u.platform, count(*) AS posts, count(*) FILTER (WHERE u.outside) AS outside_posts, ${COUNTERS.map((c) => `sum(u.${c}) AS ${c}`).join(", ")}
+     FROM (${rowsSql}) u GROUP BY u.platform ORDER BY u.platform`,
+    params,
   );
   return {
     period,
     platforms: platforms.map((p) => DISPLAY_NAMES[p]),
-    totals_by_platform: totals.map((t) => ({ platform: t.platform, platform_name: DISPLAY_NAMES[t.platform], posts: Number(t.posts), stats: counters(t) })),
+    totals_by_platform: totals.map((t) => ({
+      platform: t.platform,
+      platform_name: DISPLAY_NAMES[t.platform],
+      posts: Number(t.posts),
+      ...(outside ? { outside_posts: Number(t.outside_posts) } : {}),
+      stats: counters(t),
+    })),
     posts: rows.slice(0, limit).map(shape),
     has_more: rows.length > limit,
     limit,

@@ -41,6 +41,11 @@ work.
 2. Write tests for the feature, then run `npm run typecheck`, `npm run lint`,
    `npm test` and `npm run build`. All must pass before anything is pushed. For
    database changes, also apply them to dev and run `npm run test:db`.
+   Anything a person can do in the app, their AI agent must be able to do too:
+   add or update the feature's entries in `backend/lib/api/operations.ts` (which
+   generates the REST API, MCP tools, OpenAPI and API docs) with tests, and say
+   in the PR which agent tools changed. Only connecting social accounts and
+   entering a card stay web-only.
 3. Batch work into one pull request per substantial chunk (roughly a phase or a
    large part of one); keep unfinished work as a draft.
 4. Before asking to merge, review the full diff yourself for correctness and
