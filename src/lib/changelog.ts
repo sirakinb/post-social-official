@@ -14,6 +14,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    at: "2026-11-21T22:30:00-05:00",
+    kind: "Improved",
+    title: "Your AI agent can do more",
+    body: "Your AI agent can now read your whole-account stats (reach, views, audience, best times to post, and posts you made outside Post Social), see your plan, bill and X spending, set your monthly X limit, and disconnect an account when you ask. When you set up a comment-to-DM automation, the post list now includes posts you made outside Post Social too.",
+  },
+  {
     at: "2026-11-21T20:30:00-05:00",
     kind: "Improved",
     title: "Turn on the new features with one reconnect",

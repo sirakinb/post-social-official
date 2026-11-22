@@ -2,8 +2,11 @@
 // tools, the OpenAPI document (and later the CLI) are all generated from this list, so they
 // cannot drift apart. Each operation runs the same service code as the web app.
 import { ApiError, requireUuid, type AgentCaller, type Sql } from "../access";
-import { DISPLAY_NAMES, PLATFORMS, type Platform } from "../connections/platforms";
+import { DISPLAY_NAMES, PLATFORMS, type Platform, type Settings } from "../connections/platforms";
 import { ANALYTICS_PERIODS, listAnalytics, postAnalytics, refreshAnalytics } from "../analytics";
+import { DASHBOARD_PERIODS, analyticsDashboard } from "../analytics-dashboard";
+import { billingStatus, setXCap, syncAccountQuantity, type Stripe } from "../billing";
+import { disconnectAccount } from "../connections/service";
 import { mediaActions, type MediaDeps } from "../media/service";
 import { mediaForPosts } from "../media/links";
 import type { R2 } from "../media/r2";
@@ -13,7 +16,7 @@ import { createProfile, deleteProfile, listProfiles, moveAccount, setTiktokDeliv
 import { PERIODS, usageReport } from "../usage";
 import { xPriceText } from "../pricing";
 import { deleteComment, dmCommenter, getConversation, hideComment, listComments, listContacts, listConversations, replyToComment, sendMessage, setConversationStatus, updateContact } from "../inbox/inbox";
-import { LIMITS, MATCH_MODES, createAutomation, deleteAutomation, getAutomation, listAutomations, updateAutomation, type InboxSwitch } from "../inbox/automations";
+import { LIMITS, MATCH_MODES, automationPosts, createAutomation, deleteAutomation, getAutomation, listAutomations, updateAutomation, type InboxSwitch } from "../inbox/automations";
 
 export type ApiDeps = {
   sql: Sql;
@@ -23,6 +26,8 @@ export type ApiDeps = {
   analyticsPlatforms: Platform[]; // platforms whose stats are switched on here (none: no stats tools)
   inbox?: InboxSwitch; // where comment-to-DM automations are switched on (none: no automation tools)
   pause?: (ms: number) => Promise<void>; // how status checks wait between reads (tests skip the wait)
+  setting?: Settings; // secrets: a connected account's saved access (disconnecting revokes it at the platform)
+  stripe?: Stripe | null; // billing: off (null) where Stripe isn't set up
 };
 
 type JsonSchema = Record<string, unknown>;
@@ -208,6 +213,18 @@ const automationOperations: Operation[] = [
     input: { properties: { automation_id: id("automation") }, required: ["automation_id"] },
     destructive: true,
     run: (deps, caller, input) => deleteAutomation({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, input),
+  },
+  {
+    name: "list_automation_posts",
+    inbox: true,
+    title: "Posts an automation can answer",
+    description:
+      "Lists an Instagram account's, Facebook Page's or Threads account's recent posts (up to 50), newest first, to pick one for an automation: its platform_post_id goes in create_automation or update_automation. Includes posts made outside Post Social (outside: true, no post_id).",
+    method: "GET",
+    path: "/v1/accounts/{account_id}/automation-posts",
+    input: { properties: { account_id: id("connected Instagram, Facebook Page or Threads account") }, required: ["account_id"] },
+    readOnly: true,
+    run: (deps, caller, input) => automationPosts({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, { ...input, workspace_id: caller.workspaceId }),
   },
   {
     name: "list_conversations",
@@ -558,6 +575,30 @@ export const operations: Operation[] = [
     run: (deps, caller, input) => setTiktokDelivery(deps.sql, caller, input),
   },
   {
+    name: "disconnect_account",
+    title: "Disconnect an account",
+    description:
+      "Disconnects a social account from Post Social: its access is revoked at the platform where the platform allows it, and posts scheduled to it are cancelled for that account. Only when the person asks. Connecting it again needs the person (request_connect_link).",
+    method: "DELETE",
+    path: "/v1/accounts/{account_id}",
+    input: { properties: { account_id: id("connected account") }, required: ["account_id"] },
+    destructive: true,
+    run: async (deps, caller, input) => {
+      if (caller.mode === "test") throw new ApiError(403, "Test keys cannot disconnect accounts. Use a live key.");
+      if (!deps.setting) throw new ApiError(503, "Accounts can't be disconnected here. Use the Accounts page.");
+      const accountId = requireUuid(input.account_id, "Account");
+      // Only an account in the workspace this key or connection belongs to.
+      const [account] = await deps.sql<{ id: string }>(`SELECT id FROM public.connected_accounts WHERE id = $1 AND workspace_id = $2`, [accountId, caller.workspaceId]);
+      if (!account) throw new ApiError(404, "That account was not found.");
+      const billing = { sql: deps.sql, stripe: deps.stripe ?? null, webAppUrl: deps.webAppUrl };
+      return disconnectAccount(
+        { sql: deps.sql, setting: deps.setting, allowedReturnOrigins: [], afterAccountsChanged: (workspaceId) => syncAccountQuantity(billing, workspaceId) },
+        caller,
+        { account_id: accountId },
+      );
+    },
+  },
+  {
     name: "list_media",
     title: "List media",
     description: "Lists uploaded and imported media, newest first. Only media with status ready can be posted.",
@@ -805,11 +846,38 @@ export const operations: Operation[] = [
     run: (deps, caller, input) => usageReport(deps.sql, caller, { ...input, workspace_id: caller.workspaceId }),
   },
   {
+    name: "get_billing",
+    title: "Billing and X spending",
+    description:
+      "Shows the workspace's plan, whether it has a working card, connected accounts and this month's estimated bill, X spending this month against its monthly limit, the next invoice, the card on file and past invoices. Cards are added and changed on the Billing page in Post Social.",
+    method: "GET",
+    path: "/v1/billing",
+    input: { properties: {} },
+    readOnly: true,
+    run: (deps, caller) => billingStatus({ sql: deps.sql, stripe: deps.stripe ?? null, webAppUrl: deps.webAppUrl }, caller, { workspace_id: caller.workspaceId }),
+  },
+  {
+    name: "set_x_monthly_limit",
+    title: "Set the monthly X limit",
+    description:
+      "Sets the most the workspace can spend on X posts in a calendar month, in US dollars ($0 to $10,000; $0 stops X posts). Only owners and admins. Change it only when the person asks.",
+    method: "POST",
+    path: "/v1/billing/x-limit",
+    input: { properties: { monthly_limit: { type: "number", minimum: 0, maximum: 10000, description: "US dollars a month, e.g. 10." } }, required: ["monthly_limit"] },
+    strict: true,
+    run: async (deps, caller, input) => {
+      if (caller.mode === "test") throw new ApiError(403, "Test keys cannot change billing settings. Use a live key.");
+      if (input.monthly_limit === undefined || input.monthly_limit === null || input.monthly_limit === "") throw new ApiError(400, "Send monthly_limit in US dollars, e.g. 10.");
+      const saved = await setXCap({ sql: deps.sql, stripe: null, webAppUrl: deps.webAppUrl }, caller, { workspace_id: caller.workspaceId, monthly_cap: input.monthly_limit });
+      return { monthly_limit: saved.monthly_cap };
+    },
+  },
+  {
     name: "list_analytics",
     analytics: true,
     title: "Post stats",
     description:
-      "Lists published posts with their stats (views, likes, comments, shares, and saves, reposts or quotes where the platform reports them), plus totals per platform. Sort by any stat to find what performed best.",
+      "Lists published posts with their stats (views, likes, comments, shares, and saves, reposts or quotes where the platform reports them), plus totals per platform. Includes the same accounts' posts made outside Post Social (outside: true, no post_id), where the platform shares them. Sort by any stat to find what performed best. For each account's followers, reach, audience and best times, use get_analytics_overview.",
     method: "GET",
     path: "/v1/analytics",
     input: {
@@ -817,11 +885,32 @@ export const operations: Operation[] = [
         platform: { type: "string", enum: PLATFORMS },
         period: { type: "string", enum: [...ANALYTICS_PERIODS], default: "last_30_days", description: "Posts published in this period." },
         sort: { type: "string", enum: ["published_at", "views", "likes", "comments", "shares", "saves", "reposts", "quotes"], default: "published_at" },
+        include_outside: { type: "boolean", default: true, description: "false: only posts made through Post Social." },
         ...paging,
       },
     },
     readOnly: true,
     run: (deps, caller, input) => listAnalytics(deps.sql, caller, deps.analyticsPlatforms, { ...input, workspace_id: caller.workspaceId }),
+  },
+  {
+    name: "get_analytics_overview",
+    analytics: true,
+    title: "Account stats overview",
+    description:
+      "The Analytics page's overview for a period: totals (posts, views, likes, comments, shares, saves, engagement rate, followers and follower change), a week-by-week series, and each account's followers, growth, engagement, and the platform's own account numbers (insights: views, reach per day, profile views, interactions) and audience (age, gender, country, city) where the platform shares them. Also the best hours to post (hour_of_week_utc: 0 is Monday 00:00 UTC), which formats and posting cadence do best, and how engagement builds up after posting. Counts posts made outside Post Social too. For the posts themselves, use list_analytics.",
+    method: "GET",
+    path: "/v1/analytics/overview",
+    input: {
+      properties: {
+        platform: { type: "string", enum: PLATFORMS },
+        period: { type: "string", enum: Object.keys(DASHBOARD_PERIODS), default: "last_30_days" },
+      },
+    },
+    readOnly: true,
+    run: async (deps, caller, input) => {
+      const { posts: _posts, ...overview } = await analyticsDashboard(deps.sql, caller, deps.analyticsPlatforms, { ...input, workspace_id: caller.workspaceId });
+      return overview;
+    },
   },
   {
     name: "get_post_analytics",
