@@ -14,6 +14,36 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    at: "2026-11-21T20:30:00-05:00",
+    kind: "Improved",
+    title: "Turn on the new features with one reconnect",
+    body: "Instagram, Facebook, Threads and TikTok accounts connected before today need to sign in once more to get the Inbox and official stats. Accounts lists the ones that need it under Turn on the Inbox and official stats, each with a Reconnect button. Posting keeps working either way.",
+  },
+  {
+    at: "2026-11-21T19:30:00-05:00",
+    kind: "New",
+    title: "Stats for your whole account",
+    body: "Analytics now includes posts you made outside Post Social on Instagram, Facebook, Threads, TikTok and Bluesky, marked Posted outside Post Social. Overview shows each account's reach, views and engagement for the period, and Growth shows who your audience is, where the platform shares it. Every TikTok video now has its views, likes, comments and shares straight from TikTok.",
+  },
+  {
+    at: "2026-11-21T17:10:00-05:00",
+    kind: "New",
+    title: "Official Instagram, Facebook and Threads stats",
+    body: "Your Instagram, Facebook and Threads numbers now come straight from each platform, including reach, saves and shares that public pages don't show. Accounts that haven't reconnected yet keep their public numbers until they do.",
+  },
+  {
+    at: "2026-11-21T14:00:00-05:00",
+    kind: "New",
+    title: "Inbox and comment-to-DM",
+    body: "The new Inbox brings your Instagram, Facebook and Threads comments and Instagram and Facebook messages into one place, and you or your AI agent can reply from there. Comment-to-DM sends a direct message with your link when someone comments a keyword you choose, like GUIDE, on your post.",
+  },
+  {
+    at: "2026-11-21T14:00:00-05:00",
+    kind: "Fixed",
+    title: "Choosing your Facebook Page",
+    body: "If you manage more than one Facebook Page, connecting Facebook now asks which Page to add instead of picking one for you.",
+  },
+  {
     at: "2026-11-15T10:00:00-05:00",
     kind: "Improved",
     title: "Add a card any time, and clearer billing and posting",
