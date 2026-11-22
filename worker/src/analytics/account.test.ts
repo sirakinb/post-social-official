@@ -128,6 +128,14 @@ describe("reading every TikTok video", () => {
     expect(read.followers).toBeNull();
   });
 
+  it("treats TikTok's 401 for a permission the account never granted as missing permission, not an expired login", async () => {
+    const http = (async () => new Response(JSON.stringify({ data: {}, error: { code: "scope_not_authorized", message: "The user did not authorize the scope required for completing this request." } }), { status: 401 })) as unknown as typeof fetch;
+    expect((await ACCOUNT_READERS.tiktok!(ctx(http))).posts).toEqual([]);
+    const expired = (async () => new Response(JSON.stringify({ data: {}, error: { code: "access_token_invalid", message: "expired" } }), { status: 401 })) as unknown as typeof fetch;
+    // A login that really expired still stops the read (and waits for a reconnect).
+    await expect(ACCOUNT_READERS.tiktok!(ctx(expired))).rejects.toMatchObject({ expired: true });
+  });
+
   it("brings nothing (no error) when the account can't read video.list yet", async () => {
     const { http } = fakeHttp([]);
     expect((await ACCOUNT_READERS.tiktok!(ctx(http))).posts).toEqual([]);
