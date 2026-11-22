@@ -298,17 +298,24 @@ export async function deleteAutomation(deps: InboxDeps, caller: Caller, input: {
   return { deleted: true, automation_id: automation.id };
 }
 
-// The posts an automation can be attached to: recent posts published through
-// Post Social on that account.
+// The posts an automation can be attached to: the account's recent posts, published through
+// Post Social or made outside it (read by the whole-account stats sweep).
 export async function automationPosts(deps: InboxDeps, caller: Caller, input: { workspace_id?: unknown; account_id?: unknown }) {
   const workspaceId = requireUuid(input.workspace_id, "Workspace");
   await membership(deps.sql, caller, workspaceId, false);
   const account = await inboxAccount(deps.sql, workspaceId, input.account_id);
   const posts = await deps.sql(
-    `SELECT d.platform_request_id AS platform_post_id, d.post_id, d.live_url, d.updated_at AS published_at, left(p.caption, 120) AS caption
-     FROM public.destinations d JOIN public.posts p ON p.id = d.post_id
-     WHERE d.connected_account_id = $1 AND d.status = 'published' AND d.platform_request_id IS NOT NULL
-     ORDER BY d.updated_at DESC LIMIT 50`,
+    `SELECT * FROM (
+       SELECT d.platform_request_id AS platform_post_id, d.post_id, d.live_url, d.updated_at AS published_at, left(p.caption, 120) AS caption, false AS outside
+       FROM public.destinations d JOIN public.posts p ON p.id = d.post_id
+       WHERE d.connected_account_id = $1 AND d.status = 'published' AND d.platform_request_id IS NOT NULL
+       UNION ALL
+       SELECT o.platform_post_id, NULL, o.permalink, o.published_at, left(o.caption, 120), true
+       FROM public.account_posts o
+       WHERE o.connected_account_id = $1
+         AND NOT EXISTS (SELECT 1 FROM public.destinations d WHERE d.connected_account_id = $1 AND d.platform_request_id = o.platform_post_id)
+     ) u
+     ORDER BY u.published_at DESC LIMIT 50`,
     [account.id],
   );
   return { posts };

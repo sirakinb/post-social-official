@@ -116,6 +116,23 @@ describe.skipIf(!enabled)("post stats on the dev backend (US-068)", () => {
     expect(none.posts).toEqual([]);
   });
 
+  it("lists the account's posts made outside Post Social too, unless asked not to (PEN-39)", async () => {
+    await sql(
+      `INSERT INTO public.account_posts (connected_account_id, workspace_id, platform, platform_post_id, published_at, caption, permalink, format, likes, reach)
+       VALUES ($1, $2, 'facebook', $3, now() - interval '1 day', 'Made in Facebook', 'https://facebook.com/x', 'photo', 7, 50)`,
+      [facebook, owner.workspaceId, `outside_${suffix}`],
+    );
+    const list = await listAnalytics(sql, person(), ["facebook", "threads"], { workspace_id: owner.workspaceId });
+    const outside = list.posts.find((p) => (p as { outside?: boolean }).outside) as { post_id: unknown; stats: Record<string, number>; more?: Record<string, number>; live_url: string };
+    expect(outside).toMatchObject({ post_id: null, stats: { likes: 7 }, more: { reach: 50 }, live_url: "https://facebook.com/x" });
+    expect(list.totals_by_platform).toEqual(expect.arrayContaining([expect.objectContaining({ platform: "facebook", posts: 2, outside_posts: 1 })]));
+    const sorted = await listAnalytics(sql, person(), ["facebook", "threads"], { workspace_id: owner.workspaceId, sort: "likes" });
+    expect(sorted.posts.map((p) => (p.stats as Record<string, number>).likes)).toEqual([20, 9, 7]);
+    const ours = await listAnalytics(sql, person(), ["facebook", "threads"], { workspace_id: owner.workspaceId, include_outside: false });
+    expect(ours.posts.some((p) => (p as { outside?: boolean }).outside)).toBe(false);
+    await sql(`DELETE FROM public.account_posts WHERE connected_account_id = $1`, [facebook]);
+  });
+
   it("refresh now fetches again, but not more than every 30 minutes", async () => {
     const fresh = await refreshAnalytics(sql, person(), ["facebook", "threads"], { workspace_id: owner.workspaceId, post_id: thPost });
     expect(fresh).toMatchObject({ queued: 0, message: expect.stringMatching(/already fresh/) });
