@@ -355,6 +355,11 @@ async function saveIdentities(deps: ConnectionDeps, target: SaveTarget, identiti
              encrypted_payload = EXCLUDED.encrypted_payload, initialization_vector = EXCLUDED.initialization_vector,
              access_token_expires_at = EXCLUDED.access_token_expires_at, refresh_token_expires_at = EXCLUDED.refresh_token_expires_at,
              refresh_lease_until = NULL
+         ), stats_sync AS (
+           -- A reconnect can grant permissions the account lacked (insights, video.list), so
+           -- its whole-account numbers are read again on the next sweep instead of waiting.
+           UPDATE public.account_stats_syncs SET next_sync_at = now(), last_error = NULL
+           WHERE connected_account_id IN (SELECT id FROM account)
          ), usage AS (
            INSERT INTO public.usage_events (workspace_id, actor_id, event_type, quantity)
            SELECT $1, $10, 'account_connected', 1 FROM account WHERE created
