@@ -259,7 +259,14 @@ export async function readClientMetadata(clientId: string, fetcher: Fetcher = fe
     return null;
   }
   if (!doc || typeof doc !== "object" || doc.client_id !== clientId) return null;
-  if (doc.token_endpoint_auth_method !== undefined && doc.token_endpoint_auth_method !== "none") return null;
+  // In newer CIMD documents the list declares capabilities; the singular field is a
+  // legacy preference. Our token endpoint still only supports public clients with PKCE.
+  const authMethods = doc.token_endpoint_auth_methods_supported;
+  if (authMethods !== undefined) {
+    if (!Array.isArray(authMethods) || authMethods.some((method) => typeof method !== "string") || !authMethods.includes("none")) return null;
+  } else if (doc.token_endpoint_auth_method !== undefined && doc.token_endpoint_auth_method !== "none") {
+    return null;
+  }
   const uris = doc.redirect_uris;
   if (!Array.isArray(uris) || uris.length === 0 || uris.length > 10 || uris.some((u) => redirectUriProblem(u) !== null)) return null;
   const host = new URL(clientId).hostname;
