@@ -3,6 +3,8 @@
 // accounts (not reviewers); every change is audited. The worker does the sending
 // (worker/src/inbox/runner.ts).
 import { ApiError, membership, requireUuid, type Caller, type Sql } from "../access";
+import type { Settings } from "../connections/platforms";
+import { liveAccountPosts, postOnAccount, type LiveAccount, type LivePost } from "./account-posts";
 import type { MatchMode } from "./match";
 
 // Where automations are switched on: INBOX_WORKSPACES lists workspace ids, or "all".
@@ -24,7 +26,9 @@ export function inboxSwitch(setting: (name: string) => string | undefined): Inbo
 }
 export const inboxOn = (on: InboxSwitch, workspaceId: string) => on.all || on.workspaces.includes(workspaceId.toLowerCase());
 
-export type InboxDeps = { sql: Sql; inbox: InboxSwitch };
+// `setting` (secrets) lets the post list be read live from the platform with the account's
+// saved access; without it the list comes from the posts we have saved.
+export type InboxDeps = { sql: Sql; inbox: InboxSwitch; setting?: Settings; http?: typeof fetch };
 
 export const MATCH_MODES: MatchMode[] = ["word", "contains", "exact"];
 export const LIMITS = { name: 80, keywords: 20, keyword: 50, dm: 640, variations: 5, buttons: 3, buttonLabel: 20, reply: 300 };
@@ -179,8 +183,8 @@ async function automationFor(deps: InboxDeps, caller: Caller, automationId: unkn
 // The account must be an Instagram account, Facebook Page or Threads account in this workspace that is still connected.
 async function inboxAccount(sql: Sql, workspaceId: string, accountId: unknown) {
   const id = requireUuid(accountId, "Account");
-  const [account] = await sql<{ id: string; platform: string; health: string }>(
-    `SELECT id, platform, health FROM public.connected_accounts WHERE id = $1 AND workspace_id = $2`,
+  const [account] = await sql<{ id: string; platform: string; health: string; display_name: string; external_account_id: string }>(
+    `SELECT id, platform, health, display_name, external_account_id FROM public.connected_accounts WHERE id = $1 AND workspace_id = $2`,
     [id, workspaceId],
   );
   if (!account) throw new ApiError(404, "That account was not found in this workspace.");
@@ -197,6 +201,13 @@ async function ourPostId(sql: Sql, accountId: string, platformPostId: string | n
     [accountId, platformPostId],
   );
   return row?.post_id ?? null;
+}
+
+// A chosen post must be on the chosen account, or the automation would never fire.
+async function requireOwnPost(deps: InboxDeps, account: LiveAccount, platformPostId: string | null) {
+  if (!platformPostId || !deps.setting) return;
+  const own = await postOnAccount({ sql: deps.sql, setting: deps.setting, http: deps.http }, account, platformPostId);
+  if (own === false) throw new ApiError(400, `That post isn't on ${account.display_name}. Pick one of this account's posts.`);
 }
 
 export async function listAutomations(deps: InboxDeps, caller: Caller, input: { workspace_id?: unknown; account_id?: unknown }) {
@@ -236,6 +247,7 @@ export async function createAutomation(deps: InboxDeps, caller: Caller, input: R
   const [{ count }] = await deps.sql<{ count: number }>(`SELECT count(*)::int AS count FROM public.comment_automations WHERE workspace_id = $1`, [workspaceId]);
   if (Number(count) >= MAX_AUTOMATIONS) throw new ApiError(409, `A workspace can have up to ${MAX_AUTOMATIONS} automations.`);
   const post = await ourPostId(deps.sql, account.id, values.platform_post_id);
+  if (!post) await requireOwnPost(deps, account, values.platform_post_id);
   const active = input.is_active === undefined ? true : Boolean(input.is_active);
   const [automation] = await deps.sql<Automation>(
     `WITH created AS (
@@ -261,10 +273,11 @@ export async function createAutomation(deps: InboxDeps, caller: Caller, input: R
 
 export async function updateAutomation(deps: InboxDeps, caller: Caller, input: Record<string, unknown>) {
   const { automation: before, member } = await automationFor(deps, caller, input.automation_id, true);
-  const [{ platform }] = await deps.sql<{ platform: string }>(`SELECT platform FROM public.connected_accounts WHERE id = $1`, [before.connected_account_id]);
-  const values = cleanValues(input, platform, before);
+  const [account] = await deps.sql<LiveAccount>(`SELECT id, platform, display_name, external_account_id FROM public.connected_accounts WHERE id = $1`, [before.connected_account_id]);
+  const values = cleanValues(input, account.platform, before);
   const active = input.is_active === undefined ? before.is_active : Boolean(input.is_active);
   const post = values.platform_post_id === before.platform_post_id ? before.post_id : await ourPostId(deps.sql, before.connected_account_id, values.platform_post_id);
+  if (values.platform_post_id !== before.platform_post_id && !post) await requireOwnPost(deps, account, values.platform_post_id);
   const [automation] = await deps.sql<Automation>(
     `WITH updated AS (
        UPDATE public.comment_automations SET name = $2, platform_post_id = $3, post_id = $4, keywords = $5, match_mode = $6, exclude_keywords = $7,
@@ -298,19 +311,46 @@ export async function deleteAutomation(deps: InboxDeps, caller: Caller, input: {
   return { deleted: true, automation_id: automation.id };
 }
 
-// The posts an automation can be attached to: the account's recent posts, published through
-// Post Social or made outside it (read by the whole-account stats sweep).
-export async function automationPosts(deps: InboxDeps, caller: Caller, input: { workspace_id?: unknown; account_id?: unknown }) {
+export type AutomationPost = LivePost & { post_id: string | null; outside: boolean };
+
+// The posts an automation can be attached to: any post on the account, newest first, read
+// from the platform itself (so posts made in its own app, and ones from a minute ago, are
+// there), a page at a time. `source` is "saved" when the platform couldn't be read just now:
+// then the list is what we have on file, i.e. posts published through Post Social and the ones
+// the stats sweep has seen.
+export async function automationPosts(deps: InboxDeps, caller: Caller, input: { workspace_id?: unknown; account_id?: unknown; cursor?: unknown }) {
   const workspaceId = requireUuid(input.workspace_id, "Workspace");
   await membership(deps.sql, caller, workspaceId, false);
   const account = await inboxAccount(deps.sql, workspaceId, input.account_id);
-  const posts = await deps.sql(
+  if (deps.setting) {
+    const live = await liveAccountPosts({ sql: deps.sql, setting: deps.setting, http: deps.http }, account, input.cursor).catch(() => null);
+    if (live) {
+      // Which of them went out through Post Social (for the link to our own post).
+      const ours = live.posts.length
+        ? await deps.sql<{ platform_request_id: string; post_id: string }>(
+            `SELECT platform_request_id, post_id FROM public.destinations WHERE connected_account_id = $1 AND platform_request_id = ANY($2::text[])`,
+            [account.id, live.posts.map((p) => p.platform_post_id)],
+          )
+        : [];
+      const byId = new Map(ours.map((o) => [o.platform_request_id, o.post_id]));
+      const posts: AutomationPost[] = live.posts.map((p) => ({ ...p, post_id: byId.get(p.platform_post_id) ?? null, outside: !byId.has(p.platform_post_id) }));
+      return { posts, next_cursor: live.next_cursor, source: "live" as const };
+    }
+  }
+  // Only the first page exists on file; a cursor past it has nothing more.
+  if (input.cursor) return { posts: [] as AutomationPost[], next_cursor: null, source: "saved" as const };
+  const posts = await deps.sql<AutomationPost>(
     `SELECT * FROM (
-       SELECT d.platform_request_id AS platform_post_id, d.post_id, d.live_url, d.updated_at AS published_at, left(p.caption, 120) AS caption, false AS outside
+       SELECT d.platform_request_id AS platform_post_id, d.post_id, d.live_url, d.updated_at AS published_at, left(p.caption, 160) AS caption, false AS outside,
+              NULL::text AS thumbnail_url,
+              CASE WHEN EXISTS (SELECT 1 FROM public.post_media pm JOIN public.media_assets ma ON ma.id = pm.media_asset_id WHERE pm.post_id = d.post_id AND ma.media_type = 'video') THEN 'video'
+                   WHEN (SELECT count(*) FROM public.post_media pm WHERE pm.post_id = d.post_id) > 1 THEN 'carousel'
+                   WHEN EXISTS (SELECT 1 FROM public.post_media pm WHERE pm.post_id = d.post_id) THEN 'photo'
+                   ELSE 'text' END AS format
        FROM public.destinations d JOIN public.posts p ON p.id = d.post_id
        WHERE d.connected_account_id = $1 AND d.status = 'published' AND d.platform_request_id IS NOT NULL
        UNION ALL
-       SELECT o.platform_post_id, NULL, o.permalink, o.published_at, left(o.caption, 120), true
+       SELECT o.platform_post_id, NULL, o.permalink, o.published_at, left(o.caption, 160), true, NULL::text, o.format
        FROM public.account_posts o
        WHERE o.connected_account_id = $1
          AND NOT EXISTS (SELECT 1 FROM public.destinations d WHERE d.connected_account_id = $1 AND d.platform_request_id = o.platform_post_id)
@@ -318,5 +358,5 @@ export async function automationPosts(deps: InboxDeps, caller: Caller, input: { 
      ORDER BY u.published_at DESC LIMIT 50`,
     [account.id],
   );
-  return { posts };
+  return { posts, next_cursor: null, source: "saved" as const };
 }
