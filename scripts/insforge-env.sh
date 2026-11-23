@@ -23,7 +23,18 @@ linked_name() {
   python3 -c "import json; print(json.load(open('.insforge/project.json'))['project_name'])"
 }
 
+# GitHub's dev deploy links the folder straight to the dev backend with the dev branch's own
+# key (INSFORGE_DEV_DIRECT=1, no InsForge login), which the prod backend refuses.
+DEV_HOST="https://syydd6ck-zqc.us-east.insforge.app"
+linked_host() {
+  python3 -c "import json; print(json.load(open('.insforge/project.json')).get('oss_host', ''))"
+}
+
 ensure_dev() {
+  if [[ -n "${INSFORGE_DEV_DIRECT:-}" ]]; then
+    [[ "$(linked_host)" == "$DEV_HOST" ]] || { echo "INSFORGE_DEV_DIRECT is set but the link isn't the dev backend." >&2; exit 1; }
+    return 0
+  fi
   if [[ "$(linked_name)" != "$DEV_BRANCH" ]]; then
     "${CLI[@]}" branch switch "$DEV_BRANCH" >/dev/null
   fi
@@ -104,6 +115,11 @@ local_versions() {
 
 target="${1:-}"
 shift || true
+
+if [[ -n "${INSFORGE_DEV_DIRECT:-}" && "$target" != "dev" ]]; then
+  echo "INSFORGE_DEV_DIRECT only works with dev." >&2
+  exit 1
+fi
 
 case "$target" in
   dev)
