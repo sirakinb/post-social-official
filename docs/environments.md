@@ -40,6 +40,20 @@ changed by the same tool.
 Do not use `INSFORGE_PROJECT_ID` to pick an environment: the CLI ignores it for
 database commands and silently hits whichever environment is linked.
 
+## Deploying to dev
+
+The `api` function deploys to dev from GitHub: Actions → **Deploy api to dev** → Run workflow
+(branch `dev`), optionally with a commit SHA from `dev` (empty: the tip of `dev`). It refuses
+commits that aren't on `dev`, runs one at a time (dev is shared), uses only the dev branch's own
+key (`Development` environment secret `INSFORGE_DEV_API_KEY`, which the prod backend refuses),
+checks the dev API answers, and records the commit in the run summary. Other functions, the
+worker and migrations still deploy to dev by hand (`npm run functions:deploy -- dev <name>`,
+`npm run worker:deploy -- dev`, `npm run db:dev`). A Vercel preview never deploys the backend.
+
+Production is gated in GitHub: `main` takes only pull requests with an approving review (stale
+approvals are dismissed on new pushes) and passing checks, and the release job's `Production`
+environment waits for Aki's approval, runs only from `main`, and admins can't bypass it.
+
 ## Dev to prod
 
 **Releases run on GitHub Actions** (`.github/workflows/release.yml`): every push to `main`
