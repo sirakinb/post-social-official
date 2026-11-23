@@ -11,9 +11,21 @@ describe("getting started", () => {
     await agent.assert("the page shows step-by-step instructions for connecting an AI app such as Claude or ChatGPT");
   });
 
-  test("the Send your first post step opens the composer", { session: "tester" }, async ({ app, agent, browser }) => {
+  // The step's button goes once the workspace has sent a post: the step shows Done instead, and
+  // the whole list goes once all three steps are done. The prod test customer has posted (its
+  // Bluesky pilot post, Nov 23, 2026), so this checks whichever state the list is in, then
+  // opens the composer from the step's button or, without one, from the sidebar.
+  test("the Send your first post step opens the composer", { session: "tester" }, async ({ app, screen, browser }) => {
     await app.open("/beta/accounts");
-    await agent.act("start creating your first post from the Get started list");
+    await expect(screen.getByRole("heading", "Accounts").first()).toBeVisible();
+    const step = screen.getByRole("listitem").filter({ hasText: "Send your first post" });
+    const start = step.getByRole("link", "Create a post");
+    if ((await step.count()) > 0 && (await start.count()) > 0) {
+      await start.click();
+    } else {
+      if ((await step.count()) > 0) await expect(step).toContainText("Done");
+      await screen.getByRole("link", "Create").first().click();
+    }
     await expect(browser).toHaveURL(/\/beta\/create/);
   });
 
