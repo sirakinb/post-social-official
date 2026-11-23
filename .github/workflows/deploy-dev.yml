@@ -1,0 +1,155 @@
+# Deploy to the shared dev backend (InsForge branch `dev`) from an exact commit that is already
+# on the `dev` branch, i.e. reviewed and merged through a pull request.
+# Run it by hand: Actions → "Deploy to dev" → Run workflow (branch: dev). Choose what to deploy;
+# optionally give a commit SHA from dev (empty: the tip of dev).
+#
+# It uses only the dev branch's own API key (the `Development` environment secret
+# INSFORGE_DEV_API_KEY), which the prod backend refuses, and the scripts run in their dev-key
+# mode (INSFORGE_DEV_DIRECT=1), which refuses prod. So this workflow can't reach prod.
+# One dev deploy at a time: dev is shared, so a second run waits for the first.
+# A Vercel preview is not this: previews only build the website.
+name: Deploy to dev
+run-name: Deploy ${{ inputs.what }} to dev @ ${{ inputs.sha || github.sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      what:
+        description: "What to deploy"
+        type: choice
+        options: [api, all functions, worker, migrations, everything]
+        default: api
+      sha:
+        description: "Commit on dev to deploy (empty: the tip of dev)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: insforge-dev-deploy
+  cancel-in-progress: false
+
+env:
+  INSFORGE_CLI: "@insforge/cli@0.2.8"
+  INSFORGE_DEV_DIRECT: "1"
+  FLYCTL_VERSION: 0.4.111
+  DEV_FUNCTIONS_URL: https://syydd6ck-zqc.function2.insforge.app
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    environment: Development
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: dev
+          fetch-depth: 0
+
+      - name: Pick the commit (must already be on dev)
+        id: pick
+        env:
+          INPUT_SHA: ${{ inputs.sha }}
+          WHAT: ${{ inputs.what }}
+        run: |
+          sha="${INPUT_SHA:-$(git rev-parse HEAD)}"
+          if ! [[ "$sha" =~ ^[0-9a-f]{7,40}$ ]]; then echo "::error::Not a commit SHA: $sha"; exit 1; fi
+          full=$(git rev-parse --verify "$sha^{commit}") || { echo "::error::Unknown commit $sha"; exit 1; }
+          git merge-base --is-ancestor "$full" origin/dev || { echo "::error::$full is not on dev. Only merged, reviewed commits are deployed."; exit 1; }
+          git checkout --quiet "$full"
+          case "$WHAT" in
+            api) parts="api" ;;
+            "all functions") parts="functions" ;;
+            worker) parts="worker" ;;
+            migrations) parts="migrations" ;;
+            everything) parts="migrations functions worker" ;;
+            *) echo "::error::Unknown choice: $WHAT"; exit 1 ;;
+          esac
+          echo "sha=$full" >> "$GITHUB_OUTPUT"
+          echo "parts=$parts" >> "$GITHUB_OUTPUT"
+          echo "Deploying [$parts] from $full"
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      - name: Link to dev with the dev-only key
+        env:
+          INSFORGE_DEV_API_KEY: ${{ secrets.INSFORGE_DEV_API_KEY }}
+          INSFORGE_DEV_BASE_URL: ${{ vars.INSFORGE_DEV_BASE_URL }}
+        run: |
+          [[ -n "$INSFORGE_DEV_API_KEY" ]] || { echo "::error::Add the Development environment secret INSFORGE_DEV_API_KEY."; exit 1; }
+          [[ "$INSFORGE_DEV_BASE_URL" == "https://syydd6ck-zqc.us-east.insforge.app" ]] || { echo "::error::INSFORGE_DEV_BASE_URL must be the dev backend."; exit 1; }
+          npx -y "$INSFORGE_CLI" link --api-base-url "$INSFORGE_DEV_BASE_URL" --api-key "$INSFORGE_DEV_API_KEY" > /dev/null
+          scripts/insforge-env.sh dev functions list > /dev/null
+          echo "Linked to the dev backend."
+
+      - name: Migrations
+        if: contains(steps.pick.outputs.parts, 'migrations')
+        run: npm run db:dev
+
+      # InsForge's deploy can print success and then not exit (see release.yml), so each one
+      # counts as done once success is reported, and fails if that doesn't happen in 4 minutes.
+      - name: Functions
+        if: contains(steps.pick.outputs.parts, 'api') || contains(steps.pick.outputs.parts, 'functions')
+        env:
+          PARTS: ${{ steps.pick.outputs.parts }}
+        run: |
+          if [[ "$PARTS" == *functions* ]]; then fns="api connections media posts"; else fns="api"; fi
+          for fn in $fns; do
+            echo "::group::$fn"
+            log=$(mktemp)
+            setsid npm run functions:deploy -- dev "$fn" > "$log" 2>&1 &
+            pid=$!
+            for _ in $(seq 1 120); do
+              grep -qE "Function \"$fn\" (updation|creation) success" "$log" && break
+              kill -0 "$pid" 2>/dev/null || break
+              sleep 2
+            done
+            kill -- "-$pid" 2>/dev/null || true
+            grep -v '^npm notice' "$log"
+            echo "::endgroup::"
+            grep -qE "Function \"$fn\" (updation|creation) success" "$log" || { echo "::error::The $fn function didn't report a successful deploy."; exit 1; }
+          done
+
+      - name: Install flyctl (the worker is built with it)
+        if: contains(steps.pick.outputs.parts, 'worker')
+        run: |
+          curl -fsSL https://fly.io/install.sh | sh -s "$FLYCTL_VERSION"
+          echo "$HOME/.fly/bin" >> "$GITHUB_PATH"
+      - name: Worker
+        if: contains(steps.pick.outputs.parts, 'worker')
+        run: npm run worker:deploy -- dev
+
+      - name: Check dev answers
+        run: |
+          curl -fsS --retry 5 --retry-delay 5 --max-time 20 "$DEV_FUNCTIONS_URL/api/v1/openapi.json" -o openapi.json
+          python3 -c "import json; d=json.load(open('openapi.json')); n=sum(len(m) for m in d['paths'].values()); print(f'Dev API answers with {n} operations'); assert n > 0"
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 -X POST "$DEV_FUNCTIONS_URL/api/mcp" -H 'Content-Type: application/json' -d '{}')
+          [[ "$code" == "401" ]] || { echo "::error::MCP without a key answered $code, expected 401"; exit 1; }
+          echo "MCP asks for sign-in (401), as it should."
+
+      - name: Record what was deployed
+        if: always()
+        env:
+          SHA: ${{ steps.pick.outputs.sha }}
+          PARTS: ${{ steps.pick.outputs.parts }}
+          OUTCOME: ${{ job.status }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          {
+            echo "### Deploy to dev"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Commit | \`${SHA:-unknown}\` |"
+            echo "| Deployed | ${PARTS:-nothing} |"
+            echo "| Result | $OUTCOME |"
+            echo "| Run by | $ACTOR |"
+            echo "| Dev API | $DEV_FUNCTIONS_URL/api |"
+          } >> "$GITHUB_STEP_SUMMARY"
