@@ -96,6 +96,52 @@ describe("apps whose id is a web address", () => {
     expect(await readClientMetadata(GROK, async () => { throw new Error("redirected"); })).toBeNull();
   });
 
+  const CHATGPT = "https://chatgpt.com/oauth/client.json";
+  const chatgptDoc = {
+    client_id: CHATGPT,
+    client_name: "ChatGPT",
+    redirect_uris: ["https://chatgpt.com/connector_platform_oauth_redirect"],
+    token_endpoint_auth_methods_supported: ["none", "private_key_jwt"],
+    token_endpoint_auth_method: "private_key_jwt",
+  };
+
+  it("accepts ChatGPT metadata that advertises public-client support despite the legacy preference", async () => {
+    expect(await readClientMetadata(CHATGPT, serve(chatgptDoc))).toMatchObject({
+      name: "ChatGPT",
+      redirectUris: chatgptDoc.redirect_uris,
+    });
+  });
+
+  it.each([["private_key_jwt"], [], "none", ["none", 1], null].map((value) => [value]))(
+    "refuses invalid or incompatible explicit method lists (%j)",
+    async (methods) => {
+      const doc = { ...chatgptDoc, token_endpoint_auth_methods_supported: methods, token_endpoint_auth_method: "none" };
+      expect(await readClientMetadata(CHATGPT, serve(doc))).toBeNull();
+    },
+  );
+
+  it("lets ChatGPT reach consent without relaxing redirect or PKCE checks", async () => {
+    const sql = (async (query: string, params: unknown[]) => {
+      if (query.startsWith("SELECT")) return [];
+      return [{ id: "chatgpt", client_id: params[0], client_name: params[1], redirect_uris: params[2], client_uri: params[3] }];
+    }) as Sql;
+    const issuer = "https://dev.postsocial.xyz";
+    const params = {
+      client_id: CHATGPT,
+      redirect_uri: chatgptDoc.redirect_uris[0],
+      response_type: "code",
+      code_challenge: "a".repeat(43),
+      code_challenge_method: "S256",
+      resource: `${issuer}/mcp`,
+    };
+    const fetcher = serve(chatgptDoc);
+    await expect(checkAuthorization(sql, issuer, params, fetcher)).resolves.toMatchObject({
+      client: { client_id: CHATGPT }, redirect: null,
+    });
+    await expect(checkAuthorization(sql, issuer, { ...params, redirect_uri: `${params.redirect_uri}/` }, fetcher)).rejects.toThrow(/did not register/);
+    await expect(checkAuthorization(sql, issuer, { ...params, code_challenge_method: undefined }, fetcher)).rejects.toThrow(/PKCE/);
+  });
+
   it("never follows redirects when reading the file", async () => {
     let init: RequestInit | undefined;
     await readClientMetadata(GROK, async (_url, i) => { init = i; return new Response(JSON.stringify(grokDoc)); });
