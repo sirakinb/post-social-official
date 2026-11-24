@@ -1,5 +1,5 @@
-// Every page in the sidebar, the way a new Free customer sees it: it opens, says what it's
-// for, and when there's nothing on it yet, says what to do next.
+// Every page in the sidebar, the way the test customer (Free or Paid) sees it: it opens, says
+// what it's for, and when there's nothing on it yet, says what to do next.
 import { describe, expect, test } from "e2e";
 
 // heading: the page's main heading, or null when it changes (the Calendar shows the month).
@@ -13,7 +13,7 @@ const PAGES: Array<{ path: string; name: string; heading: string | null; makesSe
   { path: "/beta/api", name: "Connect your AI", heading: "Connect your AI", makesSense: "the page explains how to connect an AI app such as Claude or ChatGPT, with setup steps" },
   { path: "/beta/usage", name: "Usage", heading: "Usage", makesSense: "the page shows the plan's limits and this period's usage in plain words" },
   { path: "/beta/settings", name: "Settings", heading: "Settings", makesSense: "the page shows the account, the workspace and links to billing and usage" },
-  { path: "/beta/billing", name: "Billing", heading: "Billing", makesSense: "the page explains what the customer pays and how to add a card" },
+  { path: "/beta/billing", name: "Billing", heading: "Billing", makesSense: "the page explains what the customer pays and how to add a card, or, on the paid plan, shows the next charge and the card on file" },
 ];
 
 describe("every page", () => {
