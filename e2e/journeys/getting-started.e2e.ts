@@ -40,7 +40,8 @@ describe("getting started", () => {
     await expect(browser).toHaveURL(/\/beta\/create/);
   });
 
-  test("a customer can find how to add a card for X", { session: "tester" }, async ({ app, agent, browser }) => {
+  // Ends on the billing page, so it is tagged "billing" and CI runs it privately.
+  test("a customer can find how to add a card for X", { session: "tester", tags: ["billing"] }, async ({ app, agent, browser }) => {
     await app.open("/beta/accounts");
     await agent.act("find where to add a payment card so you can post to X");
     await expect(browser).toHaveURL(/\/beta\/billing/);
