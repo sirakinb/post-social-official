@@ -2,14 +2,15 @@
 // is also a hands-on account (on the paid plan with a card since Nov 23, 2026), so each test
 // reads the plan the page shows and checks that plan's view: Free offers a way to add a
 // card, Paid shows the next charge, the card and the X limit. Never presses Add a card,
-// Update, Save or Cancel paid plan (they open payment or change billing).
+// Update, Save or Cancel paid plan (they open payment or change billing). Tagged "billing": the
+// page shows the customer's card and receipts, so CI runs it privately (e2e-after-release.yml).
 import { describe, expect, test } from "e2e";
 
 // The "Your month" summary says "To pay" on Free and "Next charge" (or, while cancelling,
 // "Paid plan ends") on the paid plan.
 const PAID = /^(Next charge|Paid plan ends)$/;
 
-describe("billing", () => {
+describe("billing", { tags: ["billing"] }, () => {
   test("shows the current plan and how to pay for it", { session: "tester" }, async ({ app, screen }) => {
     await app.open("/beta/billing");
     await expect(screen.getByRole("heading", "Billing").first()).toBeVisible();
