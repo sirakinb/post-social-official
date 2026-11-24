@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/beta/ui";
 import { cn } from "@/lib/utils";
-import { automationPosts, createAutomation, updateAutomation, type AutomationInput } from "./actions";
+import { createAutomation, updateAutomation, type automationPosts, type AutomationInput } from "./actions";
+import { PostPicker } from "./post-picker";
+import { AutomationPreview } from "./preview";
 import { accountLabel } from "../account-label";
 import type { AccountOption, AutomationRow } from "./types";
 
@@ -28,40 +30,31 @@ function Field(props: { label: string; hint?: string; optional?: boolean; childr
   );
 }
 
-// What the follower sees: the DM, its link buttons and the public reply under their comment.
-function Preview(props: { keyword: string; dm: string; buttons: Array<{ label: string; url: string }>; reply: string; publicOnly: boolean }) {
-  const sample = (text: string) => text.replace(/\{username\}/g, "@jay");
+// A numbered part of the form: what triggers it, what gets sent, what else happens.
+function Section(props: { step: number; title: string; note?: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <p className="m-0 mb-2 text-xs text-ps-subtle">Under your post</p>
-        <div className="rounded-xl border border-ps-line bg-ps-ground p-3">
-          <p className="m-0 text-[13px]"><span className="font-medium">jay</span> {props.keyword || "Your keyword"}</p>
-          {props.reply && <p className="m-0 mt-2 border-l-2 border-ps-line pl-2.5 text-[13px] text-ps-muted"><span className="font-medium text-ps-text">You</span> {sample(props.reply)}</p>}
-        </div>
+    <Card className="flex flex-col">
+      <div className="flex items-baseline gap-3 border-b border-ps-fg/[0.06] px-5 py-3.5">
+        <span className="font-mono text-[10.5px] tracking-[0.14em] text-ps-subtle">{String(props.step).padStart(2, "0")}</span>
+        <h2 className="m-0 text-[13px] font-medium">{props.title}</h2>
+        {props.note && <span className="ml-auto text-xs text-ps-subtle">{props.note}</span>}
       </div>
-      {!props.publicOnly && <div>
-        <p className="m-0 mb-2 text-xs text-ps-subtle">In their DMs</p>
-        <div className="rounded-xl border border-ps-line bg-ps-ground p-3">
-          <div className="max-w-[260px] rounded-2xl rounded-bl-md bg-ps-segment px-3 py-2 text-[13px] whitespace-pre-wrap">{sample(props.dm) || "Your message"}</div>
-          {props.buttons.filter((b) => b.label).map((b, i) => (
-            <div key={i} className="mt-1.5 max-w-[260px] rounded-xl border border-ps-line-strong px-3 py-2 text-center text-[13px] font-medium text-ps-plum">{b.label}</div>
-          ))}
-        </div>
-      </div>}
-    </div>
+      <div className="flex flex-col gap-4 p-5">{props.children}</div>
+    </Card>
   );
 }
 
-export function AutomationForm(props: { workspaceId: string; accounts: AccountOption[]; automation?: AutomationRow; backHref: string }) {
+export function AutomationForm(props: { workspaceId: string; accounts: AccountOption[]; automation?: AutomationRow; backHref: string; loadPosts?: typeof automationPosts }) {
   const router = useRouter();
   const a = props.automation;
   const [accountId, setAccountId] = useState(a?.connected_account_id ?? props.accounts[0]?.id ?? "");
+  const account = a?.account ?? props.accounts.find((x) => x.id === accountId);
+  const platform = account?.platform ?? "instagram";
   // Threads has no DMs: there the automation only replies publicly.
-  const publicOnly = (a?.account?.platform ?? props.accounts.find((x) => x.id === accountId)?.platform) === "threads";
+  const publicOnly = platform === "threads";
   const [name, setName] = useState(a?.name ?? "");
   const [postId, setPostId] = useState<string>(a?.platform_post_id ?? "");
-  const [posts, setPosts] = useState<Array<{ platform_post_id: string; caption: string | null; published_at: string }>>([]);
+  const [onePost, setOnePost] = useState(Boolean(a?.platform_post_id));
   const [keywords, setKeywords] = useState((a?.keywords ?? []).join(", ").toUpperCase());
   const [matchMode, setMatchMode] = useState<AutomationInput["match_mode"]>(a?.match_mode ?? "word");
   const [exclude, setExclude] = useState((a?.exclude_keywords ?? []).join(", "));
@@ -72,24 +65,16 @@ export function AutomationForm(props: { workspaceId: string; accounts: AccountOp
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!accountId) return;
-    let live = true;
-    void automationPosts(props.workspaceId, accountId).then((r) => live && r.ok && setPosts(r.data.posts));
-    return () => {
-      live = false;
-    };
-  }, [accountId, props.workspaceId]);
-
   const usedButtons = buttons.filter((b) => b.label.trim() || b.url.trim());
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    if (onePost && !postId) return setError("Pick the post, or choose Every post.");
     setBusy(true);
     setError(null);
     const input: AutomationInput = {
       name,
-      platform_post_id: postId || null,
+      platform_post_id: onePost && postId ? postId : null,
       keywords: splitWords(keywords),
       match_mode: matchMode,
       exclude_keywords: splitWords(exclude),
@@ -107,36 +92,30 @@ export function AutomationForm(props: { workspaceId: string; accounts: AccountOp
   }
 
   return (
-    <form onSubmit={save} className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-      <div className="flex flex-col gap-6">
-        <Card className="flex flex-col gap-4 p-5">
-          <h2 className="m-0 text-[13px] font-medium">Trigger</h2>
-          <Field label="Name" hint="Only you see this.">
-            <input required maxLength={80} value={name} onChange={(e) => setName(e.target.value)} placeholder="Free guide" className={field} />
-          </Field>
-          {!a && (
-            <Field label="Account">
-              <select value={accountId} onChange={(e) => (setAccountId(e.target.value), setPostId(""))} className={field}>
-                {props.accounts.map((acc) => <option key={acc.id} value={acc.id}>{accountLabel(acc)}</option>)}
-              </select>
+    <form onSubmit={save} className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="flex flex-col gap-4">
+        <Section step={1} title="When someone comments">
+          <div className={cn("grid gap-4", !a && "sm:grid-cols-2")}>
+            <Field label="Name" hint="Only you see this.">
+              <input required maxLength={80} value={name} onChange={(e) => setName(e.target.value)} placeholder="Free guide" className={field} />
             </Field>
-          )}
-          <Field label="Post" hint="Posts published through Post Social. Every post includes ones you publish later.">
-            <select value={postId} onChange={(e) => setPostId(e.target.value)} className={field}>
-              <option value="">Every post</option>
-              {postId && !posts.some((p) => p.platform_post_id === postId) && <option value={postId}>The current post</option>}
-              {posts.map((p) => (
-                <option key={p.platform_post_id} value={p.platform_post_id}>
-                  {new Date(p.published_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · {(p.caption ?? "No caption").slice(0, 60)}
-                </option>
-              ))}
-            </select>
-          </Field>
+            {!a && (
+              <Field label="Account">
+                <select value={accountId} onChange={(e) => (setAccountId(e.target.value), setPostId(""))} className={field}>
+                  {props.accounts.map((acc) => <option key={acc.id} value={acc.id}>{accountLabel(acc)}</option>)}
+                </select>
+              </Field>
+            )}
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs text-ps-muted">On</span>
+            <PostPicker key={accountId} workspaceId={props.workspaceId} accountId={accountId} platform={platform} onePost={onePost} onOnePost={setOnePost} value={postId} onChange={(id) => (setPostId(id), setError(null))} loadPosts={props.loadPosts} />
+          </div>
           <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_180px]">
             <Field label="Keywords" hint="Separate with commas. Leave empty to answer every comment.">
-              <input value={keywords} onChange={(e) => setKeywords(e.target.value)} placeholder="GUIDE, LINK" className={field} />
+              <input value={keywords} onChange={(e) => setKeywords(e.target.value)} placeholder="GUIDE, LINK" className={cn(field, "font-mono uppercase placeholder:normal-case")} />
             </Field>
-            <Field label="Match">
+            <Field label="Match" hint={MATCH_HELP[matchMode]}>
               <select value={matchMode} onChange={(e) => setMatchMode(e.target.value as AutomationInput["match_mode"])} className={field}>
                 <option value="word">Whole word</option>
                 <option value="contains">Anywhere</option>
@@ -144,36 +123,36 @@ export function AutomationForm(props: { workspaceId: string; accounts: AccountOp
               </select>
             </Field>
           </div>
-          <p className="-mt-2 m-0 text-xs text-ps-subtle">{MATCH_HELP[matchMode]}</p>
           <Field label="Ignore comments with" optional hint="Separate with commas.">
             <input value={exclude} onChange={(e) => setExclude(e.target.value)} placeholder="unsubscribe" className={field} />
           </Field>
-        </Card>
+        </Section>
 
-        {!publicOnly && <Card className="flex flex-col gap-4 p-5">
-          <h2 className="m-0 text-[13px] font-medium">The DM</h2>
-          <Field label="Message" hint="{username} becomes their @handle (their name on Facebook). One DM per comment.">
-            <textarea required maxLength={640} rows={4} value={dm} onChange={(e) => setDm(e.target.value)} placeholder="Hey {username}! Here's the free guide 👇" className={cn(field, "h-auto resize-y py-2")} />
-          </Field>
-          <div className="flex flex-col gap-2">
-            <span className="text-xs text-ps-muted">Link buttons <span className="text-ps-subtle">(up to 3, clicks are counted)</span></span>
-            {buttons.map((b, i) => (
-              <div key={i} className="grid gap-2 sm:grid-cols-[160px_minmax(0,1fr)_auto]">
-                <input maxLength={20} value={b.label} onChange={(e) => setButtons(buttons.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} placeholder="Get the guide" aria-label={`Button ${i + 1} label`} className={field} />
-                <input value={b.url} onChange={(e) => setButtons(buttons.map((x, j) => (j === i ? { ...x, url: e.target.value } : x)))} placeholder="https://…" aria-label={`Button ${i + 1} link`} className={field} />
-                <button type="button" onClick={() => setButtons(buttons.length > 1 ? buttons.filter((_, j) => j !== i) : [{ label: "", url: "" }])} className="h-9 rounded-lg px-2 text-xs text-ps-subtle hover:text-ps-text">Remove</button>
-              </div>
-            ))}
-            {buttons.length < 3 && (
-              <button type="button" onClick={() => setButtons([...buttons, { label: "", url: "" }])} className="self-start text-xs text-ps-plum hover:underline">Add a button</button>
-            )}
-          </div>
-        </Card>}
+        {!publicOnly && (
+          <Section step={2} title="Send them this DM" note="One DM per comment">
+            <Field label="Message" hint={`{username} becomes ${platform === "facebook" ? "their name" : "their @handle"}.`}>
+              <textarea required maxLength={640} rows={4} value={dm} onChange={(e) => setDm(e.target.value)} placeholder="Hey {username}! Here's the free guide." className={cn(field, "h-auto resize-y py-2")} />
+              <span className="self-end font-mono text-[10.5px] text-ps-subtle">{dm.length} / 640</span>
+            </Field>
+            <div className="flex flex-col gap-2">
+              <span className="text-xs text-ps-muted">Link buttons <span className="text-ps-subtle">(up to 3, clicks are counted)</span></span>
+              {buttons.map((b, i) => (
+                <div key={i} className="grid gap-2 sm:grid-cols-[160px_minmax(0,1fr)_auto]">
+                  <input maxLength={20} value={b.label} onChange={(e) => setButtons(buttons.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} placeholder="Get the guide" aria-label={`Button ${i + 1} label`} className={field} />
+                  <input value={b.url} onChange={(e) => setButtons(buttons.map((x, j) => (j === i ? { ...x, url: e.target.value } : x)))} placeholder="https://…" aria-label={`Button ${i + 1} link`} className={field} />
+                  <button type="button" onClick={() => setButtons(buttons.length > 1 ? buttons.filter((_, j) => j !== i) : [{ label: "", url: "" }])} className="h-9 rounded-lg px-2 text-xs text-ps-subtle hover:text-ps-text">Remove</button>
+                </div>
+              ))}
+              {buttons.length < 3 && (
+                <button type="button" onClick={() => setButtons([...buttons, { label: "", url: "" }])} className="self-start text-xs text-ps-plum hover:underline">Add a button</button>
+              )}
+            </div>
+          </Section>
+        )}
 
-        <Card className="flex flex-col gap-4 p-5">
-          <h2 className="m-0 text-[13px] font-medium">{publicOnly ? "The reply" : "Also"}</h2>
-          <Field label="Public reply to the comment" optional={!publicOnly} hint={publicOnly ? "Threads has no DMs, so the automation replies under their comment." : "Posted under their comment after the DM goes out."}>
-            <input required={publicOnly} maxLength={300} value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Sent you a DM 📩" className={field} />
+        <Section step={publicOnly ? 2 : 3} title={publicOnly ? "Reply under their comment" : "And reply under their comment"} note={publicOnly ? undefined : "Optional"}>
+          <Field label="Public reply" hint={publicOnly ? "Threads has no DMs, so the automation replies under their comment." : "Posted under their comment after the DM goes out."}>
+            <input required={publicOnly} maxLength={300} value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Sent you a DM." className={field} />
           </Field>
           <Field label="If someone comments again">
             <select value={repeat} onChange={(e) => setRepeat(e.target.value as AutomationInput["repeat_mode"])} className={field}>
@@ -181,7 +160,7 @@ export function AutomationForm(props: { workspaceId: string; accounts: AccountOp
               <option value="every_comment">{publicOnly ? "Reply every time" : "DM them every time"}</option>
             </select>
           </Field>
-        </Card>
+        </Section>
 
         {error && <p role="alert" className="m-0 text-xs text-ps-failed-text">{error}</p>}
         <div className="flex items-center gap-2">
@@ -192,9 +171,13 @@ export function AutomationForm(props: { workspaceId: string; accounts: AccountOp
         </div>
       </div>
       <aside className="lg:sticky lg:top-6 lg:self-start">
-        <Card className="p-5">
-          <h2 className="m-0 mb-4 text-[13px] font-medium">Preview</h2>
-          <Preview keyword={splitWords(keywords)[0] ?? ""} dm={dm} buttons={usedButtons} reply={reply} publicOnly={publicOnly} />
+        <Card>
+          <div className="border-b border-ps-fg/[0.06] px-5 py-3.5">
+            <h2 className="m-0 text-[13px] font-medium">What they see</h2>
+          </div>
+          <div className="p-5">
+            <AutomationPreview platform={platform} account={account ? accountLabel(account) : "Your account"} keyword={splitWords(keywords)[0]?.toUpperCase() ?? ""} dm={dm} buttons={usedButtons} reply={reply} publicOnly={publicOnly} />
+          </div>
         </Card>
       </aside>
     </form>

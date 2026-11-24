@@ -190,7 +190,7 @@ const automationOperations: Operation[] = [
     input: { properties: { account_id: id("connected Instagram account or Facebook Page"), ...automationFields }, required: ["account_id", "name", "dm_message"] },
     creates: true,
     strict: true,
-    run: (deps, caller, input) => createAutomation({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, { ...input, workspace_id: caller.workspaceId }),
+    run: (deps, caller, input) => createAutomation({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF, setting: deps.setting }, caller, { ...input, workspace_id: caller.workspaceId }),
   },
   {
     name: "update_automation",
@@ -201,7 +201,7 @@ const automationOperations: Operation[] = [
     path: "/v1/automations/{automation_id}",
     input: { properties: { automation_id: id("automation"), ...automationFields }, required: ["automation_id"] },
     strict: true,
-    run: (deps, caller, input) => updateAutomation({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, input),
+    run: (deps, caller, input) => updateAutomation({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF, setting: deps.setting }, caller, input),
   },
   {
     name: "delete_automation",
@@ -219,12 +219,18 @@ const automationOperations: Operation[] = [
     inbox: true,
     title: "Posts an automation can answer",
     description:
-      "Lists an Instagram account's, Facebook Page's or Threads account's recent posts (up to 50), newest first, to pick one for an automation: its platform_post_id goes in create_automation or update_automation. Includes posts made outside Post Social (outside: true, no post_id).",
+      "Lists an Instagram account's, Facebook Page's or Threads account's posts, newest first, to pick one for an automation: its platform_post_id goes in create_automation or update_automation. Read from the platform itself, so it covers every post on the account, including ones made outside Post Social (outside: true, no post_id) and ones posted a moment ago. 24 at a time: pass next_cursor back as cursor for older posts. source is \"saved\" when the platform couldn't be read just now and the list is the posts on file.",
     method: "GET",
     path: "/v1/accounts/{account_id}/automation-posts",
-    input: { properties: { account_id: id("connected Instagram, Facebook Page or Threads account") }, required: ["account_id"] },
+    input: {
+      properties: {
+        account_id: id("connected Instagram, Facebook Page or Threads account"),
+        cursor: { type: "string", maxLength: 4000, description: "next_cursor from the previous page, for older posts." },
+      },
+      required: ["account_id"],
+    },
     readOnly: true,
-    run: (deps, caller, input) => automationPosts({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF }, caller, { ...input, workspace_id: caller.workspaceId }),
+    run: (deps, caller, input) => automationPosts({ sql: deps.sql, inbox: deps.inbox ?? INBOX_OFF, setting: deps.setting }, caller, { ...input, workspace_id: caller.workspaceId }),
   },
   {
     name: "list_conversations",
