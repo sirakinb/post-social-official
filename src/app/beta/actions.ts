@@ -14,6 +14,7 @@ import {
   safeNextPath,
   signInErrorMessage,
   signUpErrorMessage,
+  signUpFailureLog,
   signupOpen,
   verifyErrorMessage,
 } from "@/lib/insforge/auth-rules";
@@ -117,7 +118,12 @@ export async function signUp(_previous: FormState, formData: FormData): Promise<
 
   const auth = await insforgeAuthActions();
   const { data, error } = await auth.signUp({ email, password, name });
-  if (error) return { error: signUpErrorMessage(error) ?? undefined };
+  if (error) {
+    // Status and error code only, so a rejected site key or an outage shows up in the logs
+    // without recording who tried to sign up.
+    console.warn(signUpFailureLog(error));
+    return { error: signUpErrorMessage(error) ?? undefined };
+  }
   if (!data?.user || (data as { requireEmailVerification?: boolean }).requireEmailVerification) {
     return { step: "verify", email, notice: `We sent a code to ${email}. Enter it to finish creating your account.`, sentAt: Date.now() };
   }
