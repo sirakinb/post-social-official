@@ -4,8 +4,19 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { readSourceLine, summarize } from "./e2e-private-summary.mjs";
 
-// What the billing page could put in a report: none of it may reach the summary.
-const PAGE = ["Mastercard", "•••• 4444", "01/30", "https://pay.stripe.com/receipts/acct_x/rcpt_y", "Next charge $10.00", "tester@example.com"];
+// What the pages could put in a report (Billing's card and receipts, the account's email, its
+// channels and posts, page URLs): none of it may reach the summary.
+const PAGE = [
+  "Mastercard",
+  "•••• 4444",
+  "01/30",
+  "https://pay.stripe.com/receipts/acct_x/rcpt_y",
+  "Next charge $10.00",
+  "tester@example.com",
+  "@example_channel",
+  "Our launch post is live",
+  "https://www.postsocial.xyz/beta/settings",
+];
 const quotes = PAGE.join(" ");
 
 const step = (over: Record<string, unknown>) => ({ api: "expect.toBeVisible", label: `getByRole("button", name: "${quotes}")`, status: "passed", explanation: quotes, ...over });
@@ -47,12 +58,30 @@ const report = {
           },
         ],
       },
+      {
+        selected: true,
+        status: "failed",
+        file: "e2e/journeys/every-page.e2e.ts",
+        source: { file: "e2e/journeys/every-page.e2e.ts", line: 22 },
+        titlePath: ["every page", "Settings opens and makes sense"],
+        attempts: [
+          {
+            error: { code: "ASSERTION_FAILED", message: quotes },
+            failure: { url: PAGE[8], screen: quotes, screenshot: "attempt-1/screenshots/001-failure.png" },
+            steps: [step({ api: "agent.assert", status: "failed", source: { file: "e2e/journeys/every-page.e2e.ts", line: 27 }, error: { code: "ASSERTION_FAILED", message: quotes } })],
+          },
+        ],
+      },
       { selected: false, status: "skipped", file: "e2e/journeys/every-page.e2e.ts", titlePath: ["every page", "Accounts opens and makes sense"], attempts: [] },
     ],
   },
 };
 
-const LINES: Record<number, string> = { 20: 'await expect(screen.getByRole("region", "Card and receipts").getByRole("button", "Update")).toBeVisible();', 37: 'await agent.assert("the X spending section shows a monthly X limit");' };
+const LINES: Record<number, string> = {
+  20: 'await expect(screen.getByRole("region", "Card and receipts").getByRole("button", "Update")).toBeVisible();',
+  27: "await agent.assert(`${page.makesSense}; there is no error message, broken layout or text that only makes sense to the people who built the app`);",
+  37: 'await agent.assert("the X spending section shows a monthly X limit");',
+};
 const sourceLine = (at?: { line: number }) => (at ? LINES[at.line] : undefined);
 
 describe("the private e2e summary", () => {
@@ -64,8 +93,10 @@ describe("the private e2e summary", () => {
     expect(text).toContain("ASSERTION_FAILED in expect.toBeVisible at e2e/journeys/billing.e2e.ts:20");
     expect(text).toContain(`20 | ${LINES[20]}`);
     expect(text).toContain("ASSERTION_FAILED in agent.assert at e2e/journeys/billing.e2e.ts:37");
+    expect(text).toContain("✗ failed e2e/journeys/every-page.e2e.ts:22 every page > Settings opens and makes sense");
+    expect(text).toContain("ASSERTION_FAILED in agent.assert at e2e/journeys/every-page.e2e.ts:27");
     expect(text).toContain("✗ run error APP_LOG_ERROR (run)");
-    expect(text).toContain("Run failed: 1 passed, 2 failed.");
+    expect(text).toContain("Run failed: 1 passed, 3 failed.");
   });
 
   it("leaves out tests the run didn't select", () => {
