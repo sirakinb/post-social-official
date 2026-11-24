@@ -6,7 +6,9 @@ import {
   resetErrorMessage,
   safeNextPath,
   signInErrorMessage,
+  SIGNUP_SERVICE_PROBLEM,
   signUpErrorMessage,
+  signUpFailureLog,
   signupOpen,
   needsEmailVerification,
   verifyErrorMessage,
@@ -94,7 +96,28 @@ describe("open sign-up", () => {
   });
   it("never says whether an email already has an account", () => {
     expect(signUpErrorMessage({ statusCode: 409 })).toBe(signUpErrorMessage({ statusCode: 400 }));
+    expect(signUpErrorMessage({ statusCode: 422 })).toBe(signUpErrorMessage({ statusCode: 400 }));
+    expect(signUpErrorMessage({ statusCode: 400 })).toMatch(/with that email/);
     expect(signUpErrorMessage({ statusCode: 429 })).toMatch(/Too many attempts/);
+    expect(signUpErrorMessage({ statusCode: 403 })).toMatch(/Sign-up is closed/);
+  });
+  it("calls a rejected site key or an outage a problem on our side, not the email's", () => {
+    for (const statusCode of [401, 404, 500, 502, 503, undefined]) {
+      expect(signUpErrorMessage({ statusCode })).toBe(SIGNUP_SERVICE_PROBLEM);
+    }
+    expect(SIGNUP_SERVICE_PROBLEM).not.toMatch(/that email/);
+    expect(SIGNUP_SERVICE_PROBLEM).toMatch(/Try again/);
+    expect(signUpErrorMessage(null)).toBeNull();
+  });
+  it("logs only the status and error code of a failed sign-up", () => {
+    expect(signUpFailureLog({ statusCode: 401, error: "AUTH_INVALID_CREDENTIALS", message: "Invalid token" })).toBe(
+      "signup failed: status=401 code=AUTH_INVALID_CREDENTIALS",
+    );
+    const line = signUpFailureLog({ statusCode: 409, error: "ada@example.com already exists", message: "User ada@example.com exists" });
+    expect(line).toBe("signup failed: status=409 code=other");
+    expect(line).not.toMatch(/ada|example/);
+    expect(signUpFailureLog({})).toBe("signup failed: status=none code=other");
+    expect(signUpFailureLog(undefined)).toBe("signup failed: status=none code=other");
   });
 });
 

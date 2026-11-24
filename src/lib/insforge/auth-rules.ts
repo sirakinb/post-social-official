@@ -83,16 +83,32 @@ export function signInErrorMessage(error: MaybeAuthError) {
   return "That email and password do not match. Check them and try again.";
 }
 
+// Sign-up answers caused by what the person typed (a bad or taken email, a weak password).
+// Anything else the service turns away, such as a 401 when it rejects the site's own key, a
+// missing endpoint or a 5xx, is our problem, so the form says so instead of blaming the email.
+const SIGNUP_PERSON_STATUSES = new Set([400, 409, 422]);
+
+export const SIGNUP_SERVICE_PROBLEM =
+  "Something went wrong on our side, so we couldn't create your account. Try again in a few minutes. If it keeps happening, email support@postsocial.xyz.";
+
 export function signUpErrorMessage(error: MaybeAuthError) {
   if (!error) return null;
   if (error.statusCode === 429) return "Too many attempts. Wait a minute, then try again.";
-  if (error.statusCode !== undefined && error.statusCode >= 500) {
-    return "The sign-in service is not responding. Try again in a moment.";
-  }
   if (error.statusCode === 403) return "Sign-up is closed right now. Contact support@postsocial.xyz.";
-  // Taken addresses get the same answer as other problems, so the form cannot be used to
-  // find out who has an account.
-  return "We couldn't create an account with that email. If you already have one, sign in instead.";
+  // Taken addresses get the same answer as other problems with the email, so the form cannot
+  // be used to find out who has an account.
+  if (error.statusCode !== undefined && SIGNUP_PERSON_STATUSES.has(error.statusCode)) {
+    return "We couldn't create an account with that email. If you already have one, sign in instead.";
+  }
+  return SIGNUP_SERVICE_PROBLEM;
+}
+
+// The server log line for a failed sign-up: the status and the service's error code only.
+// Never the email, the name or the service's message, which can repeat the email.
+export function signUpFailureLog(error: MaybeAuthError) {
+  const status = typeof error?.statusCode === "number" && Number.isInteger(error.statusCode) ? error.statusCode : "none";
+  const code = typeof error?.error === "string" && /^[A-Z0-9_]{1,64}$/.test(error.error) ? error.error : "other";
+  return `signup failed: status=${status} code=${code}`;
 }
 
 export function verifyErrorMessage(error: MaybeAuthError) {

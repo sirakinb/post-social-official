@@ -4,6 +4,13 @@
 # posts or changes billing. Only after releases (and by hand), so it doesn't overlap with
 # the other e2e setups. A failed run is the alert (GitHub emails the repository owner).
 #
+# This repository is public, so its logs and artifacts are too, and every page shows the
+# test customer's account (its email, connected channels, posts, usage, and on Billing its
+# card and receipt links). So the journeys run with no trace and their output hidden, and
+# nothing is uploaded: no screenshots, traces, videos or page snapshots. The log shows only
+# scripts/e2e-private-summary.mjs: each test's status and title and, for a failure, the error
+# code and the test line that failed. To see more, run them by hand on your own machine.
+#
 # Secrets (Settings → Secrets and variables → Actions), added by Aki:
 #   CLAUDE_CODE_OAUTH_TOKEN  from `claude setup-token` on Aki's Mac
 #   E2E_TESTER_EMAIL         the prod test customer's sign-in email
@@ -55,20 +62,19 @@ jobs:
         run: npx @e2e-dev/web install chromium --with-deps
 
       # A token copied from a wrapped terminal line can carry line breaks; strip them.
+      # The run's own output (which can quote the page, its URLs and the AI tester's
+      # explanations) is discarded and its results stay in .e2e/private on the runner, which is
+      # never uploaded. The summary prints only statuses, titles, error codes and test lines,
+      # and the step still fails when any journey fails.
       - name: Run the journeys on the live site
         run: |
           CLAUDE_CODE_OAUTH_TOKEN="$(printf '%s' "$RAW_CLAUDE_TOKEN" | tr -d '[:space:]')"
           export CLAUDE_CODE_OAUTH_TOKEN
-          npx e2e run
+          status=0
+          npx e2e run --trace off --reporter json --output .e2e/private > /dev/null 2>&1 || status=$?
+          node scripts/e2e-private-summary.mjs .e2e/private/report.json
+          exit "$status"
         env:
           RAW_CLAUDE_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           E2E_USER_TESTER_USERNAME: ${{ secrets.E2E_TESTER_EMAIL }}
           E2E_USER_TESTER_PASSWORD: ${{ secrets.E2E_TESTER_PASSWORD }}
-
-      - name: Keep the traces of anything that failed
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: e2e-results
-          path: .e2e/results
-          retention-days: 14
