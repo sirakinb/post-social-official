@@ -14,6 +14,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    at: "2026-11-23T19:00:00-05:00",
+    kind: "Improved",
+    title: "Automations work on any post",
+    body: "When you set up a comment-to-DM automation, you can now pick any post on your Instagram, Facebook or Threads account, including ones you made outside Post Social, with a picture of each and older posts a click away. The automation pages are cleaner too: numbered steps, and a preview of what your follower sees, from their comment to your DM to your public reply. Your AI agent gets the same full list of posts.",
+  },
+  {
     at: "2026-11-21T22:30:00-05:00",
     kind: "Improved",
     title: "Your AI agent can do more",
