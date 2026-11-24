@@ -1,9 +1,10 @@
 // Prints which e2e checks passed or failed, and nothing the pages showed.
 //
-// The billing journeys (tests tagged "billing") run against the real prod test customer, whose
-// billing page shows its card and receipt links. This repository is public, so the E2E after
-// release workflow runs them with their output hidden and no trace, and never uploads their
-// results; this summary is all the log gets. For each test: its status, file:line and title;
+// The E2E after release journeys run against the real prod test customer, whose pages show its
+// account (email, channels, posts, usage, and on Billing its card and receipt links). This
+// repository is public, so the workflow runs them all with their output hidden and no trace,
+// and never uploads their results; this summary is all the log gets. For each test: its
+// status, file:line and title;
 // for a failure, the error code and the test line that failed (from the committed test file).
 // Never the error message, the agent's explanation, the step label, the page URL or the screen,
 // which can all quote the page.
