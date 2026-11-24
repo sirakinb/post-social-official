@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Card, PlatformMark, Status } from "@/components/beta/ui";
+import { Card, Label, PlatformMark, Status } from "@/components/beta/ui";
 import { callServer, loadViewer } from "@/lib/beta/workspace";
 import type { AutomationRow } from "./types";
 import { InboxNav, inboxAccounts, inboxQuery } from "../inbox-nav";
@@ -27,7 +27,7 @@ export default async function AutomationsPage({ searchParams }: { searchParams: 
       <div className="mt-5 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="m-0 text-lg font-medium">Automations</h1>
-          <p className="mt-1 text-ps-muted">When someone comments a keyword on your post, they get a DM with a link.</p>
+          <p className="mt-1 text-ps-muted">Someone comments your keyword, and they get your DM.</p>
         </div>
         {canEdit && (
           <Link href={`/beta/inbox/automations/new${q}`} className="flex h-9 items-center rounded-lg bg-ps-plum px-3.5 text-[13px] font-medium text-ps-ground hover:bg-ps-plum-hover">
@@ -37,18 +37,38 @@ export default async function AutomationsPage({ searchParams }: { searchParams: 
       </div>
 
       {data.automations.length === 0 ? (
-        <Card className="mt-6 p-8 text-center">
-          <p className="m-0 text-[15px] font-medium">No automations yet</p>
-          <p className="mx-auto mt-1 max-w-[440px] text-ps-muted">
-            Pick a post, a keyword like GUIDE and the link to send. Everyone who comments the keyword gets a DM with it.
-          </p>
+        <Card className="mt-6">
+          <div className="grid gap-px overflow-hidden rounded-t-xl bg-ps-line sm:grid-cols-3">
+            {(
+              [
+                ["Pick a post", "Any post on your Instagram, Facebook or Threads account, or every post."],
+                ["Choose a keyword", "A word like GUIDE that people comment to get your link."],
+                ["Write the DM", "Everyone who comments it gets your message, with link buttons you can track."],
+              ] as const
+            ).map(([title, text], i) => (
+              <div key={title} className="flex flex-col gap-1.5 bg-ps-surface p-5">
+                <Label>{String(i + 1).padStart(2, "0")}</Label>
+                <p className="m-0 text-[13px] font-medium">{title}</p>
+                <p className="m-0 text-xs leading-relaxed text-ps-muted">{text}</p>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ps-line px-5 py-4">
+            <p className="m-0 text-ps-muted">No automations yet.</p>
+            {canEdit && (
+              <Link href={`/beta/inbox/automations/new${q}`} className="flex h-9 items-center rounded-lg border border-ps-line-strong px-3.5 text-[13px] hover:border-ps-fg/30">
+                Create your first automation
+              </Link>
+            )}
+          </div>
         </Card>
       ) : (
         <Card className="mt-6 overflow-x-auto">
-          <table className="w-full min-w-[760px] border-collapse text-left">
+          <table className="w-full min-w-[820px] border-collapse text-left">
             <thead>
               <tr className="border-b border-ps-line text-xs text-ps-subtle">
                 <th className="px-4 py-2.5 font-normal">Automation</th>
+                <th className="px-4 py-2.5 font-normal">On</th>
                 <th className="px-4 py-2.5 font-normal">Keywords</th>
                 <th className="px-4 py-2.5 font-normal">Status</th>
                 <th className="px-4 py-2.5 text-right font-normal">Comments</th>
@@ -64,13 +84,14 @@ export default async function AutomationsPage({ searchParams }: { searchParams: 
                       <PlatformMark platform={a.account?.platform === "facebook" || a.account?.platform === "threads" ? a.account.platform : "instagram"} size={18} />
                       <span className="flex flex-col">
                         <span className="font-medium">{a.name}</span>
-                        <span className="text-xs text-ps-subtle">
-                          {a.account?.handle ? `@${a.account.handle}` : a.account?.display_name} · {a.platform_post_id ? "One post" : "Every post"}
-                        </span>
+                        <span className="text-xs text-ps-subtle">{a.account?.handle ? `@${a.account.handle}` : a.account?.display_name}</span>
                       </span>
                     </Link>
                   </td>
-                  <td className="px-4 py-3 text-ps-muted">{a.keywords.length ? a.keywords.map((k) => k.toUpperCase()).join(", ") : "Any comment"}</td>
+                  <td className="px-4 py-3 text-ps-muted">{a.platform_post_id ? "One post" : "Every post"}</td>
+                  <td className="px-4 py-3">
+                    {a.keywords.length ? <span className="font-mono text-xs tracking-wide text-ps-text">{a.keywords.map((k) => k.toUpperCase()).join(", ")}</span> : <span className="text-ps-muted">Any comment</span>}
+                  </td>
                   <td className="px-4 py-3">{a.is_active ? <Status tone="live" label="On" /> : <Status tone="quiet" label="Paused" />}</td>
                   <td className="px-4 py-3 text-right tabular-nums">{count(a.triggered)}</td>
                   <td className="px-4 py-3 text-right tabular-nums">

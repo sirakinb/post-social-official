@@ -425,7 +425,7 @@ async function personRoute(deps: ApiHandlerDeps, request: Request) {
       },
     };
     const billing = billingActions({ sql: deps.sql, stripe: deps.stripe ?? null, webAppUrl: deps.webAppUrl, allowedOrigins: deps.allowedOrigins });
-    const inbox: InboxDeps = { sql: deps.sql, inbox: deps.inbox ?? { all: false, workspaces: [] } };
+    const inbox: InboxDeps = { sql: deps.sql, inbox: deps.inbox ?? { all: false, workspaces: [] }, setting: deps.setting };
     const inboxActions = {
       inbox_status: async (_sql: Sql, _caller: Caller, input: Record<string, unknown>) => ({ enabled: typeof input.workspace_id === "string" && inboxOn(inbox.inbox, input.workspace_id) }),
       automations: (_sql: Sql, caller: Caller, input: Record<string, unknown>) => listAutomations(inbox, caller, input),

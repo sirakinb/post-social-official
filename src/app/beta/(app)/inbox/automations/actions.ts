@@ -51,6 +51,20 @@ export async function deleteAutomation(automationId: string) {
   return call<{ deleted: boolean }>({ action: "delete_automation", automation_id: automationId });
 }
 
-export async function automationPosts(workspaceId: string, accountId: string) {
-  return call<{ posts: Array<{ platform_post_id: string; caption: string | null; published_at: string }> }>({ action: "automation_posts", workspace_id: workspaceId, account_id: accountId });
+// One post an automation can be attached to (backend/lib/inbox/automations.ts automationPosts).
+export type AutomationPost = {
+  platform_post_id: string;
+  caption: string | null;
+  published_at: string;
+  live_url: string | null;
+  thumbnail_url: string | null;
+  format: "video" | "carousel" | "photo" | "text";
+  post_id: string | null;
+  outside: boolean;
+};
+
+// A page of the account's posts, read from the platform (source "live"), or the posts on file
+// when the platform can't be reached ("saved").
+export async function automationPosts(workspaceId: string, accountId: string, cursor?: string | null) {
+  return call<{ posts: AutomationPost[]; next_cursor: string | null; source: "live" | "saved" }>({ action: "automation_posts", workspace_id: workspaceId, account_id: accountId, ...(cursor ? { cursor } : {}) });
 }
