@@ -5,6 +5,7 @@ import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server
 import { trackAICrawlerRequest } from "@datafast/ai-crawl";
 import { updateSession } from "@insforge/sdk/ssr/middleware";
 import { BETA_HOME, BETA_LOGIN, isPublicBetaPath, isSignedOutOnlyPath } from "@/lib/insforge/auth-rules";
+import { ownSignInUrl, SESSION_COOKIE, sessionCookieOptions } from "@/lib/sign-in/rules";
 import { botTrackingConfig } from "@/lib/analytics/bot-tracking";
 import { forwardingHeaders } from "@/lib/security/client-ip";
 import { HOME_LINKS, markdownPath, publicPath, wantsMarkdown } from "@/lib/public-pages";
@@ -20,11 +21,7 @@ export async function proxy(request: NextRequest, event?: NextFetchEvent) {
   if (page && (request.method === "GET" || request.method === "HEAD")) return negotiateMarkdown(request, page);
   if (!/^\/beta(\/|$)/.test(request.nextUrl.pathname)) return NextResponse.next();
   const response = NextResponse.next({ request });
-  // Refreshes the access token before pages render, and clears cookies for a dead session.
-  const { accessToken } = await updateSession({
-    requestCookies: request.cookies,
-    responseCookies: response.cookies,
-  });
+  const accessToken = ownSignInUrl() ? keepOwnSession(request, response) : await insforgeSession(request, response);
 
   const { pathname, search } = request.nextUrl;
   const isPublic = isPublicBetaPath(pathname);
@@ -38,6 +35,22 @@ export async function proxy(request: NextRequest, event?: NextFetchEvent) {
     return withCookies(NextResponse.redirect(new URL(BETA_HOME, request.url)), response);
   }
   return response;
+}
+
+// InsForge's sign-in: refreshes the access token before pages render, and clears cookies
+// for a dead session.
+async function insforgeSession(request: NextRequest, response: NextResponse) {
+  const { accessToken } = await updateSession({ requestCookies: request.cookies, responseCookies: response.cookies });
+  return accessToken;
+}
+
+// Our own sign-in: the cookie is the session. Whether it is still good is the page's
+// question to the API (currentUser); here it is only pushed out again, as the API does with
+// the session itself, so someone who keeps using the app stays signed in.
+function keepOwnSession(request: NextRequest, response: NextResponse) {
+  const token = request.cookies.get(SESSION_COOKIE)?.value;
+  if (token) response.cookies.set(SESSION_COOKIE, token, sessionCookieOptions());
+  return token;
 }
 
 // Requests forwarded to the API reach it from Vercel's address. Tell it the visitor's real

@@ -1,10 +1,8 @@
 // The signed-in person and the workspace they are looking at, for /beta pages. Reads go
 // through row-level security with the person's own session; changes go through the
 // server functions (`callServer`), which apply the same rules as the API and MCP.
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { getAccessTokenCookieName } from "@insforge/sdk/ssr";
-import { BETA_LOGIN } from "@/lib/insforge/auth-rules";
+import { sessionToken, signedOutPath } from "@/lib/sign-in/session";
 import { currentUser, insforgeServerClient } from "@/lib/insforge/server";
 
 export type Workspace = { id: string; name: string; slug: string; role: string };
@@ -15,7 +13,7 @@ type MembershipRow = { role: string; workspace_id: string; workspaces: { name: s
 // Every /beta page starts here: the person (or a redirect to sign in) and their workspace.
 export async function loadViewer(path: string, slug?: string) {
   const user = await currentUser();
-  if (!user) redirect(`${BETA_LOGIN}?next=${encodeURIComponent(path)}`);
+  if (!user) redirect(await signedOutPath(path));
   const client = await insforgeServerClient();
   const readMemberships = async () => {
     const { data } = await client.database.from("workspace_members").select("role, workspace_id, workspaces(name, slug)").eq("user_id", user.id);
@@ -39,7 +37,7 @@ export async function callServer<T>(action: string, body: Record<string, unknown
 // The same call, with the reason when it fails, for pages that show it.
 export async function callServerResult<T>(action: string, body: Record<string, unknown>): Promise<{ data: T | null; error: string | null }> {
   const base = process.env.API_BASE_URL;
-  const token = (await cookies()).get(getAccessTokenCookieName())?.value;
+  const token = await sessionToken();
   if (!base || !token) return { data: null, error: !base ? "The app isn't set up to reach the server." : "You're signed out. Sign in again." };
   const response = await fetch(`${base}/keys`, {
     method: "POST",

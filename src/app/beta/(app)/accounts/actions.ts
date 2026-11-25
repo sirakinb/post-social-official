@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
-import { getAccessTokenCookieName } from "@insforge/sdk/ssr";
+import { sessionToken } from "@/lib/sign-in/session";
 import { OUR_SIDE, UNREACHABLE, requestError } from "../../../../../backend/lib/support";
 import { GET_STARTED_HIDDEN_COOKIE } from "@/lib/beta/get-started";
 import { flashCookie } from "@/lib/beta/flash";
@@ -14,7 +14,7 @@ type Path = "/start" | "/disconnect" | "/profiles/create" | "/profiles/update" |
 async function callConnections<T>(path: Path, body: Record<string, unknown>): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
   const base = process.env.CONNECTIONS_BASE_URL;
   if (!base) return { ok: false, error: OUR_SIDE };
-  const token = (await cookies()).get(getAccessTokenCookieName())?.value;
+  const token = await sessionToken();
   if (!token) return { ok: false, error: "Your session ended. Sign in again." };
   const response = await fetch(`${base}${path}`, {
     method: "POST",
