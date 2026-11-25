@@ -9,7 +9,7 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Caller } from "../lib/access";
 import { createKey } from "../lib/api/keys";
-import { appFrame, myWorkspaces } from "../lib/api/pages";
+import { accountsPage, appFrame, composerPage, inboxAccountsList, mediaByIds, myWorkspaces } from "../lib/api/pages";
 import { assertUtc, DatabaseError, poolConfig, poolSql, userSql } from "../lib/database";
 import { scramVerifier, setPasswordStatement } from "../lib/scram";
 import { provisionWorkspace } from "../lib/signup";
@@ -166,6 +166,58 @@ describe.skipIf(!enabled)("the backend on plain Postgres", () => {
 
     it("won't show one person another's workspace", async () => {
       await expect(appFrame(sql, ben(), { workspace_id: people.ada.workspaceId })).rejects.toMatchObject({ status: 404 });
+    });
+
+    it("gives the accounts page, the composer and the inbox what they show, from real rows", async () => {
+      const ws = people.ada.workspaceId;
+      const one = async <T = { id: string }>(query: string, params: unknown[]) => (await sql<T>(query, params))[0];
+      const account = (platform: string, name: string, extra = "") =>
+        one(`INSERT INTO public.connected_accounts (workspace_id, platform, external_account_id, handle, display_name, capabilities${extra ? ", health" : ""}) VALUES ($1, $2, $3, $3, $4, '{"post_types":["image"],"caption_max_chars":2200}'${extra ? `, '${extra}'` : ""}) RETURNING id`, [ws, platform, `${platform}-${name}-${suffix}`, name]);
+      const instagram = await account("instagram", "Zed Insta");
+      const tiktok = await account("tiktok", "Able Tok");
+      const gone = await account("threads", "Gone Threads", "disconnected");
+      const profile = await one(`INSERT INTO public.profiles (workspace_id, name) VALUES ($1, 'Brand') RETURNING id`, [ws]);
+      await sql(`UPDATE public.connected_accounts SET profile_id = $2 WHERE id = $1`, [instagram.id, profile.id]);
+      const media = (name: string, status = "ready") =>
+        one(`INSERT INTO public.media_assets (workspace_id, storage_key, file_name, mime_type, media_type, size_bytes, width, height, status) VALUES ($1, $2, $3, 'image/png', 'image', 1000, 1080, 1080, $4) RETURNING id`, [ws, `${ws}/${suffix}/${name}`, name, status]);
+      const ready = await media("ready.png");
+      const pending = await media("pending.png", "processing");
+      const post = await one(`INSERT INTO public.posts (workspace_id, entry_point, caption, effective_approval_policy, status) VALUES ($1, 'ui', 'Hello', 'autonomous', 'draft') RETURNING id`, [ws]);
+      await sql(`INSERT INTO public.destinations (workspace_id, post_id, connected_account_id, platform, effective_approval_policy) VALUES ($1, $2, $3, 'instagram', 'autonomous')`, [ws, post.id, instagram.id]);
+      await sql(`INSERT INTO public.post_media (post_id, media_asset_id, workspace_id, position) VALUES ($1, $2, $3, 0)`, [post.id, ready.id, ws]);
+      // Something of Ben's that must never appear.
+      const bens = await one(`INSERT INTO public.media_assets (workspace_id, storage_key, file_name, mime_type, media_type, size_bytes, width, height, status) VALUES ($1, $2, 'bens.png', 'image/png', 'image', 1000, 10, 10, 'ready') RETURNING id`, [people.ben.workspaceId, `${people.ben.workspaceId}/${suffix}/bens.png`]);
+      const bensPost = await one(`INSERT INTO public.posts (workspace_id, entry_point, caption, effective_approval_policy, status) VALUES ($1, 'ui', 'Bens', 'autonomous', 'draft') RETURNING id`, [people.ben.workspaceId]);
+
+      const accounts = await accountsPage(sql, ada(), { workspace_id: ws });
+      // By platform, then name; every account, connected or not.
+      expect((accounts.accounts as Array<{ display_name: string }>).map((a) => a.display_name)).toEqual(["Zed Insta", "Gone Threads", "Able Tok"]);
+      expect(accounts.accounts[0]).toMatchObject({ id: instagram.id, platform: "instagram", profile_id: profile.id, health: "connected", capabilities: { post_types: ["image"] }, tiktok_delivery: "direct" });
+      expect(accounts.profiles).toEqual([{ id: profile.id, name: "Brand", description: null, color: expect.anything(), timezone: null }]);
+      expect(accounts.last_posted).toEqual([]);
+      // The same accounts, in the same order, that the person's own session read through the access policies.
+      const viaPolicies = await userSql(userPool, people.ada.id)<{ id: string }>(`SELECT id FROM public.connected_accounts WHERE workspace_id = $1 ORDER BY platform, display_name`, [ws]);
+      expect((accounts.accounts as Array<{ id: string }>).map((a) => a.id)).toEqual(viaPolicies.map((a) => a.id));
+
+      const composer = await composerPage(sql, ada(), { workspace_id: ws, post_id: post.id, media_id: pending.id });
+      // Only accounts that can be posted to.
+      expect((composer.accounts as Array<{ id: string }>).map((a) => a.id).sort()).toEqual([instagram.id, tiktok.id].sort());
+      expect((composer.media as Array<{ id: string }>).map((m) => m.id)).toEqual([ready.id]);
+      expect(composer.post).toMatchObject({ id: post.id, status: "draft", caption: "Hello", scheduled_at: null, destinations: [{ connected_account_id: instagram.id, platform: "instagram" }], post_media: [{ position: 0, media_asset_id: ready.id }] });
+      expect(composer.pending_media).toEqual({ id: pending.id, display_name: null, file_name: "pending.png" });
+      // Nothing asked for, nothing extra.
+      expect(await composerPage(sql, ada(), { workspace_id: ws })).toMatchObject({ post: null, pending_media: null });
+      // Another workspace's post or file, asked for by id, is simply not there.
+      expect(await composerPage(sql, ada(), { workspace_id: ws, post_id: bensPost.id, media_id: bens.id })).toMatchObject({ post: null, pending_media: null });
+
+      expect(((await mediaByIds(sql, ada(), { workspace_id: ws, ids: [ready.id, pending.id, bens.id] })).media as Array<{ id: string }>).map((m) => m.id).sort()).toEqual([ready.id, pending.id].sort());
+
+      // The inbox: the platforms it works with, still connected.
+      expect(((await inboxAccountsList(sql, ada(), { workspace_id: ws })).accounts as Array<{ id: string }>).map((a) => a.id)).toEqual([instagram.id]);
+      expect(gone.id).toBeTruthy();
+
+      for (const read of [accountsPage, composerPage, inboxAccountsList]) await expect(read(sql, ben(), { workspace_id: ws })).rejects.toMatchObject({ status: 404 });
+      await expect(mediaByIds(sql, ben(), { workspace_id: ws, ids: [ready.id] })).rejects.toMatchObject({ status: 404 });
     });
   });
 

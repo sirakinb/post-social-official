@@ -228,7 +228,8 @@ on by the `AUTH_SECRET` it is given there:
   (`backend/lib/api/pages.ts`: one action per page, each checking the person belongs to the
   workspace). It works on InsForge and on AWS alike, so it is tried on dev, then prod,
   before sign-in moves. Setting `SIGN_IN_URL` implies it. Moved so far: the person's
-  workspaces and the app frame (plan, posts this month, getting-started steps).
+  workspaces, the app frame (plan, posts this month, getting-started steps), the Accounts
+  page, the composer and the Inbox's account list.
 
 Without `AUTH_SECRET`, the service checks tokens with InsForge while `INSFORGE_BASE_URL` is
 set, as the functions do. With neither, nobody can sign in through it (API keys and AI app
