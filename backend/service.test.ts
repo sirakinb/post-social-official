@@ -12,12 +12,13 @@ const SETTINGS: Record<string, string> = {
   META_WEBHOOK_VERIFY_TOKEN: "verify-me",
 };
 
-function service(overrides: { sql?: Sql; ready?: () => Promise<boolean>; settings?: Record<string, string | undefined> } = {}) {
+function service(overrides: { sql?: Sql; ready?: () => Promise<boolean>; settings?: Record<string, string | undefined>; auth?: { path: string; handler: (request: Request) => Promise<Response> } } = {}) {
   const settings = { ...SETTINGS, ...overrides.settings };
   return createService({
     env: (name) => settings[name],
     base: { sql: overrides.sql ?? (vi.fn(async () => []) as unknown as Sql), userForToken: async () => null },
     ready: overrides.ready ?? (async () => true),
+    ...(overrides.auth ? { auth: overrides.auth } : {}),
   });
 }
 const get = (handler: ReturnType<typeof service>, path: string, init?: RequestInit) => handler(new Request(`https://api.postsocial.xyz${path}`, init));
@@ -67,6 +68,25 @@ describe("the Node service", () => {
   it("answers 404 for anything else, including near misses of a mount", async () => {
     const handler = service();
     for (const path of ["/", "/apix/v1/openapi.json", "/mediax", "/functions", "/functions/api/v1/openapi.json"]) expect((await get(handler, path)).status, path).toBe(404);
+  });
+
+  it("has no sign-in routes unless sign-in runs here, and then only for our website's server", async () => {
+    const signIn = vi.fn(async (request: Request) => new Response(new URL(request.url).pathname));
+    // Sign-in is elsewhere: the path is nothing.
+    expect((await get(service({ settings: { INTERNAL_PROXY_SECRET: "website-secret" } }), "/auth/sign-in/email", { method: "POST", headers: { "X-PS-Proxy-Secret": "website-secret" } })).status).toBe(404);
+
+    const handler = service({ auth: { path: "/auth", handler: signIn }, settings: { INTERNAL_PROXY_SECRET: "website-secret" } });
+    expect((await get(handler, "/auth/sign-in/email", { method: "POST" })).status).toBe(404);
+    expect((await get(handler, "/auth/sign-in/email", { method: "POST", headers: { "X-PS-Proxy-Secret": "guess" } })).status).toBe(404);
+    expect(signIn).not.toHaveBeenCalled();
+    // With the secret, the request arrives with its whole path, which sign-in routes on.
+    const answered = await get(handler, "/auth/sign-in/email", { method: "POST", headers: { "X-PS-Proxy-Secret": "website-secret" } });
+    expect([answered.status, await answered.text()]).toEqual([200, "/auth/sign-in/email"]);
+    // No secret set on the service at all: closed to everyone.
+    const unset = service({ auth: { path: "/auth", handler: signIn } });
+    expect((await get(unset, "/auth/sign-in/email", { method: "POST", headers: { "X-PS-Proxy-Secret": "" } })).status).toBe(404);
+    // A near miss of the path is nothing.
+    expect((await get(handler, "/authx/sign-in/email", { method: "POST", headers: { "X-PS-Proxy-Secret": "website-secret" } })).status).toBe(404);
   });
 
   it("answers a plain 500 and reports the error when the database fails mid-request", async () => {

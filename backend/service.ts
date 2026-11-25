@@ -6,6 +6,7 @@
 //   /connections/...   connecting accounts, platform callbacks, Meta's calls
 //   /media             media actions (also at /functions/media, the path the web app uses today)
 //   /posts             post actions (also at /functions/posts)
+//   /auth/...          sign-in (backend/lib/auth), for our website's server only
 //   /healthz           the service is up (the load balancer's check; doesn't touch the database)
 //   /readyz            the service can reach the database (checked after a deploy)
 //
@@ -13,6 +14,7 @@
 import { reportError } from "./lib/telemetry";
 import type { Env } from "./lib/settings";
 import type { Handler } from "./lib/node-http";
+import { fromOurWebsite } from "./lib/rate-limit";
 import { apiDeps, type BackendBase } from "./functions/api/deps";
 import { createApiHandler } from "./functions/api/handler";
 import { connectionsDeps } from "./functions/connections/deps";
@@ -27,6 +29,8 @@ export type ServiceDeps = {
   base: BackendBase;
   // True when the database answers. Used by /readyz only.
   ready: () => Promise<boolean>;
+  // Our own sign-in and the path it answers under. Left out while sign-in is elsewhere.
+  auth?: { path: string; handler: Handler };
 };
 
 const JSON_HEADERS = { "Content-Type": "application/json", "Cache-Control": "no-store" };
@@ -46,6 +50,8 @@ function guarded(name: string, handler: Handler): Handler {
 
 export function createService(deps: ServiceDeps): Handler {
   const { env, base } = deps;
+  const auth = deps.auth ? { path: deps.auth.path, handler: guarded("auth", deps.auth.handler) } : null;
+  const proxySecret = env("INTERNAL_PROXY_SECRET") ?? null;
   const media = guarded("media", createMediaHandler(mediaDeps(env, base)));
   const posts = guarded("posts", createPostsHandler(postsDeps(env, base)));
   const mounts: Array<[string, Handler]> = [
@@ -64,6 +70,13 @@ export function createService(deps: ServiceDeps): Handler {
     if (path === "/readyz") {
       const ok = await deps.ready().catch(() => false);
       return json(ok ? 200 : 503, { ok });
+    }
+    // Sign-in is called by our website's server, never by a browser or anyone else: without
+    // the website's shared secret these routes don't exist. The website checks the attempt
+    // limits before each call.
+    if (auth && path.startsWith(`${auth.path}/`)) {
+      if (!fromOurWebsite(request, proxySecret)) return json(404, { error: "Not found." });
+      return auth.handler(request);
     }
     for (const [prefix, handler] of mounts) {
       if (path !== prefix && !path.startsWith(`${prefix}/`)) continue;

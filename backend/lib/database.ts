@@ -94,6 +94,9 @@ export type DatabaseSettings = DatabaseAddress & {
   max?: number;
   statementTimeoutMs?: number;
   applicationName?: string;
+  // The one schema this pool's connections look in (our sign-in's tables live in `auth`).
+  // Left out, Postgres's usual lookup applies.
+  schema?: string;
 };
 
 // The login the API and the worker use. bootstrap.sql creates it; it runs as project_admin.
@@ -146,6 +149,8 @@ export function poolConfig(settings: DatabaseSettings, readFile: (path: string) 
   const { host, port, user, password, database, sslmode } = parseAddress(settings);
   if (!host || !database) throw new Error("The database address needs a host and a database name.");
 
+  if (settings.schema !== undefined && !/^[a-z_][a-z0-9_]*$/.test(settings.schema)) throw new Error("Not a schema name.");
+
   const plain = sslmode === "disable" || (LOCAL_HOSTS.has(host) && !sslmode);
   return {
     host,
@@ -159,7 +164,7 @@ export function poolConfig(settings: DatabaseSettings, readFile: (path: string) 
     connectionTimeoutMillis: 10_000,
     statement_timeout: settings.statementTimeoutMs ?? 60_000,
     application_name: settings.applicationName ?? "postsocial",
-    options: "-c timezone=UTC",
+    options: `-c timezone=UTC${settings.schema ? ` -c search_path=${settings.schema}` : ""}`,
   };
 }
 

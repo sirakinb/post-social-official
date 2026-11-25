@@ -99,8 +99,15 @@ export class ServicesStack extends Stack {
         PORT: String(CONTAINER_PORT),
         // Where platforms are sent back to when the website isn't forwarding for us.
         CONNECTIONS_BASE_URL: `https://${apiDomain}/connections`,
+        // This API's own public address, for its sign-in (backend/lib/auth).
+        AUTH_BASE_URL: `https://${apiDomain}`,
       },
-      secrets: { SETTINGS_JSON: ecs.Secret.fromSecretsManager(data.settings.api), DATABASE_PASSWORD: appPassword },
+      secrets: {
+        SETTINGS_JSON: ecs.Secret.fromSecretsManager(data.settings.api),
+        DATABASE_PASSWORD: appPassword,
+        // With this set the API runs sign-in itself instead of asking InsForge.
+        AUTH_SECRET: ecs.Secret.fromSecretsManager(data.signIn),
+      },
       logging: ecs.LogDrivers.awsLogs({ logGroup: data.logGroups.api, streamPrefix: "api" }),
       // The service finishes the requests in hand for up to 25 seconds (backend/server.ts).
       stopTimeout: Duration.seconds(30),

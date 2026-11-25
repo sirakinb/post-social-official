@@ -57,7 +57,8 @@ theirs -At -F ' ' -c "$COUNTS" | sort > "$work/theirs.txt"
 # What goes in. From `public`: everything except the schema itself and InsForge's defaults
 # for future tables (it gives new tables to everyone signed in; our migrations say who gets
 # what). From `auth`: the people (into the table bootstrap.sql made) and their Google links
-# (that table comes with the copy; scripts/migrate-auth.sql reads it and it goes after).
+# (that table comes with the copy; database/migrate-auth.sql carries its rows over and
+# removes it).
 pg_restore --list "$work/source.dump" > "$work/all.txt"
 grep -E '^[0-9]+; [0-9]+ [0-9]+ ' "$work/all.txt" \
   | grep -Ev '^[0-9]+; [0-9]+ [0-9]+ (SCHEMA - |COMMENT - SCHEMA |ACL - SCHEMA |DEFAULT ACL )' \
@@ -88,7 +89,9 @@ GRANT USAGE ON SCHEMA public TO PUBLIC;
 GRANT USAGE, CREATE ON SCHEMA public TO project_admin;
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
 DROP TABLE IF EXISTS auth.user_providers;
-TRUNCATE auth.users;
+-- The people, and with them what our own sign-in keeps about each (accounts, sessions).
+TRUNCATE auth.users CASCADE;
+DO $$ BEGIN IF to_regclass('auth.verifications') IS NOT NULL THEN TRUNCATE auth.verifications; END IF; END $$;
 TRUNCATE app_meta.migrations;
 SQL
   pg_restore --file=- --no-owner --role=project_admin --use-list="$work/chosen.txt" "$work/source.dump"

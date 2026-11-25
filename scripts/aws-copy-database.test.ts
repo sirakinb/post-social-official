@@ -40,7 +40,7 @@ describe("copying a database to AWS", () => {
     const copy = readFileSync(new URL("../database/copy-from-insforge.sh", import.meta.url), "utf8");
     const begin = copy.indexOf("BEGIN;");
     const commit = copy.indexOf("COMMIT;");
-    for (const step of ["DROP SCHEMA public CASCADE;", "TRUNCATE auth.users;", "pg_restore --file=-", "UPDATE auth.user_providers SET access_token = NULL"]) {
+    for (const step of ["DROP SCHEMA public CASCADE;", "TRUNCATE auth.users CASCADE;", "pg_restore --file=-", "UPDATE auth.user_providers SET access_token = NULL"]) {
       // The last mention: the same tool is used once earlier, only to read the dump.
       expect(copy.lastIndexOf(step)).toBeGreaterThan(begin);
       expect(copy.lastIndexOf(step)).toBeLessThan(commit);

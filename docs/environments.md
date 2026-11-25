@@ -195,9 +195,28 @@ up the first time, and copying its settings (`scripts/aws-copy-settings.mjs`) an
 copy script was last run, and its worker is stopped: two workers on the same accounts would
 both renew the same platform tokens. The AWS one starts on the day the dev website moves over.
 
-**Sign-in.** While `INSFORGE_BASE_URL` is set, the service checks sign-in tokens with InsForge,
-as the functions do. Without it nobody can sign in through the service (API keys and AI app
-sign-ins still work; they live in our database). Better Auth replaces this.
+**Sign-in.** On AWS the service runs sign-in itself (Better Auth, `backend/lib/auth`), switched
+on by the `AUTH_SECRET` it is given there:
+
+- People stay in `auth.users` with the ids they always had. Beside them are `auth.accounts`
+  (a password's hash, or a Google link), `auth.sessions` and `auth.verifications` (emailed
+  codes, stored hashed). `database/bootstrap.sql` creates them.
+- Passwords are the bcrypt hashes InsForge made, checked as they are, so nobody resets
+  anything. `database/migrate-auth.sql` carries InsForge's records over; the migration task
+  runs it on every deploy and after every data copy, and it changes nothing when there is
+  nothing to carry.
+- An email is confirmed, and a password reset, with a 6-digit code sent through Resend
+  (`backend/lib/auth/emails.ts`): good for 10 minutes and 5 tries. Sessions last 30 days,
+  extended while in use.
+- The routes live under `/auth` and answer only our website's server (the shared
+  `INTERNAL_PROXY_SECRET`), which checks the attempt limits before each call. A browser
+  never talks to them. Only the routes listed in `backend/lib/auth/auth.ts` exist.
+- The website doesn't use it yet: it still signs people in with InsForge until it is
+  switched over, one environment at a time.
+
+Without `AUTH_SECRET`, the service checks tokens with InsForge while `INSFORGE_BASE_URL` is
+set, as the functions do. With neither, nobody can sign in through it (API keys and AI app
+sign-ins still work; they live in our database).
 
 **On your machine** (needs Docker):
 
