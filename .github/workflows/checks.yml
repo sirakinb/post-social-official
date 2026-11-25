@@ -22,3 +22,9 @@ jobs:
       - run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: "1"
+      # The move to AWS: build a Postgres 15 the way the AWS database is set up (every
+      # migration, no InsForge), run the backend's tests on it, and build the API's image.
+      - name: Backend on plain Postgres
+        run: scripts/local-database.sh && npm run test:pg
+      - name: API container image builds
+        run: docker build -q -t postsocial-api:ci backend

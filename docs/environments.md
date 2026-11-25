@@ -145,6 +145,52 @@ pg_restore --no-owner --no-privileges --dbname "<target database address>" posts
 The dump holds every schema (`public`, `auth` and InsForge's own). Add `--schema=public` to
 restore only the app's tables. It holds people's data: delete local copies when done.
 
+## Node API service (for the move to AWS)
+
+Being built alongside InsForge; nothing in production uses it yet. The same four handlers that
+run as InsForge functions (`api`, `connections`, `media`, `posts`) also run as one Node
+service, built from the same code, so the two can't drift apart: each function's settings are
+read in its `deps.ts`, used by both the function's `index.ts` and `backend/service.ts`.
+
+| Path on the service | What it is |
+|---|---|
+| `/api/...` | REST API, MCP server, OAuth for AI apps, Stripe webhook, tracked links |
+| `/connections/...` | Connecting accounts, platform callbacks, Meta's calls |
+| `/media`, `/posts` | Media and post actions (also at `/functions/media` and `/functions/posts`, the paths the web app uses today) |
+| `/healthz` | The service is up. The load balancer's check; it doesn't touch the database |
+| `/readyz` | The service can reach the database. Checked after a deploy |
+
+So on AWS the web environment's `API_BASE_URL` becomes `https://api.postsocial.xyz/api` and
+`CONNECTIONS_BASE_URL` becomes `https://api.postsocial.xyz/connections`.
+
+**Database.** The service and the worker talk to Postgres directly (`backend/lib/database.ts`)
+and get back exactly what InsForge's SQL endpoint returned, so no query changed. The worker
+switches by itself: with `DATABASE_URL` set it uses Postgres, without it InsForge.
+`database/bootstrap.sql` creates what InsForge used to provide (the `auth` schema and the
+roles our migrations name), and `backend/migrate.ts` applies `migrations/` in order.
+
+| Setting | Login | Used by |
+|---|---|---|
+| `DATABASE_URL` | `app_admin`: every session runs as `project_admin`, which owns the tables | The API's own checks and the worker |
+| `DATABASE_USER_URL` | `app_user`: every session runs as `authenticated`, so the access policies apply, and it can't become `project_admin` | Queries for one signed-in person (`userSql`) |
+| `DATABASE_OWNER_URL` | The database's owner | Setup and migrations only (`migrate.mjs`), never the running service |
+| `DATABASE_CA_FILE` | | AWS's certificate bundle for RDS; the images set it. Connections are always encrypted and checked, except to a database on the same machine |
+
+**Sign-in.** While `INSFORGE_BASE_URL` is set, the service checks sign-in tokens with InsForge,
+as the functions do. Without it nobody can sign in through the service (API keys and AI app
+sign-ins still work; they live in our database). Better Auth replaces this.
+
+**On your machine** (needs Docker):
+
+```bash
+npm run db:local      # a Postgres 15 set up like the AWS one, with every migration
+npm run test:pg       # the backend's tests on it: data formats, access policies, an API key
+npm run api:build     # backend/dist: server.mjs, migrate.mjs and the SQL they read
+docker build -t postsocial-api backend
+```
+
+`scripts/local-database.sh reset` starts the local database again from nothing; `stop` removes it.
+
 ## Accounts
 
 Public sign-up is off. Accounts are created with a script; the password is typed in when

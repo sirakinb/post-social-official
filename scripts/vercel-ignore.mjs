@@ -26,6 +26,10 @@ const NOT_WEBSITE = [
   /^\.github\//,
   /^backend\/functions\//,
   /^backend\/tests\//,
+  // The Node API service for AWS: its entry points, image and database setup.
+  /^backend\/(server|service|migrate)\.ts$/,
+  /^backend\/(Dockerfile|build\.sh|\.dockerignore)$/,
+  /^database\//,
   /^worker\//,
   /^scripts\/(?!vercel-ignore)/,
   /\.test\.tsx?$/,
