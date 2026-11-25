@@ -67,7 +67,8 @@ export class DataStack extends Stack {
       }),
       backupRetention: Duration.days(backupDays),
       preferredBackupWindow: "07:00-08:00", // about 2am US Eastern
-      preferredMaintenanceWindow: "Sun:08:30-09:30",
+      // Both ends need the day: RDS rejects "Sun:08:30-09:30" at deploy time.
+      preferredMaintenanceWindow: "Sun:08:30-Sun:09:30",
       autoMinorVersionUpgrade: true,
       copyTagsToSnapshot: true,
       cloudwatchLogsExports: ["postgresql"],

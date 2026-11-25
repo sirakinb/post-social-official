@@ -140,6 +140,20 @@ describe.each(ENV_NAMES)("%s database", (envName) => {
   });
 });
 
+describe.each(ENV_NAMES)("database timing: %s", (envName) => {
+  it("uses the window formats RDS accepts, and they don't overlap", () => {
+    // RDS only checks these when the database is created, so a typo fails the whole deploy.
+    const [database] = resources(data[envName], "AWS::RDS::DBInstance");
+    const backup = String(database.Properties.PreferredBackupWindow);
+    const maintenance = String(database.Properties.PreferredMaintenanceWindow);
+    expect(backup).toMatch(/^\d{2}:\d{2}-\d{2}:\d{2}$/);
+    expect(maintenance).toMatch(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun):\d{2}:\d{2}-(Mon|Tue|Wed|Thu|Fri|Sat|Sun):\d{2}:\d{2}$/);
+    const backupEnds = backup.split("-")[1];
+    const maintenanceStarts = maintenance.split("-")[0].slice(4);
+    expect(backupEnds <= maintenanceStarts).toBe(true);
+  });
+});
+
 describe("what protects prod, and what lets dev be rebuilt", () => {
   it("prod's database can't be deleted and survives its stack", () => {
     const [database] = resources(data.prod, "AWS::RDS::DBInstance");

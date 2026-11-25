@@ -77,5 +77,9 @@ Order: `PostSocialFoundation`, then `PostSocialData-dev`, then `PostSocialEdge`,
 - **Settings.** After a data stack exists, put the environment's settings into
   `postsocial/<env>/api` and `postsocial/<env>/worker` as one JSON object each, in the AWS
   console. A later deploy leaves them alone.
+- **If a first deploy of a data stack fails,** CloudFormation rolls back but keeps the items
+  marked to survive deletion (the settings secrets, and on prod the log groups and subnet
+  group). Check they are empty, remove them and the failed stack, then deploy again, or the
+  retry stops on "already exists". This happened on 2026-11-25.
 - **Never rename** a construct that holds data (the database, a secret): CloudFormation would
   replace it. Read `cdk diff` for the word "replace" before every deploy.
