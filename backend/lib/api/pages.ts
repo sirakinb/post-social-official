@@ -65,9 +65,98 @@ export async function appFrame(sql: Sql, caller: Caller, input: { workspace_id?:
   };
 }
 
+// A workspace the person belongs to, from what the page sent.
+async function memberOf(sql: Sql, caller: Caller, input: { workspace_id?: unknown }) {
+  const workspaceId = requireUuid(input.workspace_id, "Workspace");
+  await membership(sql, personOnly(caller), workspaceId, false);
+  return workspaceId;
+}
+
+const optionalUuid = (value: unknown, label: string) => (value === undefined || value === null || value === "" ? null : requireUuid(value, label));
+
+// The Accounts page: every connected account, when each last posted, and the profiles.
+export async function accountsPage(sql: Sql, caller: Caller, input: { workspace_id?: unknown }) {
+  const workspaceId = await memberOf(sql, caller, input);
+  const [row] = await sql<{ accounts: unknown[]; last_posted: unknown[]; profiles: unknown[] }>(
+    `SELECT
+       (SELECT coalesce(json_agg(a ORDER BY a.platform, a.display_name), '[]') FROM (
+          SELECT id, platform, handle, display_name, avatar_url, health, health_reason, capabilities, created_at,
+                 profile_id, scopes, last_connected_at, tiktok_delivery
+          FROM public.connected_accounts WHERE workspace_id = $1) a) AS accounts,
+       (SELECT coalesce(json_agg(d), '[]') FROM (
+          SELECT connected_account_id, max(updated_at) AS updated_at
+          FROM public.destinations WHERE workspace_id = $1 AND status = 'published' GROUP BY connected_account_id) d) AS last_posted,
+       (SELECT coalesce(json_agg(p ORDER BY p.name), '[]') FROM (
+          SELECT id, name, description, color, timezone FROM public.profiles WHERE workspace_id = $1) p) AS profiles`,
+    [workspaceId],
+  );
+  return { accounts: row?.accounts ?? [], last_posted: row?.last_posted ?? [], profiles: row?.profiles ?? [] };
+}
+
+const MEDIA_COLUMNS = "id, display_name, file_name, media_type, width, height, duration_seconds";
+
+// The composer: the accounts that can be posted to, the newest ready media, the profiles,
+// the post being edited (if one was asked for), and a file still being checked that the
+// composer should wait for (if one was asked for).
+export async function composerPage(sql: Sql, caller: Caller, input: { workspace_id?: unknown; post_id?: unknown; media_id?: unknown }) {
+  const workspaceId = await memberOf(sql, caller, input);
+  const postId = optionalUuid(input.post_id, "Post");
+  const mediaId = optionalUuid(input.media_id, "Media");
+  const [row] = await sql<{ accounts: unknown[]; media: unknown[]; profiles: unknown[]; post: unknown; pending_media: unknown }>(
+    `SELECT
+       (SELECT coalesce(json_agg(a ORDER BY a.platform), '[]') FROM (
+          SELECT id, platform, handle, display_name, avatar_url, health, capabilities, profile_id
+          FROM public.connected_accounts WHERE workspace_id = $1 AND health <> 'disconnected') a) AS accounts,
+       (SELECT coalesce(json_agg(m ORDER BY m.created_at DESC), '[]') FROM (
+          SELECT ${MEDIA_COLUMNS}, created_at FROM public.media_assets
+          WHERE workspace_id = $1 AND status = 'ready' AND hidden_from_library_at IS NULL
+          ORDER BY created_at DESC LIMIT 48) m) AS media,
+       (SELECT coalesce(json_agg(p), '[]') FROM (SELECT id, name, color FROM public.profiles WHERE workspace_id = $1) p) AS profiles,
+       (SELECT json_build_object(
+          'id', o.id, 'status', o.status, 'caption', o.caption, 'scheduled_at', o.scheduled_at,
+          'destinations', (SELECT coalesce(json_agg(json_build_object('connected_account_id', d.connected_account_id, 'platform', d.platform, 'options', d.options)), '[]')
+                           FROM public.destinations d WHERE d.post_id = o.id),
+          'post_media', (SELECT coalesce(json_agg(json_build_object('position', pm.position, 'media_asset_id', pm.media_asset_id)), '[]')
+                         FROM public.post_media pm WHERE pm.post_id = o.id))
+        FROM public.posts o WHERE o.id = $2::uuid AND o.workspace_id = $1) AS post,
+       (SELECT json_build_object('id', w.id, 'display_name', w.display_name, 'file_name', w.file_name)
+        FROM public.media_assets w WHERE w.id = $3::uuid AND w.workspace_id = $1 AND w.status IN ('uploading', 'processing')) AS pending_media`,
+    [workspaceId, postId, mediaId],
+  );
+  return { accounts: row?.accounts ?? [], media: row?.media ?? [], profiles: row?.profiles ?? [], post: row?.post ?? null, pending_media: row?.pending_media ?? null };
+}
+
+// Media by id, for a post being edited whose files aren't among the newest. Only this
+// workspace's: an id from anywhere else comes back as nothing.
+export async function mediaByIds(sql: Sql, caller: Caller, input: { workspace_id?: unknown; ids?: unknown }) {
+  const workspaceId = await memberOf(sql, caller, input);
+  if (!Array.isArray(input.ids) || input.ids.length > 60) throw new ApiError(400, "ids must be a list of up to 60 media ids.");
+  const ids = input.ids.map((id) => requireUuid(id, "Media"));
+  if (!ids.length) return { media: [] };
+  const media = await sql(`SELECT ${MEDIA_COLUMNS} FROM public.media_assets WHERE workspace_id = $1 AND id = ANY($2::uuid[])`, [workspaceId, ids]);
+  return { media };
+}
+
+// The accounts the Inbox works with: Instagram, Facebook Pages, Threads and LinkedIn that
+// are still connected. (The page keeps LinkedIn Company Pages only.)
+export async function inboxAccountsList(sql: Sql, caller: Caller, input: { workspace_id?: unknown }) {
+  const workspaceId = await memberOf(sql, caller, input);
+  const accounts = await sql(
+    `SELECT id, platform, handle, display_name, external_account_id FROM public.connected_accounts
+     WHERE workspace_id = $1 AND platform IN ('instagram', 'facebook', 'threads', 'linkedin') AND health <> 'disconnected'
+     ORDER BY display_name`,
+    [workspaceId],
+  );
+  return { accounts };
+}
+
 // The actions above by name, for the route that serves them, and which of them only read.
 export const pageActions = {
   my_workspaces: (sql: Sql, caller: Caller) => myWorkspaces(sql, caller),
   app_frame: appFrame,
+  accounts_page: accountsPage,
+  composer_page: composerPage,
+  media_by_ids: mediaByIds,
+  inbox_accounts: inboxAccountsList,
 };
 export const isPageRead = (action: string) => Object.hasOwn(pageActions, action);

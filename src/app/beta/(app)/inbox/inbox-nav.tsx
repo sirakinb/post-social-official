@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { callServer } from "@/lib/beta/workspace";
+import { pageReadsViaApi } from "@/lib/sign-in/rules";
 import { cn } from "@/lib/utils";
 import { AccountPicker } from "./account-picker";
 import type { AccountOption } from "./automations/types";
@@ -15,7 +17,9 @@ type Client = Awaited<ReturnType<typeof import("@/lib/beta/workspace").loadViewe
 
 // The workspace's Instagram accounts, Facebook Pages and Threads accounts, and the one picked in ?account= (null means all of them).
 export async function inboxAccounts(client: Client, workspaceId: string, picked?: string) {
-  const { data } = await client.database.from("connected_accounts").select("id, platform, handle, display_name, external_account_id").eq("workspace_id", workspaceId).in("platform", ["instagram", "facebook", "threads", "linkedin"]).neq("health", "disconnected").order("display_name");
+  const data = pageReadsViaApi()
+    ? ((await callServer<{ accounts: Array<AccountOption & { external_account_id: string }> }>("inbox_accounts", { workspace_id: workspaceId }))?.accounts ?? [])
+    : (await client.database.from("connected_accounts").select("id, platform, handle, display_name, external_account_id").eq("workspace_id", workspaceId).in("platform", ["instagram", "facebook", "threads", "linkedin"]).neq("health", "disconnected").order("display_name")).data;
   // LinkedIn: Company Pages only (their comments); a member profile has no inbox.
   const accounts = ((data ?? []) as Array<AccountOption & { external_account_id: string }>)
     .filter((a) => a.platform !== "linkedin" || a.external_account_id.startsWith("organization:"))

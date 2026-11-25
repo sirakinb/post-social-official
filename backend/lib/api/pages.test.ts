@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 import type { AgentCaller, Caller, Sql } from "../access";
-import { appFrame, isPageRead, myWorkspaces, pageActions } from "./pages";
+import { accountsPage, appFrame, composerPage, inboxAccountsList, isPageRead, mediaByIds, myWorkspaces, pageActions } from "./pages";
 
 const WORKSPACE = "11111111-1111-4111-8111-111111111111";
 const person: Caller = { userId: "22222222-2222-4222-8222-222222222222", displayName: "Ada", entryPoint: "ui" };
@@ -60,8 +60,45 @@ describe("what the web app's pages read", () => {
     expect(calls).toHaveLength(0);
   });
 
+  it("reads each page in one statement after the membership check, scoped to the workspace", async () => {
+    for (const [read, answer] of [
+      [accountsPage, { accounts: [{ id: "a" }], last_posted: [], profiles: [] }],
+      [composerPage, { accounts: [], media: [{ id: "m" }], profiles: [], post: null, pending_media: null }],
+    ] as const) {
+      const { sql, calls } = database([answer]);
+      expect(await read(sql, person, { workspace_id: WORKSPACE })).toEqual(answer);
+      expect(calls).toHaveLength(2);
+      expect(calls[1].params[0]).toBe(WORKSPACE);
+      // Every table read is narrowed to the workspace.
+      expect(calls[1].query.match(/FROM public\.\w+/g)!.length).toBeLessThanOrEqual(calls[1].query.match(/workspace_id = \$1|post_id = o\.id/g)!.length);
+    }
+    const inbox = database([{ id: "a", platform: "instagram" }]);
+    expect(await inboxAccountsList(inbox.sql, person, { workspace_id: WORKSPACE })).toEqual({ accounts: [{ id: "a", platform: "instagram" }] });
+  });
+
+  it("refuses ids that aren't ids, and long lists, before reading anything", async () => {
+    const { sql, calls } = database([]);
+    await expect(composerPage(sql, person, { workspace_id: WORKSPACE, post_id: "x' OR '1'='1" })).rejects.toMatchObject({ status: 400 });
+    await expect(composerPage(sql, person, { workspace_id: WORKSPACE, media_id: 12 })).rejects.toMatchObject({ status: 400 });
+    await expect(mediaByIds(sql, person, { workspace_id: WORKSPACE, ids: "all" })).rejects.toMatchObject({ status: 400 });
+    await expect(mediaByIds(sql, person, { workspace_id: WORKSPACE, ids: [WORKSPACE, "nope"] })).rejects.toMatchObject({ status: 400 });
+    await expect(mediaByIds(sql, person, { workspace_id: WORKSPACE, ids: Array.from({ length: 61 }, () => WORKSPACE) })).rejects.toMatchObject({ status: 400 });
+    // Only the membership checks ran.
+    expect(calls.every((call) => call.query.includes("WITH member AS"))).toBe(true);
+    expect(await mediaByIds(sql, person, { workspace_id: WORKSPACE, ids: [] })).toEqual({ media: [] });
+  });
+
+  it("answers 'not found' for every page read when the person isn't in the workspace, and refuses keys", async () => {
+    for (const read of [accountsPage, composerPage, inboxAccountsList, mediaByIds]) {
+      const { sql, calls } = database([{ accounts: ["secret"] }], false);
+      await expect(read(sql, person, { workspace_id: WORKSPACE, ids: [] })).rejects.toMatchObject({ status: 404 });
+      expect(calls).toHaveLength(1);
+      await expect(read(sql, key, { workspace_id: WORKSPACE, ids: [] })).rejects.toMatchObject({ status: 403 });
+    }
+  });
+
   it("names its actions, so the route can give reads their own allowance", () => {
-    expect(Object.keys(pageActions).sort()).toEqual(["app_frame", "my_workspaces"]);
+    expect(Object.keys(pageActions).sort()).toEqual(["accounts_page", "app_frame", "composer_page", "inbox_accounts", "media_by_ids", "my_workspaces"]);
     expect(isPageRead("app_frame")).toBe(true);
     expect(isPageRead("create_key")).toBe(false);
     expect(isPageRead("toString")).toBe(false);
