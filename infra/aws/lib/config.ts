@@ -5,6 +5,12 @@ export const REGION = "us-east-1";
 export const AVAILABILITY_ZONES = ["us-east-1a", "us-east-1b"];
 
 export const GITHUB_REPO = "sirakinb/post-social-official";
+// How GitHub names this repository in the identity it signs each job with. The repository
+// uses GitHub's immutable form, which carries the owner's and the repository's ids, so a
+// renamed or re-created repository with the same name can't pass for it. Roles that trust
+// the plain "repo:owner/name" form are refused (found on the first deploy, 2026-11-25).
+// Read it with: gh api repos/sirakinb/post-social-official/actions/oidc/customization/sub
+export const GITHUB_SUBJECT = "repo:sirakinb@13540758/post-social-official@1394110583";
 // Created once by hand on 2026-11-24 (the nightly backup's role uses it too).
 export const GITHUB_OIDC_PROVIDER_ARN = `arn:aws:iam::${ACCOUNT}:oidc-provider/token.actions.githubusercontent.com`;
 

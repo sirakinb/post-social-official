@@ -3,7 +3,7 @@
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 import { buildApp } from "../lib/app";
-import { ENV_NAMES, GITHUB_REPO } from "../lib/config";
+import { ENV_NAMES, GITHUB_SUBJECT } from "../lib/config";
 
 const built = buildApp();
 const foundation = Template.fromStack(built.foundation);
@@ -59,24 +59,24 @@ describe("GitHub deploy roles", () => {
 
   it("lets only main (and the Production environment) deploy prod", () => {
     expect(subjects("postsocial-github-deploy-prod")).toEqual([
-      `repo:${GITHUB_REPO}:ref:refs/heads/main`,
-      `repo:${GITHUB_REPO}:environment:Production`,
-      `repo:${GITHUB_REPO}:environment:production`,
+      `${GITHUB_SUBJECT}:ref:refs/heads/main`,
+      `${GITHUB_SUBJECT}:environment:Production`,
+      `${GITHUB_SUBJECT}:environment:production`,
     ]);
   });
 
   it("lets only dev (and the Development environment) deploy dev", () => {
     expect(subjects("postsocial-github-deploy-dev")).toEqual([
-      `repo:${GITHUB_REPO}:ref:refs/heads/dev`,
-      `repo:${GITHUB_REPO}:environment:Development`,
-      `repo:${GITHUB_REPO}:environment:development`,
+      `${GITHUB_SUBJECT}:ref:refs/heads/dev`,
+      `${GITHUB_SUBJECT}:environment:Development`,
+      `${GITHUB_SUBJECT}:environment:development`,
     ]);
   });
 
   it("never trusts a wildcard, a pull request or another repository", () => {
     for (const name of ["postsocial-github-deploy-dev", "postsocial-github-deploy-prod"]) {
       for (const subject of subjects(name)) {
-        expect(subject.startsWith(`repo:${GITHUB_REPO}:`)).toBe(true);
+        expect(subject.startsWith(`${GITHUB_SUBJECT}:`)).toBe(true);
         expect(subject).not.toMatch(/\*|pull_request/);
       }
     }
