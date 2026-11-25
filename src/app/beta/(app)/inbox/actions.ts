@@ -1,8 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
-import { getAccessTokenCookieName } from "@insforge/sdk/ssr";
+import { sessionToken } from "@/lib/sign-in/session";
 import { OUR_SIDE, UNREACHABLE, requestError } from "../../../../../backend/lib/support";
 
 // Inbox changes go through the `api` function with the person's own session, so the same
@@ -10,7 +9,7 @@ import { OUR_SIDE, UNREACHABLE, requestError } from "../../../../../backend/lib/
 async function call<T>(body: Record<string, unknown>): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
   const base = process.env.API_BASE_URL;
   if (!base) return { ok: false, error: OUR_SIDE };
-  const token = (await cookies()).get(getAccessTokenCookieName())?.value;
+  const token = await sessionToken();
   if (!token) return { ok: false, error: "Your session ended. Sign in again." };
   const response = await fetch(`${base}/keys`, {
     method: "POST",

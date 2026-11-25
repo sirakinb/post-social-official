@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { Brand } from "@/components/brand";
-import { BETA_LOGIN } from "@/lib/insforge/auth-rules";
+import { signedOutPath } from "@/lib/sign-in/session";
 import { currentUser, insforgeServerClient } from "@/lib/insforge/server";
 import { checkRequest, type AuthorizeParams } from "./actions";
 import { ConsentForm } from "./consent-form";
@@ -23,7 +23,7 @@ export default async function AuthorizePage({ searchParams }: { searchParams: Pr
   const user = await currentUser();
   if (!user) {
     const here = new URLSearchParams(Object.entries(params).filter((e): e is [string, string] => typeof e[1] === "string"));
-    redirect(`${BETA_LOGIN}?next=${encodeURIComponent(`/beta/authorize?${here}`)}`);
+    redirect(await signedOutPath(`/beta/authorize?${here}`));
   }
 
   const check = await checkRequest(params);

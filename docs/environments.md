@@ -211,8 +211,17 @@ on by the `AUTH_SECRET` it is given there:
 - The routes live under `/auth` and answer only our website's server (the shared
   `INTERNAL_PROXY_SECRET`), which checks the attempt limits before each call. A browser
   never talks to them. Only the routes listed in `backend/lib/auth/auth.ts` exist.
-- The website doesn't use it yet: it still signs people in with InsForge until it is
-  switched over, one environment at a time.
+- The website signs people in with InsForge until an environment is switched over. The
+  switch is `SIGN_IN_URL` in that environment's web settings (Vercel), set to the API's
+  sign-in address, e.g. `https://api-dev.postsocial.xyz/auth`. With it set, the sign-in
+  pages, the session check on every `/beta` page and every call the pages make to the API
+  use our own sign-in (`src/lib/sign-in/`); the forms, limits and messages don't change.
+  The browser then holds one cookie, `ps_session`, which page scripts can't read.
+- The same environment must point at our API everywhere, because that session is only good
+  there: `API_BASE_URL` (`…/api`), `CONNECTIONS_BASE_URL` (`…/connections`),
+  `FUNCTIONS_BASE_URL` (`…/functions`, for posts and media), and the same
+  `INTERNAL_PROXY_SECRET` the API has. Until the pages' own data reads go through the API
+  too, an environment can't be switched: they still read through InsForge.
 
 Without `AUTH_SECRET`, the service checks tokens with InsForge while `INSFORGE_BASE_URL` is
 set, as the functions do. With neither, nobody can sign in through it (API keys and AI app

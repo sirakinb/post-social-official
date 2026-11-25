@@ -1,9 +1,7 @@
 import Link from "next/link";
 import { FREE_ACCOUNTS } from "@/lib/pricing";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { getAccessTokenCookieName } from "@insforge/sdk/ssr";
-import { BETA_LOGIN } from "@/lib/insforge/auth-rules";
+import { sessionToken, signedOutPath } from "@/lib/sign-in/session";
 import { currentUser, insforgeServerClient } from "@/lib/insforge/server";
 
 export const metadata = { title: "Usage · Post Social" };
@@ -38,7 +36,7 @@ const day = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString("en
 // The report comes from the same function the REST API and MCP tool use.
 async function loadReport(workspaceId: string, period: string): Promise<Report | null> {
   const base = process.env.API_BASE_URL;
-  const token = (await cookies()).get(getAccessTokenCookieName())?.value;
+  const token = await sessionToken();
   if (!base || !token) return null;
   const response = await fetch(`${base}/keys`, {
     method: "POST",
@@ -79,7 +77,7 @@ function Stat({ label, value, note }: { label: string; value: string; note?: str
 
 export default async function BetaUsagePage({ searchParams }: { searchParams: Promise<{ workspace?: string; period?: string }> }) {
   const user = await currentUser();
-  if (!user) redirect(`${BETA_LOGIN}?next=/beta/usage`);
+  if (!user) redirect(await signedOutPath("/beta/usage"));
   const { workspace: slug, period: rawPeriod } = await searchParams;
   const period = PERIODS.some((p) => p.id === rawPeriod) ? rawPeriod! : "this_month";
 

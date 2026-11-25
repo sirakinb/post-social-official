@@ -1,12 +1,11 @@
 "use server";
 
-import { cookies } from "next/headers";
-import { getAccessTokenCookieName } from "@insforge/sdk/ssr";
+import { sessionToken } from "@/lib/sign-in/session";
 
 // Asks for fresh stats now (the same action AIs use, at most every 30 minutes per post).
 export async function refreshStats(workspaceId: string): Promise<{ ok: boolean; message: string; left?: number }> {
   const base = process.env.API_BASE_URL;
-  const token = (await cookies()).get(getAccessTokenCookieName())?.value;
+  const token = await sessionToken();
   if (!base || !token) return { ok: false, message: "Your session ended. Sign in again." };
   const response = await fetch(`${base}/keys`, {
     method: "POST",

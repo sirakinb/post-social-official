@@ -11,7 +11,8 @@ export const OAUTH_CALLBACK = "/beta/auth/callback";
 export const OAUTH_VERIFIER_COOKIE = "ps_oauth_verifier";
 
 // Pages under /beta that signed-out visitors may open.
-export const PUBLIC_BETA_PATHS = [BETA_LOGIN, BETA_SIGNUP, OAUTH_CALLBACK, "/beta/reset-password"] as const;
+// "/beta/auth/ended" clears the cookie of a session that is over (src/lib/sign-in/rules.ts).
+export const PUBLIC_BETA_PATHS = [BETA_LOGIN, BETA_SIGNUP, OAUTH_CALLBACK, "/beta/reset-password", "/beta/auth/ended"] as const;
 
 // Sign-in and sign-up pages are for signed-out visitors only; signed-in people go to the app.
 export const SIGNED_OUT_ONLY_PATHS = [BETA_LOGIN, BETA_SIGNUP] as const;
