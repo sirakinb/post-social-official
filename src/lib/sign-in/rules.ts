@@ -22,6 +22,14 @@ export function functionsBaseUrl(env: Env = process.env): string {
   return own || `${trimTrailingSlashes(env.NEXT_PUBLIC_INSFORGE_URL ?? "")}/functions`;
 }
 
+// Where the pages get what they show. Today they read the database directly, with the
+// person's InsForge session. With PAGE_READS=api they ask our API instead
+// (backend/lib/api/pages.ts), which is the only way once sign-in is our own: the session
+// is no longer one InsForge's database knows.
+export function pageReadsViaApi(env: Env = process.env): boolean {
+  return env.PAGE_READS === "api" || ownSignInUrl(env) !== null;
+}
+
 // With our own sign-in the browser holds one cookie: the session token, which page scripts
 // can't read. It lasts as long as the session does on the API (backend/lib/auth/auth.ts),
 // and both are pushed out again while the person keeps using the app.

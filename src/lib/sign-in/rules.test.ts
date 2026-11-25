@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { functionsBaseUrl, ownSignInUrl, SESSION_COOKIE, SESSION_SECONDS, sessionCookieOptions } from "./rules";
+import { functionsBaseUrl, ownSignInUrl, pageReadsViaApi, SESSION_COOKIE, SESSION_SECONDS, sessionCookieOptions } from "./rules";
 
 describe("which sign-in the website uses", () => {
   it("is InsForge's unless SIGN_IN_URL names our own API", () => {
@@ -13,6 +13,14 @@ describe("which sign-in the website uses", () => {
   it("finds the posts and media functions on InsForge, or on our own API when told", () => {
     expect(functionsBaseUrl({ NEXT_PUBLIC_INSFORGE_URL: "https://abc.insforge.app" })).toBe("https://abc.insforge.app/functions");
     expect(functionsBaseUrl({ NEXT_PUBLIC_INSFORGE_URL: "https://abc.insforge.app", FUNCTIONS_BASE_URL: "https://api-dev.postsocial.xyz/functions/" })).toBe("https://api-dev.postsocial.xyz/functions");
+  });
+
+  it("has the pages read through our API when told to, and always once sign-in is our own", () => {
+    expect(pageReadsViaApi({})).toBe(false);
+    expect(pageReadsViaApi({ PAGE_READS: "on" })).toBe(false);
+    expect(pageReadsViaApi({ PAGE_READS: "api" })).toBe(true);
+    // InsForge's database doesn't know our own sessions, so there is no other way then.
+    expect(pageReadsViaApi({ SIGN_IN_URL: "https://api-dev.postsocial.xyz/auth" })).toBe(true);
   });
 
   it("keeps the session in a cookie page scripts can't read, for as long as the API keeps the session", () => {

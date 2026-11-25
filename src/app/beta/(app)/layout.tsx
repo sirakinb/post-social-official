@@ -6,7 +6,8 @@ import { RegisterServiceWorker } from "@/components/register-service-worker";
 import { Sidebar } from "@/components/beta/sidebar";
 import { ThemeToggle } from "@/components/beta/theme-toggle";
 import { GET_STARTED_HIDDEN_COOKIE, loadGetStarted, stepsDone } from "@/lib/beta/get-started";
-import { callServer, loadViewer } from "@/lib/beta/workspace";
+import { callServer, loadFrame, loadViewer } from "@/lib/beta/workspace";
+import { pageReadsViaApi } from "@/lib/sign-in/rules";
 import { THEME_COOKIE, parseTheme } from "@/lib/beta/theme";
 import { signOut } from "../actions";
 import { analyticsEnabled } from "./stats-switch";
@@ -23,20 +24,31 @@ export default async function BetaAppLayout({ children }: { children: React.Reac
   let inbox = false;
   if (workspace) {
     const showSteps = workspace.role !== "reviewer" && !jar.get(GET_STARTED_HIDDEN_COOKIE);
-    const [{ data: planRow }, { data: usage }, steps, inboxStatus] = await Promise.all([
-      client.database.from("workspace_plans").select("plans(name, max_posts_per_month)").eq("workspace_id", workspace.id).maybeSingle(),
-      client.database.rpc("workspace_usage", { target_workspace: workspace.id }),
+    // The plan and this month's posts: from our API, or (until every environment has
+    // moved) straight from the database with the person's InsForge session.
+    const planAndUsage = async (): Promise<{ plan: { name: string; max_posts_per_month: number } | null; used: number }> => {
+      if (pageReadsViaApi()) {
+        const frame = await loadFrame(workspace.id);
+        return { plan: frame?.plan ?? null, used: frame?.posts_published ?? 0 };
+      }
+      const [{ data: planRow }, { data: usage }] = await Promise.all([
+        client.database.from("workspace_plans").select("plans(name, max_posts_per_month)").eq("workspace_id", workspace.id).maybeSingle(),
+        client.database.rpc("workspace_usage", { target_workspace: workspace.id }),
+      ]);
+      const published = ((usage ?? []) as Array<{ event_type: string; quantity: number }>).find((u) => u.event_type === "post_published");
+      return { plan: (planRow as { plans: { name: string; max_posts_per_month: number } | null } | null)?.plans ?? null, used: Number(published?.quantity ?? 0) };
+    };
+    const [{ plan: p, used }, steps, inboxStatus] = await Promise.all([
+      planAndUsage(),
       showSteps ? loadGetStarted(client, workspace.id) : null,
       callServer<{ enabled: boolean }>("inbox_status", { workspace_id: workspace.id }),
     ]);
     inbox = Boolean(inboxStatus?.enabled);
     if (steps && stepsDone(steps) < 3) started = stepsDone(steps);
     noAccounts = steps ? !steps.account : false;
-    const p = (planRow as { plans: { name: string; max_posts_per_month: number } | null } | null)?.plans;
-    const published = ((usage ?? []) as Array<{ event_type: string; quantity: number }>).find((u) => u.event_type === "post_published");
     const now = new Date();
     const resets = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-    if (p) plan = { name: p.name, used: Number(published?.quantity ?? 0), limit: p.max_posts_per_month, resets };
+    if (p) plan = { name: p.name, used, limit: p.max_posts_per_month, resets };
   }
 
   return (

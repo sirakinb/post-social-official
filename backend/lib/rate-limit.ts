@@ -31,6 +31,9 @@ export const LIMITS = {
   // Signed in (on top of each plan's daily API limit)
   api_credential: { limit: 120, windowSeconds: 60 },
   person_user: { limit: 120, windowSeconds: 60 },
+  // What the web app's pages read (backend/lib/api/pages.ts): a few per page opened, and
+  // the app opens pages ahead of the person, so the allowance is wider.
+  person_read: { limit: 600, windowSeconds: 60 },
   consent_user: { limit: 30, windowSeconds: 60 },
   media_user: { limit: 300, windowSeconds: 60 },
   media_upload_user: { limit: 100, windowSeconds: 3600 },
