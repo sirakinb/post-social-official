@@ -16,12 +16,9 @@ export interface EdgeStackProps extends StackProps {
 export class EdgeStack extends Stack {
   readonly loadBalancer: elbv2.ApplicationLoadBalancer;
   readonly httpsListener: elbv2.ApplicationListener;
-<<<<<<< HEAD
   // The load balancer's firewall group. It may call nothing until a services stack adds a
   // rule for its own API containers.
   readonly securityGroup: ec2.SecurityGroup;
-=======
->>>>>>> origin/dev
 
   constructor(scope: Construct, id: string, props: EdgeStackProps) {
     super(scope, id, props);
@@ -59,10 +56,7 @@ export class EdgeStack extends Stack {
       defaultAction: elbv2.ListenerAction.fixedResponse(404, { contentType: "text/plain", messageBody: "Not found" }),
     });
 
-<<<<<<< HEAD
     this.securityGroup = access;
-=======
->>>>>>> origin/dev
     acknowledge(access, { id: "AwsSolutions-EC23", reason: "A public load balancer takes web traffic from anywhere, on 80 (redirect) and 443 only." });
     acknowledge(this.loadBalancer, { id: "AwsSolutions-ELB2", reason: "Access logs need their own bucket; the API's own request logs cover us at this size. Revisit with the first security review on AWS." });
   }

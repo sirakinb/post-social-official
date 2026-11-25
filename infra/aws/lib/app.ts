@@ -1,18 +1,11 @@
-<<<<<<< HEAD
 // The whole setup: what is shared, then per environment a data stack and a services stack.
-=======
-// The whole setup: what is shared, then one data stack per environment.
->>>>>>> origin/dev
 import { App, Tags, Validations } from "aws-cdk-lib";
 import { AwsSolutionsChecks } from "cdk-nag";
 import { ACCOUNT, ENVIRONMENTS, ENV_NAMES, REGION, type EnvName } from "./config";
 import { DataStack } from "./data-stack";
 import { EdgeStack } from "./edge-stack";
 import { FoundationStack } from "./foundation-stack";
-<<<<<<< HEAD
 import { ServicesStack } from "./services-stack";
-=======
->>>>>>> origin/dev
 
 export function buildApp() {
   const app = new App();
@@ -42,7 +35,6 @@ export function buildApp() {
     ]),
   ) as Record<EnvName, DataStack>;
 
-<<<<<<< HEAD
   const services = Object.fromEntries(
     ENV_NAMES.map((envName) => [
       envName,
@@ -63,17 +55,9 @@ export function buildApp() {
     Tags.of(data[envName]).add("environment", envName);
     Tags.of(services[envName]).add("environment", envName);
   }
-=======
-  Tags.of(app).add("app", "postsocial");
-  for (const envName of ENV_NAMES) Tags.of(data[envName]).add("environment", envName);
->>>>>>> origin/dev
   // AWS's own checklist, run on every build. A finding fails the build unless it is
   // acknowledged next to the resource with a written reason (lib/acknowledge.ts).
   Validations.of(app).addPlugins(new AwsSolutionsChecks(app, { verbose: true }));
 
-<<<<<<< HEAD
   return { app, foundation, edge, data, services };
-=======
-  return { app, foundation, edge, data };
->>>>>>> origin/dev
 }
