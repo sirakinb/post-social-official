@@ -176,6 +176,21 @@ roles our migrations name), and `backend/migrate.ts` applies `migrations/` in or
 | `DATABASE_OWNER_URL` | The database's owner | Setup and migrations only (`migrate.mjs`), never the running service |
 | `DATABASE_CA_FILE` | | AWS's certificate bundle for RDS; the images set it. Connections are always encrypted and checked, except to a database on the same machine |
 
+On AWS there is no connection string. The containers get the address in parts
+(`DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`) and only the password from Secrets
+Manager: `DATABASE_PASSWORD` for `app_admin`, and for the migration task
+`DATABASE_OWNER_USERNAME` and `DATABASE_OWNER_PASSWORD`. Every other setting arrives as one
+JSON object in `SETTINGS_JSON` (the secret `postsocial/<env>/api` or `/worker`), which the
+service spreads into its environment at start; anything set on the container itself wins.
+
+**Deploying to AWS dev.** `.github/workflows/deploy-aws-dev.yml` runs on every push to `dev`
+that touches the backend, once the repository variable `AWS_DEV_DEPLOY` is `on`. It builds
+the two images, runs the migration task inside the network, rolls the API and the worker
+(`scripts/aws-deploy.mjs`), and checks `https://api-dev.postsocial.xyz` answers. A build
+that doesn't come up healthy is rolled back by AWS and fails the run. Setting an environment
+up the first time, and copying its settings from InsForge
+(`scripts/aws-copy-settings.mjs`): `infra/aws/README.md`.
+
 **Sign-in.** While `INSFORGE_BASE_URL` is set, the service checks sign-in tokens with InsForge,
 as the functions do. Without it nobody can sign in through the service (API keys and AI app
 sign-ins still work; they live in our database). Better Auth replaces this.

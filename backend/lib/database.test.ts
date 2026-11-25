@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
-import { assertUtc, DatabaseError, poolConfig, poolSql, userSql } from "./database";
+import { assertUtc, databaseAddress, DatabaseError, poolConfig, poolSql, userSql } from "./database";
 
 const USER = "11111111-2222-4333-8444-555555555555";
 
@@ -68,6 +68,33 @@ describe("userSql", () => {
     const { pool, release } = fakePool((text) => { if (!text.startsWith("BEGIN")) throw new Error("connection lost"); return { rows: [] }; });
     await expect(userSql(pool, USER)("select 1", [])).rejects.toThrow(/connection lost/);
     expect(release).toHaveBeenCalledWith(true);
+  });
+});
+
+describe("databaseAddress", () => {
+  const env = (values: Record<string, string>) => (name: string) => values[name];
+  const parts = { DATABASE_HOST: "db.example.rds.amazonaws.com", DATABASE_NAME: "postsocial", DATABASE_PASSWORD: "app-password", DATABASE_OWNER_USERNAME: "postsocial_admin", DATABASE_OWNER_PASSWORD: "owner-password" };
+
+  it("prefers one address when it is given", () => {
+    expect(databaseAddress(env({ ...parts, DATABASE_URL: "postgres://a:b@h/d" }), "app")).toEqual({ url: "postgres://a:b@h/d" });
+    expect(databaseAddress(env({ ...parts, DATABASE_OWNER_URL: "postgres://o:b@h/d" }), "owner")).toEqual({ url: "postgres://o:b@h/d" });
+  });
+
+  it("builds it from parts on AWS: the app login is always app_admin, the owner's name is given", () => {
+    expect(databaseAddress(env(parts), "app")).toEqual({ host: parts.DATABASE_HOST, port: 5432, database: "postsocial", user: "app_admin", password: "app-password" });
+    expect(databaseAddress(env({ ...parts, DATABASE_PORT: "6543" }), "owner")).toEqual({ host: parts.DATABASE_HOST, port: 6543, database: "postsocial", user: "postsocial_admin", password: "owner-password" });
+  });
+
+  it("is null when a part is missing, so the caller can say what to set", () => {
+    expect(databaseAddress(env({}), "app")).toBeNull();
+    expect(databaseAddress(env({ DATABASE_HOST: "h", DATABASE_NAME: "d" }), "app")).toBeNull();
+    expect(databaseAddress(env({ DATABASE_HOST: "h", DATABASE_NAME: "d", DATABASE_PASSWORD: "p" }), "owner")).toBeNull();
+    expect(() => databaseAddress(env({ ...parts, DATABASE_PORT: "abc" }), "app")).toThrow(/DATABASE_PORT/);
+  });
+
+  it("gives poolConfig an encrypted, checked connection", () => {
+    const config = poolConfig({ ...databaseAddress(env(parts), "app")!, caFile: "/app/rds-ca.pem" }, () => "CA");
+    expect(config).toMatchObject({ host: parts.DATABASE_HOST, port: 5432, user: "app_admin", password: "app-password", database: "postsocial", ssl: { rejectUnauthorized: true, ca: "CA" } });
   });
 });
 
