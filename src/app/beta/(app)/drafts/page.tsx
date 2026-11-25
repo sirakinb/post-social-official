@@ -1,6 +1,7 @@
 import { Card } from "@/components/beta/ui";
 import { DRAFTS_LIMIT, firstMedia, loadDrafts, savedBy } from "@/lib/beta/drafts";
-import { loadViewer } from "@/lib/beta/workspace";
+import { callServer, loadViewer } from "@/lib/beta/workspace";
+import { pageReadsViaApi } from "@/lib/sign-in/rules";
 import { getMediaLinks } from "../create/actions";
 import { DraftsList, type DraftItem } from "./drafts-list";
 
@@ -10,7 +11,7 @@ export default async function DraftsPage() {
   const { workspace, client } = await loadViewer("/beta/drafts");
   if (!workspace) return <p className="p-8 text-ps-muted">You are not a member of any workspace yet.</p>;
 
-  const { rows, hasMore, failed } = await loadDrafts(client, workspace.id);
+  const { rows, hasMore, failed } = await loadDrafts(client, workspace.id, pageReadsViaApi() ? callServer : null);
   const media = rows.map(firstMedia);
   const { links, posters } = await getMediaLinks(workspace.id, media.filter((m) => m?.status === "ready").map((m) => m!.id));
 

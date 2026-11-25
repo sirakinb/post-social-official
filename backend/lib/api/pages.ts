@@ -150,6 +150,145 @@ export async function inboxAccountsList(sql: Sql, caller: Caller, input: { works
   return { accounts };
 }
 
+// ---- posts, as the calendar and the drafts list show them ------------------------------
+
+const ACTOR = (id: string) => `(SELECT json_build_object('kind', a.kind, 'display_name', a.display_name, 'client_name', a.client_name) FROM public.actors a WHERE a.id = ${id})`;
+
+// One post with who made it, where it goes and its media, in the shape the pages read.
+const POST_COLUMNS = `
+  o.id, o.status, o.caption, o.scheduled_at, o.created_at, o.updated_at, o.entry_point,
+  ${ACTOR("o.actor_id")} AS actors,
+  (SELECT coalesce(json_agg(json_build_object(
+     'platform', d.platform, 'status', d.status, 'live_url', d.live_url, 'options', d.options,
+     'connected_account_id', d.connected_account_id, 'error_message', d.error_message, 'may_be_live', d.may_be_live,
+     'connected_accounts', (SELECT json_build_object('display_name', c.display_name) FROM public.connected_accounts c WHERE c.id = d.connected_account_id))), '[]')
+   FROM public.destinations d WHERE d.post_id = o.id) AS destinations,
+  (SELECT coalesce(json_agg(json_build_object(
+     'position', pm.position,
+     'media_assets', (SELECT json_build_object('id', m.id, 'media_type', m.media_type, 'status', m.status) FROM public.media_assets m WHERE m.id = pm.media_asset_id))), '[]')
+   FROM public.post_media pm WHERE pm.post_id = o.id) AS post_media`;
+
+function instant(value: unknown, label: string): string {
+  const time = typeof value === "string" ? Date.parse(value) : NaN;
+  if (Number.isNaN(time)) throw new ApiError(400, `${label} must be a date and time.`);
+  return new Date(time).toISOString();
+}
+
+// The calendar: every post that isn't a draft, scheduled inside the window, or sent
+// straight away (no scheduled time) and created inside it.
+export async function calendarPage(sql: Sql, caller: Caller, input: { workspace_id?: unknown; from?: unknown; to?: unknown }) {
+  const workspaceId = await memberOf(sql, caller, input);
+  const from = instant(input.from, "from");
+  const to = instant(input.to, "to");
+  if (Date.parse(to) - Date.parse(from) > 400 * 24 * 3600_000) throw new ApiError(400, "The calendar window can be at most 400 days.");
+  const window = (column: string) => `SELECT ${POST_COLUMNS} FROM public.posts o WHERE o.workspace_id = $1 AND o.status <> 'draft' AND ${column} >= $2 AND ${column} < $3`;
+  const posts = await sql(
+    `(${window("o.scheduled_at")} LIMIT 800)
+     UNION ALL
+     (${window("o.created_at")} AND o.scheduled_at IS NULL LIMIT 800)`,
+    [workspaceId, from, to],
+  );
+  return { posts };
+}
+
+// Drafts, newest first. Asked for one more than is shown, so the page knows there are more.
+export async function draftsPage(sql: Sql, caller: Caller, input: { workspace_id?: unknown; limit?: unknown }) {
+  const workspaceId = await memberOf(sql, caller, input);
+  const limit = input.limit === undefined ? 201 : Number(input.limit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 201) throw new ApiError(400, "limit must be a whole number from 1 to 201.");
+  const posts = await sql(`SELECT ${POST_COLUMNS} FROM public.posts o WHERE o.workspace_id = $1 AND o.status = 'draft' ORDER BY o.updated_at DESC LIMIT $2`, [workspaceId, limit]);
+  return { posts };
+}
+
+// The media library: the newest files (hidden ones only when asked for), who added each,
+// and how many posts use it.
+export async function mediaPage(sql: Sql, caller: Caller, input: { workspace_id?: unknown; hidden?: unknown }) {
+  const workspaceId = await memberOf(sql, caller, input);
+  const media = await sql(
+    `SELECT m.id, m.status, m.display_name, m.file_name, m.media_type, m.mime_type, m.size_bytes, m.width, m.height, m.duration_seconds,
+            m.failure_reason, m.hidden_from_library_at, m.created_at,
+            (SELECT json_build_object('kind', a.kind, 'display_name', a.display_name) FROM public.actors a WHERE a.id = m.uploaded_by_actor_id) AS actors,
+            (SELECT count(*)::int FROM public.post_media pm WHERE pm.media_asset_id = m.id) AS used
+     FROM public.media_assets m
+     WHERE m.workspace_id = $1 AND m.status <> 'uploading' AND (m.hidden_from_library_at IS NOT NULL) = $2
+     ORDER BY m.created_at DESC LIMIT 120`,
+    [workspaceId, input.hidden === true],
+  );
+  return { media };
+}
+
+// ---- the activity log ------------------------------------------------------------------
+
+const NAMES = /^[a-z][a-z0-9_.]{0,60}$/;
+function names(value: unknown, label: string): string[] | null {
+  if (value === undefined || value === null) return null;
+  if (!Array.isArray(value) || value.length > 40 || value.some((item) => typeof item !== "string" || !NAMES.test(item))) throw new ApiError(400, `${label} is not valid.`);
+  return value as string[];
+}
+
+// One page of the workspace's log, newest first, with the filters the page offers: exact
+// event types (errors and warnings), event-type prefixes (an area), where it came from,
+// who did it, and "before" for the next page. With it: the post and account each
+// publishing event was about, and the people, keys and apps to filter by.
+export async function activityPage(
+  sql: Sql,
+  caller: Caller,
+  input: { workspace_id?: unknown; event_types?: unknown; prefixes?: unknown; source?: unknown; actor_id?: unknown; before?: unknown; limit?: unknown },
+) {
+  const workspaceId = await memberOf(sql, caller, input);
+  const eventTypes = names(input.event_types, "event_types");
+  const prefixes = names(input.prefixes, "prefixes");
+  const source = input.source === undefined || input.source === null ? null : names([input.source], "source")![0];
+  const actorId = optionalUuid(input.actor_id, "Actor");
+  const before = input.before === undefined || input.before === null ? null : instant(input.before, "before");
+  const limit = input.limit === undefined ? 51 : Number(input.limit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 201) throw new ApiError(400, "limit must be a whole number from 1 to 201.");
+
+  const [events, people] = await Promise.all([
+    sql<{ entity_type: string; entity_id: string | null }>(
+      `SELECT e.id, e.occurred_at, e.event_type, e.entry_point, e.entity_type, e.entity_id, e.summary, e.before_values, e.after_values, e.metadata,
+              ${ACTOR("e.actor_id")} AS actors
+       FROM public.audit_events e
+       WHERE e.workspace_id = $1
+         AND ($2::text[] IS NULL OR e.event_type = ANY($2::text[]))
+         AND ($3::text[] IS NULL OR EXISTS (SELECT 1 FROM unnest($3::text[]) AS prefix WHERE starts_with(e.event_type, prefix)))
+         AND ($4::text IS NULL OR e.entry_point = $4)
+         AND ($5::uuid IS NULL OR e.actor_id = $5::uuid)
+         AND ($6::timestamptz IS NULL OR e.occurred_at < $6::timestamptz)
+       ORDER BY e.occurred_at DESC LIMIT $7`,
+      [workspaceId, eventTypes, prefixes, source, actorId, before, limit],
+    ),
+    sql(`SELECT id, display_name FROM public.actors WHERE workspace_id = $1 AND kind IN ('user', 'api_key', 'oauth_grant') ORDER BY display_name`, [workspaceId]),
+  ]);
+  const destinationIds = [...new Set(events.filter((event) => event.entity_type === "destination" && event.entity_id).map((event) => event.entity_id!))];
+  const destinations = destinationIds.length
+    ? await sql(
+        `SELECT d.id, d.platform, d.post_id, d.connected_account_id, d.status, d.may_be_live,
+                (SELECT json_build_object('display_name', c.display_name) FROM public.connected_accounts c WHERE c.id = d.connected_account_id) AS connected_accounts,
+                ${ACTOR("d.actor_id")} AS actors
+         FROM public.destinations d WHERE d.workspace_id = $1 AND d.id = ANY($2::uuid[])`,
+        [workspaceId, destinationIds],
+      )
+    : [];
+  return { events, destinations, people };
+}
+
+// The API page: keys that still work, and the AI apps people here have signed in to.
+export async function apiPage(sql: Sql, caller: Caller, input: { workspace_id?: unknown }) {
+  const workspaceId = await memberOf(sql, caller, input);
+  const [row] = await sql<{ keys: unknown[]; grants: unknown[] }>(
+    `SELECT
+       (SELECT coalesce(json_agg(k ORDER BY k.created_at DESC), '[]') FROM (
+          SELECT id, name, key_prefix, mode, last_used_at, created_at FROM public.api_keys WHERE workspace_id = $1 AND revoked_at IS NULL) k) AS keys,
+       (SELECT coalesce(json_agg(g ORDER BY g.created_at DESC), '[]') FROM (
+          SELECT g.id, g.label, g.user_id, g.last_used_at, g.created_at,
+                 (SELECT coalesce(json_agg(json_build_object('display_name', a.display_name)), '[]') FROM public.actors a WHERE a.oauth_grant_id = g.id) AS actors
+          FROM public.oauth_grants g WHERE g.workspace_id = $1 AND g.revoked_at IS NULL) g) AS grants`,
+    [workspaceId],
+  );
+  return { keys: row?.keys ?? [], grants: row?.grants ?? [] };
+}
+
 // The actions above by name, for the route that serves them, and which of them only read.
 export const pageActions = {
   my_workspaces: (sql: Sql, caller: Caller) => myWorkspaces(sql, caller),
@@ -158,5 +297,10 @@ export const pageActions = {
   composer_page: composerPage,
   media_by_ids: mediaByIds,
   inbox_accounts: inboxAccountsList,
+  calendar_page: calendarPage,
+  drafts_page: draftsPage,
+  media_page: mediaPage,
+  activity_page: activityPage,
+  api_page: apiPage,
 };
 export const isPageRead = (action: string) => Object.hasOwn(pageActions, action);
