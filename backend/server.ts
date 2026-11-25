@@ -1,21 +1,23 @@
 // The Post Social API as one Node service (AWS: containers behind the load balancer).
 // Settings come from environment variables. Built into one file by backend/build.sh.
 //
-// Needs DATABASE_URL (the app_admin login). Sign-in tokens are checked with InsForge while
-// INSFORGE_BASE_URL is set; without it nobody can sign in through this service yet.
+// Needs the app_admin login (DATABASE_URL, or on AWS DATABASE_HOST, DATABASE_NAME and
+// DATABASE_PASSWORD). On AWS the rest arrive as one JSON object in SETTINGS_JSON. Sign-in
+// tokens are checked with InsForge while INSFORGE_BASE_URL is set; without it nobody can
+// sign in through this service yet.
+import "./lib/load-settings"; // first: spreads SETTINGS_JSON into the environment
 import { createServer } from "node:http";
 import pg from "pg";
-import { assertUtc, poolConfig, poolSql } from "./lib/database";
+import { assertUtc, databaseAddress, poolConfig, poolSql } from "./lib/database";
 import { userForToken } from "./lib/insforge-admin";
 import { nodeListener } from "./lib/node-http";
-import { required, type Env } from "./lib/settings";
+import type { Env } from "./lib/settings";
 import { createTelemetry, flushReports, reportError, setErrorReporter } from "./lib/telemetry";
 import { createService } from "./service";
 
 assertUtc();
 
 const env: Env = (name) => process.env[name];
-const setting = required(env);
 
 function log(message: string, details: Record<string, unknown> = {}) {
   console.log(JSON.stringify({ time: new Date().toISOString(), message, ...details }));
@@ -23,8 +25,10 @@ function log(message: string, details: Record<string, unknown> = {}) {
 
 setErrorReporter(createTelemetry({ key: env("POSTHOG_KEY"), host: env("POSTHOG_HOST"), service: "api", environment: env("APP_ENV") ?? "dev" }));
 
+const address = databaseAddress(env, "app");
+if (!address) throw new Error("Missing database settings: set DATABASE_URL, or DATABASE_HOST, DATABASE_NAME and DATABASE_PASSWORD.");
 const pool = new pg.Pool(poolConfig({
-  url: setting("DATABASE_URL"),
+  ...address,
   caFile: env("DATABASE_CA_FILE") ?? null,
   max: Number(env("DATABASE_POOL_MAX") ?? 10),
   applicationName: "postsocial-api",

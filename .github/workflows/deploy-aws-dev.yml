@@ -1,0 +1,142 @@
+# Deploys the backend to AWS dev (api-dev.postsocial.xyz) from the `dev` branch.
+#
+#   1. builds the API and worker bundles and their ARM64 images
+#   2. pushes them to our registry, tagged with the commit (a tag can't be overwritten)
+#   3. runs the migration task on the new image, inside the network (the database has no
+#      public address), then rolls the API and the worker; AWS goes back to the old build by
+#      itself if the new one doesn't come up healthy, and this run fails
+#   4. checks the API answers
+#
+# Off until the repository variable AWS_DEV_DEPLOY is "on" (Settings → Variables → Actions).
+# Before the dev services exist, a run only pushes the images and records the build, which
+# is what the first `cdk deploy PostSocialServices-dev` needs.
+#
+# No AWS keys: the job signs in as postsocial-github-deploy-dev through GitHub's own
+# identity. That role trusts only this repository's `dev` branch and can only push images
+# and roll dev's own services (infra/aws/lib). Prod is deployed by the release workflow,
+# with its own role, once we cut over.
+#
+# This repository is public, so are these logs: the steps print names and states only.
+name: Deploy to AWS dev
+run-name: Deploy to AWS dev @ ${{ github.sha }}
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - "backend/**"
+      - "worker/**"
+      - "migrations/**"
+      - "database/**"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/aws-deploy.mjs"
+      - ".github/workflows/deploy-aws-dev.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # lets the job sign in to AWS without stored keys
+
+# One at a time, in order: a second push waits for the first deploy to finish.
+concurrency:
+  group: aws-dev-deploy
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  AWS_ROLE: arn:aws:iam::039612844713:role/postsocial-github-deploy-dev
+  REGISTRY: 039612844713.dkr.ecr.us-east-1.amazonaws.com
+  API_URL: https://api-dev.postsocial.xyz
+
+jobs:
+  deploy:
+    if: github.repository == 'sirakinb/post-social-official' && github.ref == 'refs/heads/dev' && vars.AWS_DEV_DEPLOY == 'on'
+    # ARM64, like the containers on AWS, so the images build natively.
+    runs-on: ubuntu-24.04-arm
+    environment: Development
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      - name: Build the bundles
+        run: |
+          backend/build.sh
+          worker/build.sh
+
+      - name: Sign in to AWS
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ env.AWS_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: deploy-dev-${{ github.run_id }}
+
+      # The ARM64 runner image doesn't promise the AWS tool the way the x86 one does.
+      - name: AWS command-line tool
+        run: |
+          set -euo pipefail
+          if ! command -v aws >/dev/null; then
+            curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o "$RUNNER_TEMP/awscli.zip"
+            unzip -q "$RUNNER_TEMP/awscli.zip" -d "$RUNNER_TEMP"
+            sudo "$RUNNER_TEMP/aws/install"
+          fi
+          aws --version
+
+      - name: Build and push the images
+        run: |
+          set -euo pipefail
+          aws ecr get-login-password | docker login --username AWS --password-stdin "$REGISTRY" >/dev/null
+          for part in api worker; do
+            image="$REGISTRY/postsocial/$part:$GITHUB_SHA"
+            # A re-run of the same commit: the image is already there and can't be replaced.
+            if aws ecr describe-images --repository-name "postsocial/$part" --image-ids "imageTag=$GITHUB_SHA" >/dev/null 2>&1; then
+              echo "postsocial/$part:$GITHUB_SHA is already in the registry"
+              continue
+            fi
+            folder=$([[ "$part" == "api" ]] && echo backend || echo worker)
+            docker build --quiet --platform linux/arm64 --provenance=false -t "$image" "$folder"
+            docker push --quiet "$image"
+            echo "Pushed postsocial/$part:$GITHUB_SHA"
+          done
+
+      - name: Migrate and roll out
+        id: deploy
+        run: node scripts/aws-deploy.mjs dev "$GITHUB_SHA"
+
+      - name: Check dev answers
+        if: steps.deploy.outputs.result == 'deployed'
+        run: |
+          set -euo pipefail
+          # /healthz: the service is up. /readyz: it can reach its database.
+          for path in healthz readyz; do
+            curl -fsS --retry 6 --retry-delay 5 --retry-all-errors --max-time 15 "$API_URL/$path" -o /dev/null
+            echo "$API_URL/$path answers"
+          done
+          curl -fsS --retry 3 --retry-delay 5 --max-time 20 "$API_URL/api/v1/openapi.json" -o openapi.json
+          python3 -c "import json; d=json.load(open('openapi.json')); n=sum(len(m) for m in d['paths'].values()); print(f'The API answers with {n} operations'); assert n > 0"
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 -X POST "$API_URL/api/mcp" -H 'Content-Type: application/json' -d '{}')
+          [[ "$code" == "401" ]] || { echo "::error::MCP without a key answered $code, expected 401"; exit 1; }
+          echo "MCP asks for sign-in (401), as it should."
+
+      - name: Record what was deployed
+        if: always()
+        env:
+          RESULT: ${{ steps.deploy.outputs.result }}
+          OUTCOME: ${{ job.status }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          {
+            echo "### Deploy to AWS dev"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Commit | \`$GITHUB_SHA\` |"
+            echo "| Result | $OUTCOME (${RESULT:-not reached}) |"
+            echo "| Run by | $ACTOR |"
+            echo "| API | $API_URL |"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -12,6 +12,7 @@
 import { readFileSync } from "node:fs";
 import type { PoolConfig } from "pg";
 import type { Sql } from "./access";
+import type { Env } from "./settings";
 
 type QueryResult = { rows?: unknown[] } | Array<{ rows?: unknown[] }>;
 export type Queryable = { query: (text: string, values?: unknown[]) => Promise<QueryResult> };
@@ -81,37 +82,76 @@ export function userSql(pool: Connectable, userId: string): Sql {
   };
 }
 
-export type DatabaseSettings = {
-  url: string; // postgres://user:password@host:5432/name
+// Where the database is and who signs in. Either one address, or its parts: on AWS the host
+// is plain configuration and only the password comes from Secrets Manager, so no connection
+// string with a password in it exists anywhere.
+export type DatabaseAddress =
+  | { url: string } // postgres://user:password@host:5432/name
+  | { host: string; port?: number; database: string; user: string; password: string };
+
+export type DatabaseSettings = DatabaseAddress & {
   caFile?: string | null; // certificate authority to trust (AWS's RDS bundle, in the image)
   max?: number;
   statementTimeoutMs?: number;
   applicationName?: string;
 };
 
+// The login the API and the worker use. bootstrap.sql creates it; it runs as project_admin.
+export const APP_LOGIN = "app_admin";
+
+// Reads a login's address from settings: "app" is the API's and the worker's own login,
+// "owner" is the database owner's (setup and migrations only). Null when nothing is set.
+//
+//   app     DATABASE_URL,       or DATABASE_HOST + DATABASE_NAME + DATABASE_PASSWORD
+//   owner   DATABASE_OWNER_URL, or DATABASE_HOST + DATABASE_NAME + DATABASE_OWNER_USERNAME + DATABASE_OWNER_PASSWORD
+export function databaseAddress(env: Env, login: "app" | "owner"): DatabaseAddress | null {
+  const url = env(login === "app" ? "DATABASE_URL" : "DATABASE_OWNER_URL");
+  if (url) return { url };
+  const host = env("DATABASE_HOST");
+  const database = env("DATABASE_NAME");
+  const user = login === "app" ? APP_LOGIN : env("DATABASE_OWNER_USERNAME");
+  const password = env(login === "app" ? "DATABASE_PASSWORD" : "DATABASE_OWNER_PASSWORD");
+  if (!host || !database || !user || !password) return null;
+  const port = Number(env("DATABASE_PORT") ?? 5432);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("DATABASE_PORT is not a port number.");
+  return { host, port, database, user, password };
+}
+
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]", "host.docker.internal"]);
 
-// Connection settings from a database address. Built by hand rather than passed as a
-// connection string, because `pg` lets a string's sslmode override the options given next to
-// it. Connections are encrypted and the server's certificate is checked, except to a
-// database on this machine or when the address says sslmode=disable (local development).
-export function poolConfig(settings: DatabaseSettings, readFile: (path: string) => string = (path) => readFileSync(path, "utf8")): PoolConfig {
+function parseAddress(address: DatabaseAddress) {
+  if (!("url" in address)) return { host: address.host, port: address.port ?? 5432, user: address.user, password: address.password, database: address.database, sslmode: null };
   let url: URL;
   try {
-    url = new URL(settings.url);
+    url = new URL(address.url);
   } catch {
     throw new Error("The database address is not a valid URL."); // never echo it: it holds the password
   }
   if (url.protocol !== "postgres:" && url.protocol !== "postgresql:") throw new Error("The database address must start with postgres://");
-  const database = decodeURIComponent(url.pathname.replace(/^\//, ""));
-  if (!url.hostname || !database) throw new Error("The database address needs a host and a database name.");
-
-  const plain = url.searchParams.get("sslmode") === "disable" || (LOCAL_HOSTS.has(url.hostname) && !url.searchParams.get("sslmode"));
   return {
     host: url.hostname,
     port: url.port ? Number(url.port) : 5432,
     user: decodeURIComponent(url.username),
     password: decodeURIComponent(url.password),
+    database: decodeURIComponent(url.pathname.replace(/^\//, "")),
+    sslmode: url.searchParams.get("sslmode"),
+  };
+}
+
+// Connection settings for the `pg` client. Built by hand rather than passed as a connection
+// string, because `pg` lets a string's sslmode override the options given next to it.
+// Connections are encrypted and the server's certificate is checked, except to a database
+// on this machine or when the address says sslmode=disable (local development).
+export function poolConfig(settings: DatabaseSettings, readFile: (path: string) => string = (path) => readFileSync(path, "utf8")): PoolConfig {
+  const { host, port, user, password, database, sslmode } = parseAddress(settings);
+  if (!host || !database) throw new Error("The database address needs a host and a database name.");
+
+  const plain = sslmode === "disable" || (LOCAL_HOSTS.has(host) && !sslmode);
+  return {
+    host,
+    port,
+    user,
+    password,
     database,
     ssl: plain ? false : { rejectUnauthorized: true, ...(settings.caFile ? { ca: readFile(settings.caFile) } : {}) },
     max: settings.max ?? 10,

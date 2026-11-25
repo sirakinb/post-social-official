@@ -8,7 +8,7 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import * as logs from "aws-cdk-lib/aws-logs";
 import type { Construct } from "constructs";
 import { acknowledge } from "./acknowledge";
-import { AVAILABILITY_ZONES, ENVIRONMENTS, ENV_NAMES, GITHUB_OIDC_PROVIDER_ARN, GITHUB_REPO, type EnvName } from "./config";
+import { ACCOUNT, AVAILABILITY_ZONES, CLUSTER_NAME, deployRoleName, ENVIRONMENTS, ENV_NAMES, GITHUB_OIDC_PROVIDER_ARN, GITHUB_REPO, imageTagParameter, REGION, type EnvName } from "./config";
 
 export class FoundationStack extends Stack {
   readonly vpc: ec2.Vpc;
@@ -64,16 +64,16 @@ export class FoundationStack extends Stack {
       });
     this.repositories = { api: repository("api"), worker: repository("worker") };
 
-    this.cluster = new ecs.Cluster(this, "Cluster", { clusterName: "postsocial", vpc: this.vpc, containerInsightsV2: ecs.ContainerInsights.DISABLED });
+    this.cluster = new ecs.Cluster(this, "Cluster", { clusterName: CLUSTER_NAME, vpc: this.vpc, containerInsightsV2: ecs.ContainerInsights.DISABLED });
 
     // GitHub signs in as these roles with its own identity, so no AWS keys are stored in
     // GitHub. Each role trusts one branch of this repository and the GitHub environment that
-    // is itself limited to that branch. They can push images; rights to roll out a service
-    // are added with the services.
+    // is itself limited to that branch. Here they can push images and record which build
+    // their own environment runs; rights to roll out a service are added by the services stack.
     const deployRole = (envName: EnvName) => {
       const { deployBranch, githubEnvironment } = ENVIRONMENTS[envName];
       const role = new iam.Role(this, `GitHubDeploy-${envName}`, {
-        roleName: `postsocial-github-deploy-${envName}`,
+        roleName: deployRoleName(envName),
         description: `GitHub Actions on ${deployBranch} of ${GITHUB_REPO}: deploy Post Social ${envName}`,
         maxSessionDuration: Duration.hours(1),
         assumedBy: new iam.WebIdentityPrincipal(GITHUB_OIDC_PROVIDER_ARN, {
@@ -83,8 +83,22 @@ export class FoundationStack extends Stack {
           },
         }),
       });
-      this.repositories.api.grantPush(role);
-      this.repositories.worker.grantPush(role);
+      for (const images of Object.values(this.repositories)) {
+        images.grantPush(role);
+        // Lets a re-run see that a commit's image is already there (tags can't be overwritten).
+        images.grant(role, "ecr:DescribeImages");
+      }
+      role.addToPolicy(
+        new iam.PolicyStatement({
+          actions: ["ssm:GetParameter", "ssm:PutParameter"],
+          resources: [`arn:aws:ssm:${REGION}:${ACCOUNT}:parameter${imageTagParameter(envName)}`],
+        }),
+      );
+      // Read-only, and here rather than with the services so a deploy can tell "not created
+      // yet" from "not allowed" before its environment's services exist.
+      const ownServices = `arn:aws:ecs:${REGION}:${ACCOUNT}:service/${CLUSTER_NAME}/postsocial-${envName}-*`;
+      role.addToPolicy(new iam.PolicyStatement({ actions: ["ecs:DescribeServices"], resources: [ownServices] }));
+      acknowledge(role, { id: `AwsSolutions-IAM5[Resource::${ownServices}]`, reason: "Reading the state of this environment's own services (its API and worker), which are created later by the services stack." });
       acknowledge(role, { id: "AwsSolutions-IAM5[Resource::*]", reason: "ecr:GetAuthorizationToken has no resource to limit it to; every other right names the two repositories." });
       return role;
     };

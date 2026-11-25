@@ -16,10 +16,11 @@ from InsForge: `tasks/aws-migration.md`. What runs where today: `infra/README.md
 | `PostSocialEdge` | One public load balancer shared by dev and prod, and the HTTPS certificate for `api.postsocial.xyz` and `api-dev.postsocial.xyz` | About $25 a month |
 | `PostSocialData-dev` | Dev's Postgres 15 database (private, encrypted), the firewall groups for its API and worker, its settings (`postsocial/dev/api`, `postsocial/dev/worker`) and logs | About $16 a month |
 | `PostSocialData-prod` | The same for prod, with deletion protection and 7 days of automatic backups | About $16 a month |
+| `PostSocialServices-dev` | Dev's API (1 container behind the load balancer at `api-dev.postsocial.xyz`), its worker (1 container), the migration task, and what dev's GitHub role may roll out | About $23 a month |
+| `PostSocialServices-prod` | The same for prod: 2 API containers at `api.postsocial.xyz` and a larger worker | About $40 a month |
 
-Not here yet: the API and worker services themselves. They are added once the backend runs
-as a Node service (step 6 in `tasks/aws-migration.md`), in their own stack per environment,
-so a service change can never replace a database.
+The services are their own stack per environment, so a service change can never replace a
+database. Costs are list prices for containers running all month, each with a public address.
 
 ## Choices worth knowing
 
@@ -36,6 +37,19 @@ so a service change can never replace a database.
   images and nothing else.
 - **One database zone for now.** A standby (Multi-AZ) roughly doubles the database cost; turn
   it on once there are paying users.
+- **The stack decides the shape, the deploy decides the build.** Sizes, settings and firewall
+  rules live here. Which commit's images run is recorded by the deploy workflow in
+  `/postsocial/<env>/image-tag` (Parameter Store) and read back at every stack deploy, so
+  changing a stack never moves a service to a different build.
+- **A bad build rolls itself back.** A new API container must pass `/healthz` behind the load
+  balancer before an old one stops; if it doesn't, AWS returns to the previous build and
+  the deploy fails. There is only ever one worker: the old one stops before the new starts.
+- **Three database logins.** The services sign in as `app_admin`, whose password is made up
+  inside AWS (`postsocial/<env>/database-app`). Only the migration task holds the owner
+  login. Neither password is ever in this repo, in GitHub or in a connection string.
+- **Settings arrive as one JSON object** (`SETTINGS_JSON`, from `postsocial/<env>/api` or
+  `/worker`). What is set on the container itself wins: the database's address, the
+  environment's name and the API's own address can't be overridden by a copied setting.
 
 ## The checklist
 
@@ -70,7 +84,32 @@ npx cdk deploy PostSocialFoundation --profile postsocial
 ```
 
 Order: `PostSocialFoundation`, then `PostSocialData-dev`, then `PostSocialEdge`, then
-`PostSocialData-prod` shortly before the cutover.
+`PostSocialData-prod` shortly before the cutover. All four are live (2026-11-25).
+
+### Bringing an environment's services up for the first time
+
+The services stack starts containers, so it needs images to start and settings to read.
+
+1. Deploy the shared and data stacks from this branch (adds the app login's password and
+   lets the GitHub role record a build): `npx cdk deploy PostSocialFoundation PostSocialEdge PostSocialData-dev --profile postsocial`.
+2. Fill in the settings: `node scripts/aws-copy-settings.mjs dev --dry-run`, read the list of
+   names, then run it without `--dry-run`. Values go from InsForge to AWS without being shown.
+3. Turn the deploy on (repository variable `AWS_DEV_DEPLOY` = `on`) and let it run once on
+   `dev`. With no services yet it pushes the images and records the build, nothing else.
+4. `npx cdk deploy PostSocialServices-dev --exclusively --profile postsocial`. The API starts
+   but can't sign in to the database yet (`/healthz` 200, `/readyz` 503).
+5. Run the deploy again (re-run the workflow). This time it runs the migration task, which
+   sets up the database and gives `app_admin` its password, then rolls both services.
+6. Add the DNS record in Cloudflare: `api-dev` CNAME to the load balancer's address, DNS only.
+
+After that every push to `dev` that touches the backend deploys by itself
+(`.github/workflows/deploy-aws-dev.yml`, `scripts/aws-deploy.mjs`).
+
+### Rotating the app login's password
+
+Change the `password` in `postsocial/<env>/database-app` (Secrets Manager), then run a
+deploy: the migration task gives the database the new password, and the services read it as
+they restart. For the minute in between, new connections from the old containers fail.
 
 - **The certificate waits for DNS.** The first `PostSocialEdge` deploy pauses until the
   records AWS asks for (shown in Certificate Manager) exist in Cloudflare.

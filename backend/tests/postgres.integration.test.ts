@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Caller } from "../lib/access";
 import { createKey } from "../lib/api/keys";
 import { assertUtc, DatabaseError, poolConfig, poolSql, userSql } from "../lib/database";
+import { scramVerifier, setPasswordStatement } from "../lib/scram";
 import { provisionWorkspace } from "../lib/signup";
 import { createService } from "../service";
 
@@ -17,6 +18,7 @@ const enabled = process.env.POSTSOCIAL_PG_TESTS === "1";
 const port = process.env.LOCAL_DB_PORT ?? "55432";
 const adminUrl = process.env.DATABASE_URL ?? `postgres://app_admin:local@127.0.0.1:${port}/postsocial`;
 const userUrl = process.env.DATABASE_USER_URL ?? `postgres://app_user:local@127.0.0.1:${port}/postsocial`;
+const ownerUrl = process.env.DATABASE_OWNER_URL ?? `postgres://postsocial_admin:local@127.0.0.1:${port}/postsocial`;
 
 describe.skipIf(!enabled)("the backend on plain Postgres", () => {
   const adminPool = new pg.Pool(poolConfig({ url: adminUrl, max: 4 }));
@@ -154,5 +156,33 @@ describe.skipIf(!enabled)("the backend on plain Postgres", () => {
       expect((await call("/api/v1/accounts", "ps_live_not_a_real_key_000000000000000000000000")).status).toBe(401);
       expect((await call("/api/v1/accounts")).status).toBe(401);
     });
+  });
+
+  it("a login can sign in with a password that was only ever sent to the database as a hash", async () => {
+    // What migrate.mjs --bootstrap does on AWS for app_admin, on a throwaway login here.
+    const role = `test_login_${suffix.replace(/[^a-z0-9]/g, "_")}`;
+    const password = `pw${suffix.replace(/[^a-z0-9]/g, "")}0123456789abcdef`;
+    const owner = new pg.Client(poolConfig({ url: ownerUrl }));
+    await owner.connect();
+    try {
+      await owner.query(`CREATE ROLE ${role} LOGIN`);
+      await owner.query(setPasswordStatement(role, password));
+      const [{ rolpassword }] = (await owner.query(`select rolpassword from pg_authid where rolname = $1`, [role]).catch(() => ({ rows: [{ rolpassword: null }] }))).rows;
+      // Only a superuser can read pg_authid; when we can, check nothing but the hash is stored.
+      if (rolpassword) expect(rolpassword).toMatch(/^SCRAM-SHA-256\$4096:/);
+
+      const login = new pg.Client(poolConfig({ host: "127.0.0.1", port: Number(port), database: "postsocial", user: role, password }));
+      await login.connect();
+      expect((await login.query("select current_user as who")).rows).toEqual([{ who: role }]);
+      await login.end();
+
+      const wrong = new pg.Client(poolConfig({ host: "127.0.0.1", port: Number(port), database: "postsocial", user: role, password: `${password}x` }));
+      await expect(wrong.connect()).rejects.toThrow(/password authentication failed/);
+      await wrong.end().catch(() => {});
+      expect(scramVerifier(password)).not.toContain(password);
+    } finally {
+      await owner.query(`DROP ROLE IF EXISTS ${role}`);
+      await owner.end();
+    }
   });
 });
