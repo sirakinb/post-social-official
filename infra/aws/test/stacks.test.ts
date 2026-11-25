@@ -177,8 +177,8 @@ describe.each(ENV_NAMES)("%s services", (envName) => {
   const service = (part: string) => resources(template, "AWS::ECS::Service").find((s) => s.Properties.ServiceName === `postsocial-${envName}-${part}`)!;
   const names = (list: unknown) => (list as { Name: string }[]).map((item) => item.Name).sort();
 
-  it("runs the API, the worker and the migration task on ARM64 Fargate", () => {
-    expect(Object.keys(definitions).sort()).toEqual(["api", "migrate", "worker"].map((part) => `postsocial-${envName}-${part}`));
+  it("runs the API, the worker and the two database tasks on ARM64 Fargate", () => {
+    expect(Object.keys(definitions).sort()).toEqual(["api", "copy", "migrate", "worker"].map((part) => `postsocial-${envName}-${part}`));
     for (const definition of Object.values(definitions)) {
       expect(definition.Properties).toMatchObject({ RequiresCompatibilities: ["FARGATE"], NetworkMode: "awsvpc", RuntimePlatform: { CpuArchitecture: "ARM64", OperatingSystemFamily: "LINUX" } });
     }
@@ -195,9 +195,9 @@ describe.each(ENV_NAMES)("%s services", (envName) => {
     });
   });
 
-  it("never runs two workers at once", () => {
+  it("never runs two workers at once, and none on dev while dev's worker is still on InsForge", () => {
     expect(service("worker").Properties).toMatchObject({
-      DesiredCount: 1,
+      DesiredCount: envName === "prod" ? 1 : 0,
       DeploymentConfiguration: { DeploymentCircuitBreaker: { Enable: true, Rollback: true }, MinimumHealthyPercent: 0, MaximumPercent: 100 },
     });
     expect(service("worker").Properties.LoadBalancers).toBeUndefined();
@@ -271,9 +271,35 @@ describe.each(ENV_NAMES)("%s services", (envName) => {
     expect(reads("migrate")).not.toMatch(/Settings/);
   });
 
+  it("fills the database from InsForge with a task only a person can start", () => {
+    // Postgres's own tools, running the script in database/, as the owner.
+    expect(JSON.stringify(container("copy").Image)).toBe('"public.ecr.aws/docker/library/postgres:15"');
+    expect((container("copy").Command as string[]).slice(0, 2)).toEqual(["bash", "-c"]);
+    expect((container("copy").Command as string[])[2]).toContain("pg_restore");
+    expect(names(container("copy").Secrets)).toEqual(["PGPASSWORD", "PGUSER", "SOURCE_URL"]);
+    expect(names(container("copy").Environment)).toEqual(["PGDATABASE", "PGHOST", "PGPORT", "PGSSLMODE", "WORK_DIR"]);
+    expect(container("copy")).toMatchObject({ ReadonlyRootFilesystem: true, MountPoints: [{ ContainerPath: "/work", ReadOnly: false }] });
+    // InsForge's address lives in a secret that exists only while a copy runs: it is named
+    // here and never created here, so no stack ever holds it.
+    template.resourceCountIs("AWS::SecretsManager::Secret", 0);
+    const address = `arn:aws:secretsmanager:us-east-1:039612844713:secret:postsocial/${envName}/insforge-address`;
+    expect((container("copy").Secrets as { Name: string; ValueFrom: string }[]).find((secret) => secret.Name === "SOURCE_URL")!.ValueFrom).toBe(address);
+    // AWS reads a name ending in a hyphen and six characters as carrying its own suffix.
+    expect(address).not.toMatch(/-[A-Za-z0-9]{6}$/);
+    const policy = resources(template, "AWS::IAM::Policy").find((p) => JSON.stringify(p.Properties.Roles).includes("copyTaskExecutionRole"))!;
+    const reads = JSON.stringify(statementsOf(policy).filter((s) => actionsOf(s).includes("secretsmanager:GetSecretValue")).map((s) => s.Resource));
+    expect(reads).toContain(`${address}-??????`);
+    expect(reads).toMatch(/DatabaseSecret/);
+    expect(reads).not.toMatch(/Settings|AppLogin/);
+    // A deploy from GitHub can neither run it nor hand it its roles.
+    const deploy = resources(template, "AWS::IAM::Policy").find((p) => p.Properties.PolicyName === `postsocial-${envName}-deploy`)!;
+    expect(JSON.stringify(statementsOf(deploy).filter((s) => actionsOf(s).some((action) => action === "ecs:RunTask" || action === "iam:PassRole")))).not.toMatch(/copy/i);
+  });
+
   it("runs whichever build the deploy recorded, read from AWS rather than written here", () => {
     expect(template.toJSON().Parameters).toMatchObject({ [Object.keys(template.toJSON().Parameters).find((key) => key.startsWith("SsmParameterValue"))!]: { Type: "AWS::SSM::Parameter::Value<String>", Default: `/postsocial/${envName}/image-tag` } });
     for (const part of ["api", "worker", "migrate"]) expect(JSON.stringify(container(part).Image)).toMatch(/SsmParameterValue/);
+    expect(JSON.stringify(container("copy").Image)).not.toMatch(/SsmParameterValue/);
     expect(JSON.stringify(container("api").Image)).toContain("apiImages");
     expect(JSON.stringify(container("worker").Image)).toContain("workerImages");
     expect(JSON.stringify(container("migrate").Image)).toContain("apiImages");
@@ -299,7 +325,7 @@ describe.each(ENV_NAMES)("%s services", (envName) => {
 
   it("gives the containers themselves no AWS rights", () => {
     const taskRoles = Object.keys(template.findResources("AWS::IAM::Role")).filter((id) => id.includes("TaskTaskRole"));
-    expect(taskRoles).toHaveLength(3);
+    expect(taskRoles).toHaveLength(4);
     for (const policy of resources(template, "AWS::IAM::Policy")) expect(JSON.stringify(policy.Properties.Roles)).not.toMatch(/TaskTaskRole/);
     for (const role of resources(template, "AWS::IAM::Role")) expect(role.Properties.ManagedPolicyArns).toBeUndefined();
   });

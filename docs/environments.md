@@ -188,8 +188,12 @@ that touches the backend, once the repository variable `AWS_DEV_DEPLOY` is `on`.
 the two images, runs the migration task inside the network, rolls the API and the worker
 (`scripts/aws-deploy.mjs`), and checks `https://api-dev.postsocial.xyz` answers. A build
 that doesn't come up healthy is rolled back by AWS and fails the run. Setting an environment
-up the first time, and copying its settings from InsForge
-(`scripts/aws-copy-settings.mjs`): `infra/aws/README.md`.
+up the first time, and copying its settings (`scripts/aws-copy-settings.mjs`) and its data
+(`scripts/aws-copy-database.mjs`) from InsForge: `infra/aws/README.md`.
+
+**Dev's worker still runs on InsForge.** AWS dev holds a copy of dev's data, taken when the
+copy script was last run, and its worker is stopped: two workers on the same accounts would
+both renew the same platform tokens. The AWS one starts on the day the dev website moves over.
 
 **Sign-in.** While `INSFORGE_BASE_URL` is set, the service checks sign-in tokens with InsForge,
 as the functions do. Without it nobody can sign in through the service (API keys and AI app

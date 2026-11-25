@@ -1,18 +1,22 @@
 // One environment's running pieces: the API behind the shared load balancer, the worker, and
-// the one-off task that sets up and migrates the database. Kept apart from the data stack so
-// changing a service can never replace the database.
+// the two one-off tasks that work on the database from inside the network (set up and
+// migrate; fill from a copy of InsForge). Kept apart from the data stack so changing a
+// service can never replace the database.
 //
 // This stack decides the shape (sizes, settings, firewall rules, who may deploy). Which build
 // runs is decided by the deploy workflow (scripts/aws-deploy.mjs), one commit at a time.
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { Duration, Stack, type StackProps } from "aws-cdk-lib";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecs from "aws-cdk-lib/aws-ecs";
 import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import * as iam from "aws-cdk-lib/aws-iam";
+import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import * as ssm from "aws-cdk-lib/aws-ssm";
 import type { Construct } from "constructs";
 import { acknowledge } from "./acknowledge";
-import { ACCOUNT, CLUSTER_NAME, CONTAINER_PORT, DATABASE_NAME, deployRoleName, ENVIRONMENTS, imageTagParameter, REGION, type EnvName } from "./config";
+import { ACCOUNT, CLUSTER_NAME, CONTAINER_PORT, copySourceSecret, DATABASE_NAME, deployRoleName, ENVIRONMENTS, imageTagParameter, REGION, type EnvName } from "./config";
 import type { DataStack } from "./data-stack";
 import type { EdgeStack } from "./edge-stack";
 import type { FoundationStack } from "./foundation-stack";
@@ -30,11 +34,12 @@ export class ServicesStack extends Stack {
   readonly api: ecs.FargateService;
   readonly worker: ecs.FargateService;
   readonly migrate: ecs.FargateTaskDefinition;
+  readonly copy: ecs.FargateTaskDefinition;
 
   constructor(scope: Construct, id: string, props: ServicesStackProps) {
     super(scope, id, props);
     const { envName, foundation, edge, data } = props;
-    const { apiDomain, apiTasks, appEnv, listenerPriority, workerCpu } = ENVIRONMENTS[envName];
+    const { apiDomain, apiTasks, appEnv, listenerPriority, workerCpu, workerTasks } = ENVIRONMENTS[envName];
     const { cluster, repositories, vpc } = foundation;
     const name = (part: string) => `postsocial-${envName}-${part}`;
 
@@ -160,8 +165,9 @@ export class ServicesStack extends Stack {
       serviceName: name("worker"),
       cluster,
       taskDefinition: workerTask,
-      // Exactly one: two workers would both renew the same platform tokens.
-      desiredCount: 1,
+      // Never more than one: two workers would both renew the same platform tokens. None
+      // while this environment's worker still runs on InsForge (config.ts).
+      desiredCount: workerTasks,
       securityGroups: [workerAccess],
       ...placement,
       circuitBreaker: rollout.circuitBreaker,
@@ -190,6 +196,39 @@ export class ServicesStack extends Stack {
       readonlyRootFilesystem: true,
     });
 
+    // --- Filling the database from a copy of InsForge ----------------------------------
+    // Started by hand (scripts/aws-copy-database.mjs), never by a deploy: the GitHub role
+    // below is given neither this task nor its roles. It runs Postgres's own tools, signs
+    // in as the owner, and reads InsForge's address from a secret that exists only while a
+    // copy runs: the script creates it and deletes it, so it is named here, not made here.
+    const copySourceArn = `arn:aws:secretsmanager:${REGION}:${ACCOUNT}:secret:${copySourceSecret(envName)}`;
+    const copySource = secretsmanager.Secret.fromSecretPartialArn(this, "CopySource", copySourceArn);
+    this.copy = task("copy", 256, 512);
+    this.copy.addVolume({ name: "scratch" });
+    const copyContainer = this.copy.addContainer("copy", {
+      // Postgres 15's client tools, the same major version as both databases.
+      image: ecs.ContainerImage.fromRegistry("public.ecr.aws/docker/library/postgres:15"),
+      command: ["bash", "-c", readFileSync(path.join(__dirname, "../../../database/copy-from-insforge.sh"), "utf8")],
+      environment: {
+        PGHOST: data.database.dbInstanceEndpointAddress,
+        PGPORT: data.database.dbInstanceEndpointPort,
+        PGDATABASE: DATABASE_NAME,
+        // Encrypted. The image has no copy of AWS's certificate authorities to check the
+        // database's certificate against; the connection never leaves our network.
+        PGSSLMODE: "require",
+        WORK_DIR: "/work",
+      },
+      secrets: {
+        SOURCE_URL: ecs.Secret.fromSecretsManager(copySource),
+        PGUSER: ecs.Secret.fromSecretsManager(owner, "username"),
+        PGPASSWORD: ecs.Secret.fromSecretsManager(owner, "password"),
+      },
+      logging: ecs.LogDrivers.awsLogs({ logGroup: data.logGroups.api, streamPrefix: "copy" }),
+      readonlyRootFilesystem: true,
+    });
+    // Where the dump sits while the task runs; it goes when the task does.
+    copyContainer.addMountPoints({ sourceVolume: "scratch", containerPath: "/work", readOnly: false });
+
     // --- What the GitHub deploy role may do here ---------------------------------------
     // Added to the role the foundation stack made, which only this environment's branch can
     // use. It can roll these two services and run this migration task, with these roles.
@@ -217,7 +256,8 @@ export class ServicesStack extends Stack {
       ],
     });
 
-    for (const definition of [apiTask, workerTask, this.migrate]) {
+    acknowledge(this.copy.obtainExecutionRole(), { id: `AwsSolutions-IAM5[Resource::${copySourceArn}-??????]`, reason: "One secret by name: the six characters are the suffix AWS adds to it, which changes each time the copy script creates it." });
+    for (const definition of [apiTask, workerTask, this.migrate, this.copy]) {
       acknowledge(definition, PLAIN_SETTINGS);
       acknowledge(definition.obtainExecutionRole(), { id: "AwsSolutions-IAM5[Resource::*]", reason: "ecr:GetAuthorizationToken has no resource to limit it to; pulling images and reading secrets name their own." });
     }

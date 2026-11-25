@@ -32,13 +32,17 @@ export type EnvConfig = {
   apiTasks: number;
   // The worker's share of a processor, in 1024ths (256 is a quarter). It has 1 GB of memory.
   workerCpu: 256 | 512;
+  // 1, or 0 while this environment's worker still runs on InsForge. Never both at once on
+  // the same data: two workers would renew the same platform tokens and publish the same
+  // posts. Dev goes to 1 on the day the dev website moves to this backend.
+  workerTasks: 0 | 1;
   // Where this environment's rule sits on the shared HTTPS listener. Must differ per environment.
   listenerPriority: number;
 };
 
 export const ENVIRONMENTS: Record<EnvName, EnvConfig> = {
-  dev: { apiDomain: "api-dev.postsocial.xyz", deployBranch: "dev", githubEnvironment: "Development", backupDays: 1, protect: false, appEnv: "dev", apiTasks: 1, workerCpu: 256, listenerPriority: 20 },
-  prod: { apiDomain: "api.postsocial.xyz", deployBranch: "main", githubEnvironment: "Production", backupDays: 7, protect: true, appEnv: "production", apiTasks: 2, workerCpu: 512, listenerPriority: 10 },
+  dev: { apiDomain: "api-dev.postsocial.xyz", deployBranch: "dev", githubEnvironment: "Development", backupDays: 1, protect: false, appEnv: "dev", apiTasks: 1, workerCpu: 256, workerTasks: 0, listenerPriority: 20 },
+  prod: { apiDomain: "api.postsocial.xyz", deployBranch: "main", githubEnvironment: "Production", backupDays: 7, protect: true, appEnv: "production", apiTasks: 2, workerCpu: 512, workerTasks: 1, listenerPriority: 10 },
 };
 
 export const ENV_NAMES = Object.keys(ENVIRONMENTS) as EnvName[];
@@ -52,6 +56,11 @@ export const DATABASE_NAME = "postsocial";
 // reads it, so changing the stack never moves a service to a different build. It is not
 // created here on purpose: a stack that owned it would reset it.
 export const imageTagParameter = (envName: EnvName) => `/postsocial/${envName}/image-tag`;
+
+// The secret that holds InsForge's database address while a copy runs, and at no other
+// time: scripts/aws-copy-database.mjs creates it, and deletes it when the copy ends. (The
+// name must not end in a hyphen and six characters, which AWS would read as its own suffix.)
+export const copySourceSecret = (envName: EnvName) => `postsocial/${envName}/insforge-address`;
 
 // Names other stacks and the deploy script refer to, so they are fixed here.
 export const CLUSTER_NAME = "postsocial";
