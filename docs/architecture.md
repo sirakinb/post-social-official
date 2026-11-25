@@ -122,6 +122,9 @@ every write is tied to the claim, so two workers can never send the same post.
   email): `user_invited` (`npm run beta:invite`), `$identify` (first sign-in in a browser),
   `account_connected` (a new account, not a reconnect), `post_submitted` (scheduled, sent
   now, or sent for approval; `when` says which) and `post_published` (worker).
+- **Moving to AWS (in progress):** the backend also builds as one Node service that talks to
+  Postgres directly (`backend/server.ts`, `backend/lib/database.ts`), from the same handlers
+  the InsForge functions run. Not serving anyone yet (`environments.md`, "Node API service").
 - **Backups:** prod is backed up automatically before every promotion; `npm run db:backup:prod`
   makes one by hand. A nightly job also saves a full copy of the prod database to our own S3
   bucket, outside InsForge (`environments.md`, "Nightly backups to S3").

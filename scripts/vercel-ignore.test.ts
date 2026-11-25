@@ -9,7 +9,7 @@ describe("which files count as website changes", () => {
     (file) => expect(affectsWebsite(file)).toBe(true),
   );
 
-  it.each(["worker/src/publish/x.ts", "infra/aws/lib/data-stack.ts", "migrations/20261115120000_x.sql", "backend/functions/api/handler.ts", "backend/lib/billing.test.ts", "docs/environments.md", "e2e/journeys/billing.e2e.ts", ".github/workflows/release.yml", "scripts/deploy-prod.sh", "README.md"])(
+  it.each(["worker/src/publish/x.ts", "infra/aws/lib/data-stack.ts", "migrations/20261115120000_x.sql", "backend/functions/api/handler.ts", "backend/lib/billing.test.ts", "docs/environments.md", "e2e/journeys/billing.e2e.ts", ".github/workflows/release.yml", "scripts/deploy-prod.sh", "README.md", "backend/server.ts", "backend/service.ts", "backend/migrate.ts", "backend/Dockerfile", "backend/build.sh", "database/bootstrap.sql"])(
     "%s doesn't",
     (file) => expect(affectsWebsite(file)).toBe(false),
   );

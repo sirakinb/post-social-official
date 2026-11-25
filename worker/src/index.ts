@@ -1,6 +1,8 @@
-// Post Social worker: background media jobs and storage sweeps. Runs as a container on
-// InsForge Compute; settings come from environment variables.
+// Post Social worker: background media jobs and storage sweeps. Runs as a container (InsForge
+// Compute today, AWS next); settings come from environment variables.
 import { createServer } from "node:http";
+import pg from "pg";
+import { assertUtc, poolConfig, poolSql } from "../../backend/lib/database";
 import { createSql } from "../../backend/lib/insforge-admin";
 import { createR2 } from "../../backend/lib/media/r2";
 import { expireUnusedMedia, removeExpiredSignIns, removeOrphanedFiles } from "./cleanup";
@@ -37,7 +39,21 @@ function log(message: string, details: Record<string, unknown> = {}) {
 // Errors and post outcomes go to PostHog when POSTHOG_KEY is set.
 const telemetry = createTelemetry({ key: process.env.POSTHOG_KEY, host: process.env.POSTHOG_HOST, service: "worker", environment: process.env.APP_ENV ?? "dev" });
 
-const sql = createSql(setting("INSFORGE_BASE_URL"), setting("INSFORGE_API_KEY"));
+// On AWS the worker talks to Postgres directly (DATABASE_URL, the app_admin login); on
+// InsForge it sends SQL through InsForge's admin endpoint. Both give the same `sql`.
+function connect() {
+  const url = process.env.DATABASE_URL;
+  if (!url) return createSql(setting("INSFORGE_BASE_URL"), setting("INSFORGE_API_KEY"));
+  assertUtc();
+  const pool = new pg.Pool(poolConfig({ url, caFile: process.env.DATABASE_CA_FILE ?? null, max: Number(process.env.DATABASE_POOL_MAX ?? 10), applicationName: "postsocial-worker" }));
+  // A dropped idle connection must not stop the worker; the pool replaces it.
+  pool.on("error", (error) => {
+    log("database pool error", { error: error.message });
+    void telemetry.captureException(error, { area: "database pool" });
+  });
+  return poolSql(pool);
+}
+const sql = connect();
 const r2 = createR2({
   accountId: setting("R2_ACCOUNT_ID"),
   bucket: setting("R2_BUCKET"),
@@ -110,7 +126,7 @@ process.on("SIGTERM", () => {
   setTimeout(() => process.exit(0), 10_000).unref();
 });
 
-log("worker started", { concurrency, retentionDays, publishAllowlist: allowlist.length });
+log("worker started", { concurrency, retentionDays, publishAllowlist: allowlist.length, database: process.env.DATABASE_URL ? "postgres" : "insforge" });
 for (let slot = 0; slot < concurrency; slot++) void jobLoop(slot);
 void every(60 * 60 * 1000, "retention sweep", () => expireUnusedMedia(sql, r2, retentionDays));
 void every(6 * 60 * 60 * 1000, "orphan sweep", () => removeOrphanedFiles(sql, r2));
