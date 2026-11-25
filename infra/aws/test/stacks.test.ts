@@ -140,12 +140,12 @@ describe.each(ENV_NAMES)("%s database", (envName) => {
 
   it("creates the service settings empty, so no value ever comes from this repo", () => {
     const names = resources(template, "AWS::SecretsManager::Secret").map((s) => s.Properties.Name);
-    expect(names.sort()).toEqual([`postsocial/${envName}/api`, `postsocial/${envName}/database-admin`, `postsocial/${envName}/database-app`, `postsocial/${envName}/worker`]);
+    expect(names.sort()).toEqual([`postsocial/${envName}/api`, `postsocial/${envName}/database-admin`, `postsocial/${envName}/database-app`, `postsocial/${envName}/sign-in`, `postsocial/${envName}/worker`]);
     for (const service of ["api", "worker"]) {
       template.hasResourceProperties("AWS::SecretsManager::Secret", { Name: `postsocial/${envName}/${service}`, SecretString: "{}" });
     }
-    // Both database passwords are generated inside AWS, never written here.
-    for (const login of ["database-admin", "database-app"]) {
+    // Both database passwords and the sign-in key are generated inside AWS, never written here.
+    for (const login of ["database-admin", "database-app", "sign-in"]) {
       template.hasResourceProperties("AWS::SecretsManager::Secret", { Name: `postsocial/${envName}/${login}`, GenerateSecretString: Match.anyValue() });
     }
   });
@@ -238,17 +238,21 @@ describe.each(ENV_NAMES)("%s services", (envName) => {
   it("gives the services their settings from Secrets Manager, and only names and addresses directly", () => {
     for (const part of ["api", "worker"]) {
       const secrets = container(part).Secrets as { Name: string; ValueFrom: unknown }[];
-      expect(names(secrets)).toEqual(["DATABASE_PASSWORD", "SETTINGS_JSON"]);
+      expect(names(secrets)).toEqual(part === "api" ? ["AUTH_SECRET", "DATABASE_PASSWORD", "SETTINGS_JSON"] : ["DATABASE_PASSWORD", "SETTINGS_JSON"]);
       expect(JSON.stringify(secrets.find((s) => s.Name === "SETTINGS_JSON")!.ValueFrom)).toContain(`${part}Settings`);
       expect(JSON.stringify(secrets.find((s) => s.Name === "DATABASE_PASSWORD")!.ValueFrom)).toMatch(/AppLogin.*:password::/);
       const plain = names(container(part).Environment);
-      expect(plain).toEqual(["APP_ENV", "CONNECTIONS_BASE_URL", "DATABASE_HOST", "DATABASE_NAME", "DATABASE_PORT", "PORT"]);
+      expect(plain).toEqual([...(part === "api" ? ["AUTH_BASE_URL"] : []), "APP_ENV", "CONNECTIONS_BASE_URL", "DATABASE_HOST", "DATABASE_NAME", "DATABASE_PORT", "PORT"].sort());
       expect(container(part).Environment).toEqual(expect.arrayContaining([
         { Name: "APP_ENV", Value: envName === "prod" ? "production" : "dev" },
         { Name: "CONNECTIONS_BASE_URL", Value: `https://${domain}/connections` },
         { Name: "DATABASE_NAME", Value: "postsocial" },
       ]));
     }
+    // Sign-in runs in the API, at its own public address, with a key only the API is given.
+    expect(container("api").Environment).toEqual(expect.arrayContaining([{ Name: "AUTH_BASE_URL", Value: `https://${domain}` }]));
+    expect(JSON.stringify((container("api").Secrets as { Name: string; ValueFrom: unknown }[]).find((s) => s.Name === "AUTH_SECRET")!.ValueFrom)).toMatch(/SignIn/);
+    for (const part of ["worker", "migrate", "copy"]) expect(JSON.stringify(container(part))).not.toMatch(/AUTH_SECRET|SignIn/);
     // The running services never hold the database owner's login.
     for (const part of ["api", "worker"]) expect(JSON.stringify(container(part))).not.toMatch(/DATABASE_OWNER|DatabaseSecret/);
   });
@@ -264,11 +268,12 @@ describe.each(ENV_NAMES)("%s services", (envName) => {
       return JSON.stringify(statementsOf(policy).filter((s) => actionsOf(s).includes("secretsmanager:GetSecretValue")).map((s) => s.Resource));
     };
     expect(reads("api")).toMatch(/apiSettings/);
+    expect(reads("api")).toMatch(/SignIn/);
     expect(reads("api")).not.toMatch(/workerSettings|DatabaseSecret/);
     expect(reads("worker")).toMatch(/workerSettings/);
-    expect(reads("worker")).not.toMatch(/apiSettings|DatabaseSecret/);
+    expect(reads("worker")).not.toMatch(/apiSettings|DatabaseSecret|SignIn/);
     expect(reads("migrate")).toMatch(/DatabaseSecret/);
-    expect(reads("migrate")).not.toMatch(/Settings/);
+    expect(reads("migrate")).not.toMatch(/Settings|SignIn/);
   });
 
   it("fills the database from InsForge with a task only a person can start", () => {

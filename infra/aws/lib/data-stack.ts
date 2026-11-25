@@ -21,6 +21,8 @@ export class DataStack extends Stack {
   readonly settings: { api: secretsmanager.Secret; worker: secretsmanager.Secret };
   // The password of app_admin, the login the API and worker use.
   readonly appLogin: secretsmanager.Secret;
+  // What our own sign-in signs session tokens with (backend/lib/auth).
+  readonly signIn: secretsmanager.Secret;
   readonly logGroups: { api: logs.LogGroup; worker: logs.LogGroup };
 
   constructor(scope: Construct, id: string, props: DataStackProps) {
@@ -101,6 +103,15 @@ export class DataStack extends Stack {
       removalPolicy: RemovalPolicy.RETAIN,
     });
 
+    // Made up inside AWS and read only by the API. Changing it signs everyone out (their
+    // tokens stop checking out); nothing else is lost.
+    this.signIn = new secretsmanager.Secret(this, "SignIn", {
+      secretName: `postsocial/${envName}/sign-in`,
+      description: `Post Social ${envName}: the key the API signs session tokens with`,
+      generateSecretString: { excludePunctuation: true, passwordLength: 64 },
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
+
     const serviceLogs = (service: "api" | "worker") =>
       new logs.LogGroup(this, `${service}Logs`, { logGroupName: `/postsocial/${envName}/${service}`, retention: logs.RetentionDays.ONE_MONTH, removalPolicy: keep });
     this.logGroups = { api: serviceLogs("api"), worker: serviceLogs("worker") };
@@ -113,6 +124,7 @@ export class DataStack extends Stack {
     );
     if (!protect) acknowledge(this.database, { id: "AwsSolutions-RDS10", reason: "Dev holds test data and is rebuilt freely; prod has deletion protection." });
     acknowledge(this.appLogin, { id: "AwsSolutions-SMG4", reason: "Rotated by hand: change the value, then run a deploy, which gives the database the new password before the services restart with it." });
+    acknowledge(this.signIn, { id: "AwsSolutions-SMG4", reason: "Rotating it signs every person out, so it is changed by hand, on purpose, if it is ever exposed." });
     for (const secret of Object.values(this.settings)) {
       acknowledge(secret, { id: "AwsSolutions-SMG4", reason: "Holds third-party keys (platforms, Stripe, R2) that are rotated at their source, not by AWS." });
     }

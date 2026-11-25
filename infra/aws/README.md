@@ -14,7 +14,7 @@ from InsForge: `tasks/aws-migration.md`. What runs where today: `infra/README.md
 |---|---|---|
 | `PostSocialFoundation` | The network (2 zones, public subnets for containers, isolated subnets for databases, no NAT gateway), network logs, the image registry (`postsocial/api`, `postsocial/worker`), the container cluster, and the two roles GitHub deploys with | Cents a month |
 | `PostSocialEdge` | One public load balancer shared by dev and prod, and the HTTPS certificate for `api.postsocial.xyz` and `api-dev.postsocial.xyz` | About $25 a month |
-| `PostSocialData-dev` | Dev's Postgres 15 database (private, encrypted), the firewall groups for its API and worker, its settings (`postsocial/dev/api`, `postsocial/dev/worker`) and logs | About $16 a month |
+| `PostSocialData-dev` | Dev's Postgres 15 database (private, encrypted), the firewall groups for its API and worker, its settings (`postsocial/dev/api`, `postsocial/dev/worker`), the keys made inside AWS (database logins, the sign-in key) and logs | About $17 a month |
 | `PostSocialData-prod` | The same for prod, with deletion protection and 7 days of automatic backups | About $16 a month |
 | `PostSocialServices-dev` | Dev's API (1 container behind the load balancer at `api-dev.postsocial.xyz`), its worker (stopped until dev's website moves to this backend), the migration task, the task that fills the database from InsForge, and what dev's GitHub role may roll out | About $11 a month (about $23 with the worker running) |
 | `PostSocialServices-prod` | The same for prod: 2 API containers at `api.postsocial.xyz` and a larger worker | About $40 a month |
@@ -124,7 +124,8 @@ only read. The copy is one transaction: a run that fails leaves the AWS database
   starts (`workerTasks` in `lib/config.ts`) only once its InsForge worker is stopped for good.
 - **What is left behind:** InsForge's own tables (its sign-in settings, storage, logs), its
   default of giving every new table to everyone signed in, and the tokens Google returned at
-  past sign-ins. `auth.user_providers` comes along only for `scripts/migrate-auth.sql` to read.
+  past sign-ins. `auth.user_providers` comes along only for `database/migrate-auth.sql`, which carries its
+  rows over and removes it.
 - **Prod** is copied once, at cutover; the script refuses it until then.
 
 To try a change to the copy on your machine: `npm run db:local`, then run

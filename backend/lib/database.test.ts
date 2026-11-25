@@ -107,6 +107,11 @@ describe("poolConfig", () => {
     expect(config.ssl).toEqual({ rejectUnauthorized: true, ca: "CERT" });
   });
 
+  it("can keep a pool to one schema, for our sign-in's tables", () => {
+    expect(poolConfig({ url: "postgres://u:p@db.example.com/postsocial", schema: "auth" }, ca).options).toBe("-c timezone=UTC -c search_path=auth");
+    for (const schema of ["auth, public", "auth -c role=postgres", "Auth", ""]) expect(() => poolConfig({ url: "postgres://u:p@db.example.com/postsocial", schema }, ca)).toThrow("Not a schema name.");
+  });
+
   it("can't be talked out of checking the certificate by the address", () => {
     for (const mode of ["no-verify", "require", "prefer", "allow"]) {
       const config = poolConfig({ url: `postgres://u:p@db.example.com/postsocial?sslmode=${mode}` }, ca);

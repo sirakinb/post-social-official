@@ -1,7 +1,9 @@
 // Brings a plain Postgres database up to date: node migrate.mjs [--bootstrap] [--baseline]
 //
-//   --bootstrap   first run database/bootstrap.sql (roles, the auth schema; safe to repeat),
-//                 and, when DATABASE_PASSWORD is set, give the API's login that password
+//   --bootstrap   first run database/bootstrap.sql (roles, the auth schema; safe to repeat)
+//                 and database/migrate-auth.sql (sign-in records from an InsForge copy;
+//                 changes nothing when there are none), and, when DATABASE_PASSWORD is
+//                 set, give the API's login that password
 //   --baseline    record every migration as applied without running it (a database that
 //                 was just filled from a copy of InsForge)
 //
@@ -47,6 +49,9 @@ try {
   if (args.has("--bootstrap")) {
     await client.query(readFileSync(process.env.BOOTSTRAP_FILE ?? path.join(here, "bootstrap.sql"), "utf8"));
     console.log("bootstrap done");
+    // Sign-in records that came with a copy of InsForge, into the form our sign-in reads.
+    await client.query(readFileSync(process.env.MIGRATE_AUTH_FILE ?? path.join(here, "migrate-auth.sql"), "utf8"));
+    console.log("sign-in records in place");
     // On AWS the app login's password is generated in Secrets Manager; this is the one place
     // it is given to the database (as a hash). Running again after a change rotates it.
     const password = process.env.DATABASE_PASSWORD;
