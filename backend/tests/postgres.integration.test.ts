@@ -9,6 +9,7 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Caller } from "../lib/access";
 import { createKey } from "../lib/api/keys";
+import { appFrame, myWorkspaces } from "../lib/api/pages";
 import { assertUtc, DatabaseError, poolConfig, poolSql, userSql } from "../lib/database";
 import { scramVerifier, setPasswordStatement } from "../lib/scram";
 import { provisionWorkspace } from "../lib/signup";
@@ -131,6 +132,40 @@ describe.skipIf(!enabled)("the backend on plain Postgres", () => {
       } finally {
         client.release();
       }
+    });
+  });
+
+  describe("what the web app's pages read through the API", () => {
+    const ada = (): Caller => ({ userId: people.ada.id, displayName: `ada ${suffix}`, entryPoint: "ui" });
+    const ben = (): Caller => ({ userId: people.ben.id, displayName: `ben ${suffix}`, entryPoint: "ui" });
+
+    it("lists a person's own workspaces and nobody else's", async () => {
+      const mine = await myWorkspaces(sql, ada());
+      expect(mine.workspaces).toHaveLength(1);
+      expect(mine.workspaces[0]).toMatchObject({ id: people.ada.workspaceId, role: "owner" });
+      expect(typeof mine.workspaces[0].slug).toBe("string");
+      expect((await myWorkspaces(sql, ben())).workspaces.map((w) => w.id)).toEqual([people.ben.workspaceId]);
+    });
+
+    it("gives the app frame from real rows, the same numbers the database's own usage function gives", async () => {
+      const before = await appFrame(sql, ada(), { workspace_id: people.ada.workspaceId });
+      expect(before.plan).toMatchObject({ name: expect.any(String), max_posts_per_month: expect.any(Number) });
+      expect(before).toMatchObject({ posts_published: 0, steps: { account: false, ai: false, post: false } });
+
+      await sql(`INSERT INTO public.usage_events (workspace_id, event_type, quantity) VALUES ($1, 'post_published', 2), ($1, 'post_published', 3), ($1, 'api_call', 9)`, [people.ada.workspaceId]);
+      // Last month's don't count.
+      await sql(`INSERT INTO public.usage_events (workspace_id, event_type, quantity, occurred_at) VALUES ($1, 'post_published', 50, date_trunc('month', now()) - interval '1 day')`, [people.ada.workspaceId]);
+      const after = await appFrame(sql, ada(), { workspace_id: people.ada.workspaceId });
+      expect(after.posts_published).toBe(5);
+      const [fromFunction] = await sql<{ quantity: string }>(`SELECT quantity FROM public.workspace_usage($1) WHERE event_type = 'post_published'`, [people.ada.workspaceId]);
+      expect(Number(fromFunction.quantity)).toBe(after.posts_published);
+      // What the person's own session read before, through the access policies: the same plan.
+      const [viaPolicies] = await userSql(userPool, people.ada.id)<{ name: string; max_posts_per_month: number }>(`SELECT p.name, p.max_posts_per_month FROM public.workspace_plans wp JOIN public.plans p ON p.id = wp.plan_id WHERE wp.workspace_id = $1`, [people.ada.workspaceId]);
+      expect(after.plan).toEqual(viaPolicies);
+    });
+
+    it("won't show one person another's workspace", async () => {
+      await expect(appFrame(sql, ben(), { workspace_id: people.ada.workspaceId })).rejects.toMatchObject({ status: 404 });
     });
   });
 

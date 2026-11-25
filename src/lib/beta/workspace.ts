@@ -1,8 +1,11 @@
 // The signed-in person and the workspace they are looking at, for /beta pages. Reads go
 // through row-level security with the person's own session; changes go through the
 // server functions (`callServer`), which apply the same rules as the API and MCP.
+import { cache } from "react";
 import { redirect } from "next/navigation";
+import { pageReadsViaApi } from "@/lib/sign-in/rules";
 import { sessionToken, signedOutPath } from "@/lib/sign-in/session";
+import type { AppFrame, MyWorkspace } from "../../../backend/lib/api/pages";
 import { currentUser, insforgeServerClient } from "@/lib/insforge/server";
 
 export type Workspace = { id: string; name: string; slug: string; role: string };
@@ -15,7 +18,8 @@ export async function loadViewer(path: string, slug?: string) {
   const user = await currentUser();
   if (!user) redirect(await signedOutPath(path));
   const client = await insforgeServerClient();
-  const readMemberships = async () => {
+  const readMemberships = async (): Promise<Workspace[]> => {
+    if (pageReadsViaApi()) return myWorkspaces();
     const { data } = await client.database.from("workspace_members").select("role, workspace_id, workspaces(name, slug)").eq("user_id", user.id);
     return ((data ?? []) as unknown as MembershipRow[]).map((m) => ({ id: m.workspace_id, name: m.workspaces?.name ?? "Workspace", slug: m.workspaces?.slug ?? "", role: m.role }));
   };
@@ -50,3 +54,12 @@ export async function callServerResult<T>(action: string, body: Record<string, u
   if (!response.ok) return { data: null, error: json?.error?.message ?? `The server answered ${response.status}.` };
   return { data: json, error: null };
 }
+
+// The signed-in person's workspaces, through the API.
+export async function myWorkspaces(): Promise<MyWorkspace[]> {
+  return (await callServer<{ workspaces: MyWorkspace[] }>("my_workspaces", {}))?.workspaces ?? [];
+}
+
+// What surrounds every page (plan, posts this month, getting-started steps), through the
+// API. Asked once per page render, however many places show a piece of it.
+export const loadFrame = cache((workspaceId: string) => callServer<AppFrame>("app_frame", { workspace_id: workspaceId }));

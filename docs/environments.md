@@ -222,6 +222,13 @@ on by the `AUTH_SECRET` it is given there:
   `FUNCTIONS_BASE_URL` (`…/functions`, for posts and media), and the same
   `INTERNAL_PROXY_SECRET` the API has. Until the pages' own data reads go through the API
   too, an environment can't be switched: they still read through InsForge.
+- **Page reads.** The app's pages have always read what they show straight from the
+  database, with the person's InsForge session. `PAGE_READS=api` in an environment's web
+  settings makes the pages that have been moved ask our API instead
+  (`backend/lib/api/pages.ts`: one action per page, each checking the person belongs to the
+  workspace). It works on InsForge and on AWS alike, so it is tried on dev, then prod,
+  before sign-in moves. Setting `SIGN_IN_URL` implies it. Moved so far: the person's
+  workspaces and the app frame (plan, posts this month, getting-started steps).
 
 Without `AUTH_SECRET`, the service checks tokens with InsForge while `INSFORGE_BASE_URL` is
 set, as the functions do. With neither, nobody can sign in through it (API keys and AI app
