@@ -123,7 +123,8 @@ every write is tied to the claim, so two workers can never send the same post.
   `account_connected` (a new account, not a reconnect), `post_submitted` (scheduled, sent
   now, or sent for approval; `when` says which) and `post_published` (worker).
 - **Backups:** prod is backed up automatically before every promotion; `npm run db:backup:prod`
-  makes one by hand.
+  makes one by hand. A nightly job also saves a full copy of the prod database to our own S3
+  bucket, outside InsForge (`environments.md`, "Nightly backups to S3").
 - **Checks:** every change runs typecheck, lint, tests and build in CI; database tests run
   against dev with `npm run test:db`.
 

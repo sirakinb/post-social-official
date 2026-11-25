@@ -1,0 +1,127 @@
+# Nightly backup of the prod database to our own S3 bucket, so a copy exists outside
+# InsForge (which keeps only its latest nightly backup). It only reads from prod.
+#
+#   1. asks InsForge for prod's Postgres address (never printed, never stored)
+#   2. dumps the whole database with pg_dump and checks the dump is not empty
+#   3. uploads it to s3://postsocial-backups-039612844713/daily/ (kept 30 days)
+#      and, on the 1st of the month, to monthly/ (kept 12 months)
+#
+# A failed run is the alert: GitHub emails the repository owner about failed scheduled runs.
+#
+# Secrets: INSFORGE_USER_API_KEY (the one the release uses). No AWS keys: the job signs in
+# to AWS as the role below through GitHub's own identity, and that role can only add files
+# to the two folders above. It can't read, list or delete them, and only runs from main.
+# Restore steps: docs/environments.md, "Nightly backups to S3".
+name: Back up prod database
+
+on:
+  schedule:
+    - cron: "17 8 * * *" # about 3am US Eastern
+  workflow_dispatch:
+    inputs:
+      monthly:
+        description: Also save this run as the monthly copy
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write # lets the job sign in to AWS without stored keys
+
+concurrency:
+  group: prod-backup
+  cancel-in-progress: false
+
+env:
+  INSFORGE_PROJECT_ID: 33078020-21bd-4dcc-b3b5-c8033c84a097
+  INSFORGE_ORG_ID: d27676cf-6600-4e47-9fdc-efef807ff6ce
+  INSFORGE_CLI: "@insforge/cli@0.2.8"
+  # Same major version as the prod database. pg_dump refuses a newer server, so if InsForge
+  # upgrades Postgres this run fails with a clear message: raise it to match.
+  POSTGRES_IMAGE: postgres:15
+  AWS_REGION: us-east-1
+  AWS_ROLE: arn:aws:iam::039612844713:role/postsocial-github-backup
+  BUCKET: postsocial-backups-039612844713
+  # A dump with fewer tables or less data than this is treated as a broken or wiped database.
+  MIN_PUBLIC_TABLES: "30"
+  MIN_BYTES: "1000000"
+
+jobs:
+  backup:
+    # The AWS role only trusts main of this repository.
+    if: github.repository == 'sirakinb/post-social-official' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Dump prod
+        id: dump
+        run: |
+          set -euo pipefail
+          [[ -n "$INSFORGE_USER_API_KEY" ]] || { echo "::error::Add the repository secret INSFORGE_USER_API_KEY first."; exit 1; }
+
+          # An empty folder: the CLI writes its link there, and nothing from the repo is needed.
+          work="$RUNNER_TEMP/insforge"; out="$RUNNER_TEMP/out"
+          mkdir -p "$work" "$out"; cd "$work"
+          npx -y "$INSFORGE_CLI" login --user-api-key "$INSFORGE_USER_API_KEY" >/dev/null
+          npx -y "$INSFORGE_CLI" link --project-id "$INSFORGE_PROJECT_ID" --org-id "$INSFORGE_ORG_ID" >/dev/null
+
+          # The address holds the database password. Hide it in the log before anything else runs.
+          url="$(npx -y "$INSFORGE_CLI" db connection-string 2>/dev/null | grep -Eo 'postgres(ql)?://[^[:space:]"]+' | head -1 || true)"
+          [[ -n "$url" ]] || { echo "::error::InsForge didn't return a database address."; exit 1; }
+          echo "::add-mask::$url"
+          password="$(PGURL="$url" python3 -c 'import os, urllib.parse as u; print(u.urlparse(os.environ["PGURL"]).password or "")')"
+          [[ -z "$password" ]] || echo "::add-mask::$password"
+
+          stamp="$(date -u +%Y-%m-%d)"
+          file="postsocial-prod-$stamp.dump"
+          docker run --rm -e PGURL="$url" -e FILE="$file" -e MIN_PUBLIC_TABLES -v "$out:/out" "$POSTGRES_IMAGE" bash -euo pipefail -c '
+            pg_dump --version
+            pg_dump "$PGURL" --format=custom --compress=9 --file="/out/$FILE"
+            # Check the dump opens and holds real data, so a wiped database fails the run
+            # instead of quietly saving an empty file.
+            pg_restore --list "/out/$FILE" > /tmp/list.txt
+            public_tables="$(grep -c " TABLE DATA public " /tmp/list.txt || true)"
+            users="$(psql "$PGURL" -Atc "select count(*) from auth.users")"
+            echo "Tables with data in public: $public_tables. Users: $users."
+            [[ "$public_tables" -ge "$MIN_PUBLIC_TABLES" ]] || { echo "::error::Only $public_tables public tables in the dump (expected at least $MIN_PUBLIC_TABLES)."; exit 1; }
+            [[ "$users" -gt 0 ]] || { echo "::error::auth.users is empty."; exit 1; }
+            chmod 644 "/out/$FILE"
+          '
+
+          bytes="$(stat -c %s "$out/$file")"
+          echo "Dump size: $bytes bytes"
+          [[ "$bytes" -ge "$MIN_BYTES" ]] || { echo "::error::The dump is only $bytes bytes."; exit 1; }
+          echo "file=$file" >> "$GITHUB_OUTPUT"
+          echo "path=$out/$file" >> "$GITHUB_OUTPUT"
+          echo "day=$(date -u +%d)" >> "$GITHUB_OUTPUT"
+          echo "month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
+        env:
+          INSFORGE_USER_API_KEY: ${{ secrets.INSFORGE_USER_API_KEY }}
+
+      # After the dump on purpose: the step that talks to InsForge never holds AWS access.
+      - name: Sign in to AWS
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ env.AWS_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: prod-backup-${{ github.run_id }}
+
+      - name: Upload to S3
+        run: |
+          set -euo pipefail
+          aws s3 cp "$DUMP_PATH" "s3://$BUCKET/daily/$DUMP_FILE" --no-progress
+          echo "Saved daily/$DUMP_FILE"
+          if [[ "$DAY" == "01" || "$MONTHLY" == "true" ]]; then
+            aws s3 cp "$DUMP_PATH" "s3://$BUCKET/monthly/postsocial-prod-$MONTH.dump" --no-progress
+            echo "Saved monthly/postsocial-prod-$MONTH.dump"
+          fi
+        env:
+          DUMP_PATH: ${{ steps.dump.outputs.path }}
+          DUMP_FILE: ${{ steps.dump.outputs.file }}
+          DAY: ${{ steps.dump.outputs.day }}
+          MONTH: ${{ steps.dump.outputs.month }}
+          MONTHLY: ${{ inputs.monthly }}
+
+      - name: Remove the local copy
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/out" "$RUNNER_TEMP/insforge"

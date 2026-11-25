@@ -115,6 +115,36 @@ only way to reuse it is `branch reset`, which rewinds dev to the day it was crea
 and drops every migration since. Replaying git migrations keeps dev long-lived.
 If dev ever drifts, reset it and run `npm run db:dev` to replay all migrations.
 
+## Nightly backups to S3
+
+InsForge keeps only its latest nightly backup, so we keep our own copies outside it.
+`.github/workflows/backup-prod.yml` runs every night at about 3am US Eastern, from `main`:
+
+- It asks InsForge for prod's Postgres address (with `INSFORGE_USER_API_KEY`, the release's
+  secret), dumps the whole database with `pg_dump`, and checks the dump holds real data. A
+  wiped or empty database fails the run instead of saving an empty file. It only reads prod.
+- The dump goes to `s3://postsocial-backups-039612844713` (AWS account 039612844713,
+  us-east-1): `daily/postsocial-prod-<date>.dump`, kept 30 days, and on the 1st of each month
+  `monthly/postsocial-prod-<month>.dump`, kept 12 months. The bucket is private, encrypted and
+  versioned; S3 deletes old files by itself.
+- No AWS keys are stored. The job signs in as the role `postsocial-github-backup` through
+  GitHub's identity; the role only trusts `main` of this repository and can only add files to
+  those two folders. It can't read, list or delete them.
+- A failed run is the alert: GitHub emails the repository owner. Run it by hand from the
+  Actions tab ("Back up prod database", Run workflow); tick "monthly" to also save a monthly copy.
+
+To restore, sign in to AWS as an admin (`aws login --profile postsocial`), download a file and
+load it into an empty Postgres 15 database:
+
+```bash
+aws s3 ls s3://postsocial-backups-039612844713/daily/ --profile postsocial
+aws s3 cp s3://postsocial-backups-039612844713/daily/postsocial-prod-<date>.dump . --profile postsocial
+pg_restore --no-owner --no-privileges --dbname "<target database address>" postsocial-prod-<date>.dump
+```
+
+The dump holds every schema (`public`, `auth` and InsForge's own). Add `--schema=public` to
+restore only the app's tables. It holds people's data: delete local copies when done.
+
 ## Accounts
 
 Public sign-up is off. Accounts are created with a script; the password is typed in when
