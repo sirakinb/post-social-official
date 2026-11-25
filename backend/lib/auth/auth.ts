@@ -59,6 +59,12 @@ export const ALLOWED = new Set([
   "POST /email-otp/reset-password",
 ]);
 
+// The only request headers sign-in is shown. Its caller is always our website's server,
+// proved by the shared secret before a request gets here, and the session travels as a
+// bearer token. So nothing a browser would add (cookies, where the page came from) has any
+// say, and Better Auth's checks on those can't turn a server's call away.
+const PASSED_ON = ["content-type", "authorization", "user-agent", "x-ps-client-ip"];
+
 const snake = <T extends string>(...fields: T[]) => Object.fromEntries(fields.map((field) => [field, field.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)])) as Record<T, string>;
 
 export function passwordProblem(password: unknown): string | null {
@@ -156,18 +162,29 @@ export function createAuth(settings: AuthSettings) {
   const handler: Handler = async (request) => {
     const path = new URL(request.url).pathname;
     if (!path.startsWith(`${AUTH_PATH}/`) || !ALLOWED.has(`${request.method} ${path.slice(AUTH_PATH.length)}`)) return notFound();
+    const body = request.method === "GET" ? undefined : await request.text();
     if (path === `${AUTH_PATH}/email-otp/send-verification-otp`) {
       // Only to confirm an address. The same route can also send a sign-in code, which we don't offer.
-      const body = (await request.clone().json().catch(() => null)) as { type?: unknown } | null;
-      if (body?.type !== "email-verification") return notFound();
+      let type: unknown;
+      try {
+        type = (JSON.parse(body ?? "") as { type?: unknown } | null)?.type;
+      } catch {
+        // Not JSON: not ours.
+      }
+      if (type !== "email-verification") return notFound();
     }
-    const answer = await auth.handler(request);
+    const headers = new Headers();
+    for (const name of PASSED_ON) {
+      const value = request.headers.get(name);
+      if (value) headers.set(name, value);
+    }
+    const answer = await auth.handler(new Request(request.url, { method: request.method, headers, body }));
     // The website reads the token from "set-auth-token" and sets its own cookie. Better
     // Auth's cookies are for a browser talking to it directly, which never happens here.
-    const headers = new Headers(answer.headers);
-    headers.delete("Set-Cookie");
-    headers.set("Cache-Control", "no-store");
-    return new Response(answer.body, { status: answer.status, headers });
+    const answerHeaders = new Headers(answer.headers);
+    answerHeaders.delete("Set-Cookie");
+    answerHeaders.set("Cache-Control", "no-store");
+    return new Response(answer.body, { status: answer.status, headers: answerHeaders });
   };
 
   // Who a session token belongs to, or null. The same answer InsForge's check gave, so no

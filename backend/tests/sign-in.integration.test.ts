@@ -36,11 +36,14 @@ describe.skipIf(!enabled)("our own sign-in on plain Postgres", () => {
     onError: (error) => void errors.push(error),
   });
 
-  const call = async (method: string, path: string, body?: unknown, token?: string | null) => {
+  // What Node's own fetch adds to every request, which is how our website's server calls
+  // us. Better Auth reads these as a browser that won't say where it came from.
+  const FROM_A_SERVER = { "Sec-Fetch-Mode": "cors", "Accept-Language": "*", Accept: "*/*" };
+  const call = async (method: string, path: string, body?: unknown, token?: string | null, extra: Record<string, string> = {}) => {
     const response = await auth.handler(
       new Request(`https://api.postsocial.test${AUTH_PATH}${path}`, {
         method,
-        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        headers: { "Content-Type": "application/json", ...FROM_A_SERVER, ...(token ? { Authorization: `Bearer ${token}` } : {}), ...extra },
         body: body === undefined ? undefined : JSON.stringify(body),
       }),
     );
@@ -200,6 +203,17 @@ describe.skipIf(!enabled)("our own sign-in on plain Postgres", () => {
     expect(signedIn.status).toBe(200);
     expect(await auth.userForToken(signedIn.token)).toEqual({ id: person.id, email, name: "Carried Over" });
     expect((await call("POST", "/sign-in/email", { email, password: "not-their-password-7" })).status).toBe(401);
+  });
+
+  it("takes the session from the bearer token only, whatever else a request carries", async () => {
+    const { email, password } = await signUp("headers");
+    // Headers a browser on another site would send change nothing: the caller is our server.
+    const signedIn = await call("POST", "/sign-in/email", { email, password }, null, { Origin: "https://somewhere-else.test", "Sec-Fetch-Site": "cross-site", Referer: "https://somewhere-else.test/page" });
+    expect(signedIn.status).toBe(200);
+    // A cookie is never a way in, even one carrying a real session token.
+    const asCookie = { Cookie: `better-auth.session_token=${encodeURIComponent(signedIn.token!)}; __Secure-better-auth.session_token=${encodeURIComponent(signedIn.token!)}` };
+    expect((await call("GET", "/get-session", undefined, null, asCookie)).body).toBeNull();
+    expect((await call("GET", "/get-session", undefined, signedIn.token)).body).toMatchObject({ user: { email } });
   });
 
   it("offers only the routes the website uses", async () => {
