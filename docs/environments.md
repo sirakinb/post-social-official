@@ -214,6 +214,54 @@ DPoP-bound tokens, `private_key_jwt`), so nobody types a password into Post Soci
   description. No stats are read (reads are billed too). Set a spending cap in the
   console. When credits run out, posts fail with a plain "X credits ran out" message.
 
+## Platform addresses on our own domain
+
+Platforms can call us on the website's domain instead of the backend's, so the backend can
+move hosts without anything changing in a platform's dashboard. The website forwards these
+paths (`next.config.ts`, from `CONNECTIONS_BASE_URL` and `API_BASE_URL` in the web
+environment, read at build time):
+
+| Path on the website | Goes to | Used by |
+|---|---|---|
+| `/oauth/{instagram,facebook,threads,linkedin,x,bluesky}/callback` | `connections` function | Sign-in callbacks |
+| `/oauth/youtube/callback`, `/oauth/tiktok/callback` | pages on the website (no forwarding) | Google and TikTok sign-in |
+| `/oauth/bluesky/client-metadata.json`, `/oauth/bluesky/jwks.json` | `connections` function | Bluesky's client id and our public key |
+| `/meta/data-deletion`, `/meta/data-deletion/status`, `/meta/deauthorize`, `/meta/webhooks` | `connections` function | Meta (Facebook, Instagram, Threads) |
+| `/stripe/webhook` | `api` function | Stripe |
+
+Forwarding alone changes nothing: platforms keep using the backend's address until the
+`CONNECTIONS_PUBLIC_URL` secret is set (the website's address with no path:
+`https://www.postsocial.xyz` on prod, `https://dev.postsocial.xyz` on dev). Once set, the
+`connections` function and the worker give platforms our domain for sign-in callbacks, the
+Bluesky client id and Meta's deletion status link.
+
+Switching an environment, dev first:
+
+1. Deploy the website with the forwarding rules.
+2. In each platform's dashboard, **add** the new address next to the old one:
+   - **Meta** (Facebook, Instagram and Threads apps): the three redirect addresses
+     `/oauth/facebook/callback`, `/oauth/instagram/callback`, `/oauth/threads/callback`; the
+     data deletion address `/meta/data-deletion`; the deauthorize address `/meta/deauthorize`.
+     A webhook subscription holds one address, so `/meta/webhooks` replaces the old one (same
+     verify token, `META_WEBHOOK_VERIFY_TOKEN`).
+   - **LinkedIn:** `/oauth/linkedin/callback`. **X:** `/oauth/x/callback`.
+   - **Google (YouTube):** nothing; it is already on our domain.
+   - **TikTok:** nothing to add; set `TIKTOK_REDIRECT_URI` to
+     `https://www.postsocial.xyz/oauth/tiktok/callback` once TikTok has approved it.
+   - **Bluesky:** nothing to register. Its client id is the metadata address, so changing it
+     makes us a new app to Bluesky: every Bluesky account has to reconnect once.
+3. Set `CONNECTIONS_PUBLIC_URL` on that environment, then redeploy the `connections` function
+   and the worker together (Bluesky tokens only renew under the client id they were issued to).
+4. Connect one account per platform to check.
+5. **Stripe**, separately: add a webhook endpoint at `/stripe/webhook` on our domain. It gets
+   its own signing secret, so replace `STRIPE_WEBHOOK_SECRET`, redeploy the `api` function,
+   then remove the old endpoint. Stripe retries anything that arrives in between.
+
+To go back, delete `CONNECTIONS_PUBLIC_URL` and redeploy; the old addresses are still
+registered. Remove them from the dashboards only after the backend has moved. When the backend
+moves, change `CONNECTIONS_BASE_URL` and `API_BASE_URL` in the web environment and redeploy the
+website; nothing changes for the platforms.
+
 ## Media storage, functions and the worker
 
 | | Dev | Prod |

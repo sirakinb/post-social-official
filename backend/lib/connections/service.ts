@@ -3,6 +3,7 @@
 import { ApiError, isAgentCaller, membership, requireUuid, type Caller, type Sql } from "../access";
 import { accountLimitMessage } from "../billing";
 import { trackEvent } from "../telemetry";
+import { publicConnectionsUrl } from "./addresses";
 import { importKey, open, randomToken, seal, sha256Hex } from "./crypto";
 import { AtprotoError, finishSignIn, publicProfile, startSignIn, type PendingSignIn } from "./atproto";
 import { XError, finishXSignIn, startXSignIn, type PendingX } from "./x";
@@ -25,8 +26,9 @@ export function isPlatform(value: unknown): value is Platform {
   return typeof value === "string" && (PLATFORMS as string[]).includes(value);
 }
 
-// The platform sends people back here. YouTube is the exception: Google only allows
-// callbacks on domains we own, so its callback is on the web app, which forwards here.
+// The platform sends people back here: our own domain when CONNECTIONS_PUBLIC_URL is set (the
+// website forwards the callback to this function), otherwise this function's address. YouTube
+// always uses a page on the web app: Google only allows callbacks on domains we own.
 // TikTok can be pointed at another address it has already approved (TIKTOK_REDIRECT_URI,
 // the old Convex deployment's callback, which forwards here) while a new address waits for
 // its review. That deployment's code is gone from this repo; see docs/environments.md.
@@ -36,7 +38,7 @@ export function callbackUrl(platform: Platform, setting: Settings) {
     const override = optionalSetting(setting, "TIKTOK_REDIRECT_URI");
     if (override) return override;
   }
-  return `${setting("CONNECTIONS_BASE_URL")}/oauth/${platform}/callback`;
+  return `${publicConnectionsUrl(setting)}/oauth/${platform}/callback`;
 }
 
 function optionalSetting(setting: Settings, name: string) {

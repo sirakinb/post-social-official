@@ -30,6 +30,9 @@ trap 'rm -f "$env_file"' EXIT
     LINKEDIN_CLIENT_ID LINKEDIN_CLIENT_SECRET BLUESKY_CLIENT_JWK CONNECTIONS_BASE_URL X_CLIENT_ID X_CLIENT_SECRET; do
     echo "$name=$(secret "$name")"
   done
+  # The website address platforms call us at (optional). It must match the connections
+  # function's: Bluesky tokens only renew under the client id they were issued to.
+  echo "CONNECTIONS_PUBLIC_URL=$(secret CONNECTIONS_PUBLIC_URL 2>/dev/null || true)"
   # Dev only publishes to the owner's approved test accounts (platform account ids).
   if [[ "$target" == "dev" ]]; then echo "PUBLISH_ALLOWLIST=$(secret PUBLISH_ALLOWLIST)"; fi
   # Post stats only for platforms switched on in this environment (optional; none on prod
