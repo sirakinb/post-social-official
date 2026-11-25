@@ -23,6 +23,9 @@ export default defineConfig([
     "worker/dist/**",
     "ops/convex-forwarder/node_modules/**",
     "ops/convex-forwarder/convex/_generated/**",
+    // The AWS setup has its own packages and checks (infra/aws).
+    "infra/aws/node_modules/**",
+    "infra/aws/cdk.out/**",
     "next-env.d.ts",
   ]),
 ]);

@@ -17,6 +17,8 @@ jobs:
       - run: npm run typecheck
       - run: npm ci && npm run typecheck
         working-directory: ops/convex-forwarder
+      - run: npm ci && npm run typecheck && npm test && npm run synth
+        working-directory: infra/aws
       - run: npm run lint
       - run: npm test
       - run: npm run build
