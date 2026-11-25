@@ -253,9 +253,10 @@ Switching an environment, dev first:
 3. Set `CONNECTIONS_PUBLIC_URL` on that environment, then redeploy the `connections` function
    and the worker together (Bluesky tokens only renew under the client id they were issued to).
 4. Connect one account per platform to check.
-5. **Stripe**, separately: add a webhook endpoint at `/stripe/webhook` on our domain. It gets
-   its own signing secret, so replace `STRIPE_WEBHOOK_SECRET`, redeploy the `api` function,
-   then remove the old endpoint. Stripe retries anything that arrives in between.
+5. **Stripe**, separately: edit the existing webhook endpoint in Stripe's dashboard and change
+   its address to `/stripe/webhook` on our domain. Editing an endpoint keeps its signing
+   secret, so `STRIPE_WEBHOOK_SECRET` stays as it is. (Creating a new endpoint instead would
+   come with a new signing secret.) To go back, edit the address back.
 
 To go back, delete `CONNECTIONS_PUBLIC_URL` and redeploy; the old addresses are still
 registered. Remove them from the dashboards only after the backend has moved. When the backend
