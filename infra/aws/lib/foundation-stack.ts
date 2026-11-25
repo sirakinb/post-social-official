@@ -8,7 +8,7 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import * as logs from "aws-cdk-lib/aws-logs";
 import type { Construct } from "constructs";
 import { acknowledge } from "./acknowledge";
-import { ACCOUNT, AVAILABILITY_ZONES, CLUSTER_NAME, deployRoleName, ENVIRONMENTS, ENV_NAMES, GITHUB_OIDC_PROVIDER_ARN, GITHUB_REPO, imageTagParameter, REGION, type EnvName } from "./config";
+import { ACCOUNT, AVAILABILITY_ZONES, CLUSTER_NAME, deployRoleName, ENVIRONMENTS, ENV_NAMES, GITHUB_OIDC_PROVIDER_ARN, GITHUB_REPO, GITHUB_SUBJECT, imageTagParameter, REGION, type EnvName } from "./config";
 
 export class FoundationStack extends Stack {
   readonly vpc: ec2.Vpc;
@@ -112,8 +112,8 @@ export class FoundationStack extends Stack {
 // job that names one (GitHub only lets that environment run from its branch).
 export function githubSubjects(branch: string, environment: string) {
   return [
-    `repo:${GITHUB_REPO}:ref:refs/heads/${branch}`,
-    `repo:${GITHUB_REPO}:environment:${environment}`,
-    `repo:${GITHUB_REPO}:environment:${environment.toLowerCase()}`,
+    `${GITHUB_SUBJECT}:ref:refs/heads/${branch}`,
+    `${GITHUB_SUBJECT}:environment:${environment}`,
+    `${GITHUB_SUBJECT}:environment:${environment.toLowerCase()}`,
   ];
 }
