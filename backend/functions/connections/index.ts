@@ -3,6 +3,7 @@ import { withReporting } from "../../lib/telemetry";
 import { createSql, userForToken } from "../../lib/insforge-admin";
 import { createConnectionsHandler } from "./handler";
 import { forwardSettings } from "../../lib/inbox/webhooks";
+import { publicConnectionsUrl } from "../../lib/connections/addresses";
 import { createStripe, syncAccountQuantity } from "../../lib/billing";
 
 declare const Deno: { env: { get(name: string): string | undefined } };
@@ -27,7 +28,7 @@ export default withReporting("connections", (name) => Deno.env.get(name), create
   userForToken: (token) => userForToken(baseUrl, token),
   webAppHome: setting("WEB_APP_HOME"),
   metaAppSecrets: ["META_APP_SECRET", "INSTAGRAM_APP_SECRET", "THREADS_APP_SECRET"].map((n) => Deno.env.get(n)).filter((v): v is string => Boolean(v)),
-  selfBaseUrl: setting("CONNECTIONS_BASE_URL"),
+  selfBaseUrl: publicConnectionsUrl(setting),
   metaWebhookVerifyToken: Deno.env.get("META_WEBHOOK_VERIFY_TOKEN") ?? null,
   metaWebhookForward: forwardSettings((name) => Deno.env.get(name)),
   afterAccountsChanged: (workspaceId) => syncAccountQuantity(billing, workspaceId),

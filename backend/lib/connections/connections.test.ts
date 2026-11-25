@@ -85,6 +85,27 @@ describe("sign-in links", () => {
     expect(callbackUrl("tiktok", withOverride)).toBe("https://old.example/api/oauth/tiktok/callback");
     expect(callbackUrl("instagram", withOverride)).toBe("https://fn.example/connections/oauth/instagram/callback");
   });
+
+  it("sends platforms to our own domain once CONNECTIONS_PUBLIC_URL is set", () => {
+    const onSite = (name: string) => (name === "CONNECTIONS_PUBLIC_URL" ? "https://www.example.xyz/" : setting(name));
+    for (const platform of ["instagram", "facebook", "threads", "linkedin", "bluesky", "x", "tiktok"] as Platform[]) {
+      expect(callbackUrl(platform, onSite)).toBe(`https://www.example.xyz/oauth/${platform}/callback`);
+    }
+    // YouTube keeps its own setting, and TikTok's approved address still wins when set.
+    expect(callbackUrl("youtube", onSite)).toBe("http://localhost:3333/oauth/youtube/callback");
+    const both = (name: string) => (name === "TIKTOK_REDIRECT_URI" ? "https://old.example/api/oauth/tiktok/callback" : onSite(name));
+    expect(callbackUrl("tiktok", both)).toBe("https://old.example/api/oauth/tiktok/callback");
+  });
+
+  it("falls back to the function's address when CONNECTIONS_PUBLIC_URL is missing or empty", () => {
+    const empty = (name: string) => (name === "CONNECTIONS_PUBLIC_URL" ? "  " : setting(name));
+    const missing = (name: string) => {
+      if (name === "CONNECTIONS_PUBLIC_URL") throw new Error("Missing secret");
+      return setting(name);
+    };
+    expect(callbackUrl("linkedin", empty)).toBe("https://fn.example/connections/oauth/linkedin/callback");
+    expect(callbackUrl("linkedin", missing)).toBe("https://fn.example/connections/oauth/linkedin/callback");
+  });
 });
 
 describe("official stats for listed workspaces (preview)", () => {
