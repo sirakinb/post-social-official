@@ -5,6 +5,10 @@ import type { ActorKind } from "@/components/beta/marks";
 import { clientLabel } from "../../../backend/lib/api/clients";
 
 type Client = Awaited<ReturnType<typeof import("@/lib/insforge/server").insforgeServerClient>>;
+type Person = { id: string; display_name: string };
+// How a page asks our API (callServer in ./workspace). Passed in rather than imported:
+// this file's labels and types are also used in the browser, where that code can't go.
+export type ApiRead = <T>(action: string, body: Record<string, unknown>) => Promise<T | null>;
 
 export const AREAS = {
   posts: { label: "Posts", prefixes: ["post.", "destination."] },
@@ -132,43 +136,67 @@ export function whoDid(actor: Actor | null, postedBy: Actor | null): Pick<LogRow
 const WITH_APP = "kind, display_name, client_name";
 const WITHOUT_APP = "kind, display_name";
 
-export async function loadLogs(client: Client, workspaceId: string, filters: LogFilters, limit = 50) {
-  const events = (actor: string) => {
-    let query = client.database
-      .from("audit_events")
-      .select(`id, occurred_at, event_type, entry_point, entity_type, entity_id, summary, before_values, after_values, metadata, actors(${actor})`)
-      .eq("workspace_id", workspaceId)
-      .order("occurred_at", { ascending: false })
-      .limit(limit + 1);
-    if (filters.level === "errors") query = query.in("event_type", [...ERROR_EVENTS, ...WARNING_EVENTS]);
-    if (filters.area) query = query.or(AREAS[filters.area].prefixes.map((p) => `event_type.like.${p}*`).join(","));
-    if (filters.source) query = query.eq("entry_point", filters.source);
-    if (filters.actorId) query = query.eq("actor_id", filters.actorId);
-    if (filters.before) query = query.lt("occurred_at", filters.before);
-    return query;
+// With `api` given the log is read through our API; without it, straight from the database
+// with the person's InsForge session.
+export async function loadLogs(client: Client, workspaceId: string, filters: LogFilters, limit = 50, api: ApiRead | null = null) {
+  type Target = { id: string; platform: string; post_id: string; connected_account_id: string; status: string; may_be_live: boolean | null; connected_accounts: { display_name: string } | null; actors: Actor | null };
+  // The events and what each publishing event was about: from our API in one read, or
+  // (until every environment has moved) straight from the database with the person's
+  // InsForge session.
+  const viaApi = async (read: ApiRead) => {
+    const page = await read<{ events: EventRow[]; destinations: Target[]; people: Person[] }>("activity_page", {
+      workspace_id: workspaceId,
+      ...(filters.level === "errors" ? { event_types: [...ERROR_EVENTS, ...WARNING_EVENTS] } : {}),
+      ...(filters.area ? { prefixes: AREAS[filters.area].prefixes } : {}),
+      ...(filters.source ? { source: filters.source } : {}),
+      ...(filters.actorId ? { actor_id: filters.actorId } : {}),
+      ...(filters.before ? { before: filters.before } : {}),
+      limit: limit + 1,
+    });
+    return { rows: (page?.events ?? []).slice(0, limit), found: page?.events.length ?? 0, destinations: page?.destinations ?? [], people: page?.people ?? null, failed: !page };
   };
-  let actor = WITH_APP;
-  let { data, error } = await events(actor);
-  if (error) {
-    console.error("logs: reading with app names failed, retrying without", error);
-    actor = WITHOUT_APP;
-    ({ data, error } = await events(actor));
-  }
-  const rows = ((data ?? []) as unknown as EventRow[]).slice(0, limit);
+  const fromDatabase = async () => {
+    const events = (actor: string) => {
+      let query = client.database
+        .from("audit_events")
+        .select(`id, occurred_at, event_type, entry_point, entity_type, entity_id, summary, before_values, after_values, metadata, actors(${actor})`)
+        .eq("workspace_id", workspaceId)
+        .order("occurred_at", { ascending: false })
+        .limit(limit + 1);
+      if (filters.level === "errors") query = query.in("event_type", [...ERROR_EVENTS, ...WARNING_EVENTS]);
+      if (filters.area) query = query.or(AREAS[filters.area].prefixes.map((p) => `event_type.like.${p}*`).join(","));
+      if (filters.source) query = query.eq("entry_point", filters.source);
+      if (filters.actorId) query = query.eq("actor_id", filters.actorId);
+      if (filters.before) query = query.lt("occurred_at", filters.before);
+      return query;
+    };
+    let actor = WITH_APP;
+    let { data, error } = await events(actor);
+    if (error) {
+      console.error("logs: reading with app names failed, retrying without", error);
+      actor = WITHOUT_APP;
+      ({ data, error } = await events(actor));
+    }
+    const rows = ((data ?? []) as unknown as EventRow[]).slice(0, limit);
 
-  // Which post and account each publishing event was about.
-  const destinationIds = [...new Set(rows.filter((r) => r.entity_type === "destination" && r.entity_id).map((r) => r.entity_id!))];
+    // Which post and account each publishing event was about.
+    const destinationIds = [...new Set(rows.filter((r) => r.entity_type === "destination" && r.entity_id).map((r) => r.entity_id!))];
+    let destinations: Target[] = [];
+    if (destinationIds.length) {
+      const { data: found } = await client.database
+        .from("destinations")
+        .select(`id, platform, post_id, connected_account_id, status, may_be_live, connected_accounts(display_name), actors!destinations_actor_id_fkey(${actor})`)
+        .in("id", destinationIds);
+      destinations = (found ?? []) as unknown as Target[];
+    }
+    return { rows, found: (data ?? []).length, destinations, people: null as Person[] | null, failed: Boolean(error) };
+  };
+  const { rows, found: total, destinations, people, failed } = api ? await viaApi(api) : await fromDatabase();
   const targets = new Map<string, NonNullable<LogRow["target"]>>();
   const postedBy = new Map<string, Actor>();
-  if (destinationIds.length) {
-    const { data: destinations } = await client.database
-      .from("destinations")
-      .select(`id, platform, post_id, connected_account_id, status, may_be_live, connected_accounts(display_name), actors!destinations_actor_id_fkey(${actor})`)
-      .in("id", destinationIds);
-    for (const d of (destinations ?? []) as unknown as Array<{ id: string; platform: string; post_id: string; connected_account_id: string; status: string; may_be_live: boolean | null; connected_accounts: { display_name: string } | null; actors: Actor | null }>) {
-      targets.set(d.id, { platform: d.platform, account: d.connected_accounts?.display_name ?? "", postId: d.post_id, accountId: d.connected_account_id, status: d.status, mayBeLive: Boolean(d.may_be_live) });
-      if (d.actors) postedBy.set(d.id, d.actors);
-    }
+  for (const d of destinations) {
+    targets.set(d.id, { platform: d.platform, account: d.connected_accounts?.display_name ?? "", postId: d.post_id, accountId: d.connected_account_id, status: d.status, mayBeLive: Boolean(d.may_be_live) });
+    if (d.actors) postedBy.set(d.id, d.actors);
   }
 
   const logs: LogRow[] = rows.map((r) => {
@@ -188,5 +216,6 @@ export async function loadLogs(client: Client, workspaceId: string, filters: Log
       details: Object.keys(details).length ? details : null,
     };
   });
-  return { logs, hasMore: (data ?? []).length > limit, failed: Boolean(error) };
+  // `people` (who to filter by) comes along only when the read went through our API.
+  return { logs, hasMore: total > limit, failed, people };
 }

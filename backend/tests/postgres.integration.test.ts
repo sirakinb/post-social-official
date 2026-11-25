@@ -9,7 +9,7 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Caller } from "../lib/access";
 import { createKey } from "../lib/api/keys";
-import { accountsPage, appFrame, composerPage, inboxAccountsList, mediaByIds, myWorkspaces } from "../lib/api/pages";
+import { accountsPage, activityPage, apiPage, appFrame, calendarPage, composerPage, draftsPage, inboxAccountsList, mediaByIds, mediaPage, myWorkspaces } from "../lib/api/pages";
 import { assertUtc, DatabaseError, poolConfig, poolSql, userSql } from "../lib/database";
 import { scramVerifier, setPasswordStatement } from "../lib/scram";
 import { provisionWorkspace } from "../lib/signup";
@@ -218,6 +218,90 @@ describe.skipIf(!enabled)("the backend on plain Postgres", () => {
 
       for (const read of [accountsPage, composerPage, inboxAccountsList]) await expect(read(sql, ben(), { workspace_id: ws })).rejects.toMatchObject({ status: 404 });
       await expect(mediaByIds(sql, ben(), { workspace_id: ws, ids: [ready.id] })).rejects.toMatchObject({ status: 404 });
+    });
+
+    it("gives the calendar, drafts, media library, activity log and API page what they show, from real rows", async () => {
+      const ws = people.ben.workspaceId;
+      const one = async <T = { id: string }>(query: string, params: unknown[]) => (await sql<T>(query, params))[0];
+      const [{ actor_id: actor }] = await sql<{ actor_id: string }>(`SELECT id AS actor_id FROM public.actors WHERE workspace_id = $1 AND user_id = $2`, [ws, people.ben.id]);
+      const account = await one(`INSERT INTO public.connected_accounts (workspace_id, platform, external_account_id, handle, display_name, capabilities) VALUES ($1, 'x', $2, $2, 'Ben X', '{}') RETURNING id`, [ws, `x-pages-${suffix}`]);
+      const media = await one(`INSERT INTO public.media_assets (workspace_id, storage_key, file_name, mime_type, media_type, size_bytes, width, height, status, uploaded_by_actor_id) VALUES ($1, $2, 'used.png', 'image/png', 'image', 1000, 10, 10, 'ready', $3) RETURNING id`, [ws, `${ws}/${suffix}/used.png`, actor]);
+      const hidden = await one(`INSERT INTO public.media_assets (workspace_id, storage_key, file_name, mime_type, media_type, size_bytes, width, height, status, hidden_from_library_at) VALUES ($1, $2, 'hidden.png', 'image/png', 'image', 1000, 10, 10, 'ready', now()) RETURNING id`, [ws, `${ws}/${suffix}/hidden.png`]);
+      const post = (status: string, scheduled: string | null, caption: string) =>
+        one(`INSERT INTO public.posts (workspace_id, entry_point, caption, effective_approval_policy, status, scheduled_at, actor_id) VALUES ($1, 'ui', $2, 'autonomous', $3, $4, $5) RETURNING id`, [ws, caption, status, scheduled, actor]);
+      const scheduled = await post("scheduled", "2031-03-10T15:00:00Z", "In the window");
+      const later = await post("scheduled", "2031-09-10T15:00:00Z", "Outside the window");
+      const draft = await post("draft", null, "A draft");
+      const destination = await one(`INSERT INTO public.destinations (workspace_id, post_id, connected_account_id, platform, effective_approval_policy, actor_id) VALUES ($1, $2, $3, 'x', 'autonomous', $4) RETURNING id`, [ws, scheduled.id, account.id, actor]);
+      await sql(`INSERT INTO public.post_media (post_id, media_asset_id, workspace_id, position) VALUES ($1, $2, $3, 0)`, [scheduled.id, media.id, ws]);
+      await sql(
+        `INSERT INTO public.audit_events (workspace_id, actor_id, entry_point, event_type, entity_type, entity_id, summary, occurred_at) VALUES
+           ($1, $2, 'ui', 'post.created', 'post', $3, 'Created a post', '2031-03-01T10:00:00Z'),
+           ($1, NULL, 'system', 'destination.failed', 'destination', $4, 'X refused the post', '2031-03-02T10:00:00Z'),
+           ($1, $2, 'ui', 'media.uploaded', 'media', $5, 'Uploaded used.png', '2031-03-03T10:00:00Z')`,
+        [ws, actor, scheduled.id, destination.id, media.id],
+      );
+      const ben = (): Caller => ({ userId: people.ben.id, displayName: `ben ${suffix}`, entryPoint: "ui" });
+      const adaCaller = (): Caller => ({ userId: people.ada.id, displayName: `ada ${suffix}`, entryPoint: "ui" });
+      type Post = { id: string; caption: string; actors: { kind: string } | null; destinations: Array<Record<string, unknown>>; post_media: Array<{ media_assets: { id: string } | null }> };
+
+      // Calendar: posts in the window that aren't drafts, with who made them, where they go and their media.
+      const calendar = (await calendarPage(sql, ben(), { workspace_id: ws, from: "2031-03-01T00:00:00Z", to: "2031-04-01T00:00:00Z" })).posts as Post[];
+      expect(calendar.map((p) => p.id)).toEqual([scheduled.id]);
+      expect(calendar[0]).toMatchObject({ caption: "In the window", status: "scheduled", actors: { kind: "user" }, destinations: [{ platform: "x", connected_account_id: account.id, connected_accounts: { display_name: "Ben X" }, may_be_live: false }], post_media: [{ position: 0, media_assets: { id: media.id, media_type: "image", status: "ready" } }] });
+      expect(later.id).not.toBe(scheduled.id);
+      // The same posts the person's own session read through the access policies.
+      const viaPolicies = await userSql(userPool, people.ben.id)<{ id: string }>(`SELECT id FROM public.posts WHERE workspace_id = $1 AND status <> 'draft' AND scheduled_at >= $2 AND scheduled_at < $3`, [ws, "2031-03-01T00:00:00Z", "2031-04-01T00:00:00Z"]);
+      expect(calendar.map((p) => p.id)).toEqual(viaPolicies.map((p) => p.id));
+
+      // Drafts: only drafts (the example every new workspace gets, and ours), newest first.
+      const drafts = (await draftsPage(sql, ben(), { workspace_id: ws })).posts as Post[];
+      expect(drafts[0]).toMatchObject({ id: draft.id, caption: "A draft" });
+      expect(drafts.every((d) => (d as unknown as { status: string }).status === "draft")).toBe(true);
+      expect((await draftsPage(sql, ben(), { workspace_id: ws, limit: 1 })).posts).toHaveLength(1);
+
+      // Media library: hidden files only when asked for; how many posts use each.
+      const library = (await mediaPage(sql, ben(), { workspace_id: ws })).media as Array<{ id: string; used: number; actors: { kind: string } | null; size_bytes: unknown }>;
+      // Newest first; the hidden one isn't there. (An earlier test left one more file here.)
+      expect(library[0].id).toBe(media.id);
+      expect(library.map((m) => m.id)).not.toContain(hidden.id);
+      expect(library[0]).toMatchObject({ used: 1, actors: { kind: "user" } });
+      expect(library.filter((m) => m.id !== media.id).every((m) => m.used === 0)).toBe(true);
+      expect(Number(library[0].size_bytes)).toBe(1000);
+      expect(((await mediaPage(sql, ben(), { workspace_id: ws, hidden: true })).media as Array<{ id: string }>).map((m) => m.id)).toEqual([hidden.id]);
+
+      // Activity: newest first, with the post and account a publishing event was about.
+      const log = await activityPage(sql, ben(), { workspace_id: ws, before: "2031-04-01T00:00:00Z", limit: 3 });
+      const events = log.events as unknown as Array<{ event_type: string; actors: { kind: string } | null }>;
+      expect(events.map((e) => e.event_type)).toEqual(["media.uploaded", "destination.failed", "post.created"]);
+      expect(events[1].actors).toBeNull();
+      expect(log.destinations).toEqual([expect.objectContaining({ id: destination.id, platform: "x", post_id: scheduled.id, connected_accounts: { display_name: "Ben X" }, actors: expect.objectContaining({ kind: "user" }) })]);
+      expect((log.people as Array<{ id: string }>).map((p) => p.id)).toContain(actor);
+      const only = async (filter: Record<string, unknown>) => ((await activityPage(sql, ben(), { workspace_id: ws, before: "2031-04-01T00:00:00Z", ...filter })).events as unknown as Array<{ event_type: string }>).map((e) => e.event_type);
+      // (Setting the workspace up left a few older entries of its own; ours are the newest.)
+      expect(await only({ event_types: ["destination.failed", "media.failed"] })).toEqual(["destination.failed"]);
+      expect((await only({ prefixes: ["post.", "destination."] })).slice(0, 2)).toEqual(["destination.failed", "post.created"]);
+      expect((await only({ prefixes: ["post.", "destination."] })).every((type) => type.startsWith("post.") || type.startsWith("destination."))).toBe(true);
+      // An underscore in a prefix is a letter, not "any character".
+      expect(await only({ prefixes: ["p_st."] })).toEqual([]);
+      expect((await only({ source: "system" }))[0]).toBe("destination.failed");
+      expect(await only({ source: "mcp" })).toEqual([]);
+      expect((await only({ actor_id: actor })).slice(0, 2)).toEqual(["media.uploaded", "post.created"]);
+      expect(await only({ actor_id: actor })).not.toContain("destination.failed");
+      expect((await only({ before: "2031-03-02T10:00:00Z" }))[0]).toBe("post.created");
+      expect(await only({ before: "2031-03-02T10:00:00Z" })).not.toContain("destination.failed");
+
+      // API page: keys that still work.
+      const made = await createKey(sql, ben(), { workspace_id: ws, name: `Pages ${suffix}`, mode: "test" });
+      const api = await apiPage(sql, ben(), { workspace_id: ws });
+      expect(api.keys).toEqual([expect.objectContaining({ id: made.id, name: `Pages ${suffix}`, mode: "test", last_used_at: null })]);
+      expect(JSON.stringify(api)).not.toContain(made.key);
+      expect(api.grants).toEqual([]);
+
+      // Nobody outside the workspace gets any of it.
+      for (const read of [calendarPage, draftsPage, mediaPage, activityPage, apiPage]) {
+        await expect(read(sql, adaCaller(), { workspace_id: ws, from: "2031-03-01T00:00:00Z", to: "2031-04-01T00:00:00Z" })).rejects.toMatchObject({ status: 404 });
+      }
     });
   });
 

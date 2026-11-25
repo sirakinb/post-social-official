@@ -3,7 +3,7 @@
 // person's own session (row-level security).
 import type { ActorKind } from "@/components/beta/marks";
 import { SAMPLE_DRAFT } from "../../../backend/lib/sample-draft";
-import { whoDid } from "./logs";
+import { whoDid, type ApiRead } from "./logs";
 
 type Client = Awaited<ReturnType<typeof import("@/lib/insforge/server").insforgeServerClient>>;
 
@@ -44,7 +44,14 @@ const select = (actor: string) =>
 
 // Newest first. The app name (client_name) is newer than the rest: if a database doesn't
 // have it yet, drafts still load, with key and app names as before.
-export async function loadDrafts(client: Client, workspaceId: string) {
+// With `api` given the drafts are read through our API; without it, straight from the
+// database with the person's InsForge session.
+export async function loadDrafts(client: Client, workspaceId: string, api: ApiRead | null = null) {
+  if (api) {
+    const page = await api<{ posts: DraftRow[] }>("drafts_page", { workspace_id: workspaceId, limit: DRAFTS_LIMIT + 1 });
+    if (!page) return { rows: [] as DraftRow[], hasMore: false, failed: true };
+    return { rows: page.posts.slice(0, DRAFTS_LIMIT), hasMore: page.posts.length > DRAFTS_LIMIT, failed: false };
+  }
   const query = (actor: string) =>
     client.database.from("posts").select(select(actor)).eq("workspace_id", workspaceId).eq("status", "draft").order("updated_at", { ascending: false }).limit(DRAFTS_LIMIT + 1);
   let { data, error } = await query("kind, display_name, client_name");
