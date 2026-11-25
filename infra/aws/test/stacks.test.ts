@@ -279,11 +279,16 @@ describe.each(ENV_NAMES)("%s services", (envName) => {
     expect(names(container("copy").Secrets)).toEqual(["PGPASSWORD", "PGUSER", "SOURCE_URL"]);
     expect(names(container("copy").Environment)).toEqual(["PGDATABASE", "PGHOST", "PGPORT", "PGSSLMODE", "WORK_DIR"]);
     expect(container("copy")).toMatchObject({ ReadonlyRootFilesystem: true, MountPoints: [{ ContainerPath: "/work", ReadOnly: false }] });
-    // InsForge's address is never written here: the secret starts as a placeholder.
-    template.hasResourceProperties("AWS::SecretsManager::Secret", { Name: `postsocial/${envName}/copy-source`, SecretString: "not set" });
+    // InsForge's address lives in a secret that exists only while a copy runs: it is named
+    // here and never created here, so no stack ever holds it.
+    template.resourceCountIs("AWS::SecretsManager::Secret", 0);
+    const address = `arn:aws:secretsmanager:us-east-1:039612844713:secret:postsocial/${envName}/insforge-address`;
+    expect((container("copy").Secrets as { Name: string; ValueFrom: string }[]).find((secret) => secret.Name === "SOURCE_URL")!.ValueFrom).toBe(address);
+    // AWS reads a name ending in a hyphen and six characters as carrying its own suffix.
+    expect(address).not.toMatch(/-[A-Za-z0-9]{6}$/);
     const policy = resources(template, "AWS::IAM::Policy").find((p) => JSON.stringify(p.Properties.Roles).includes("copyTaskExecutionRole"))!;
     const reads = JSON.stringify(statementsOf(policy).filter((s) => actionsOf(s).includes("secretsmanager:GetSecretValue")).map((s) => s.Resource));
-    expect(reads).toMatch(/CopySource/);
+    expect(reads).toContain(`${address}-??????`);
     expect(reads).toMatch(/DatabaseSecret/);
     expect(reads).not.toMatch(/Settings|AppLogin/);
     // A deploy from GitHub can neither run it nor hand it its roles.

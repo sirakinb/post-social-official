@@ -8,8 +8,9 @@
 //
 //   1. checks InsForge and the build on AWS have the same migrations
 //   2. stops the AWS services, so nothing reads a half-filled database
-//   3. hands the task InsForge's database address through a secret (never printed, never
-//      written to a file, never on a command line), runs it, and blanks the secret again
+//   3. hands the task InsForge's database address through a secret made for this run
+//      (never printed, never written to a file, never on a command line), runs it, and
+//      deletes the secret, with no recovery copy
 //   4. runs the migration task with --baseline, which records the migrations as applied
 //   5. starts the API again and checks it answers
 //
@@ -30,7 +31,8 @@ import { CLUSTER, networkOf, taskOutcome } from "./aws-deploy.mjs";
 const ACCOUNT = "039612844713";
 const ENVIRONMENTS = { dev: { api: "https://api-dev.postsocial.xyz" } };
 const AWS = ["--profile", process.env.AWS_PROFILE ?? "postsocial", "--region", "us-east-1"];
-const BLANK = "not set";
+// Must match copySourceSecret in infra/aws/lib/config.ts: the copy task reads this name.
+export const sourceSecret = (envName) => `postsocial/${envName}/insforge-address`;
 
 // The database address in whatever the InsForge CLI printed around it.
 export function addressIn(text) {
@@ -60,6 +62,29 @@ function aws(args, input) {
   // AWS's own message names the call and the resource, never a value we sent on stdin.
   if (result.status !== 0) throw new Error(`AWS refused: ${args.slice(0, 2).join(" ")}. ${(result.stderr ?? "").trim().split("\n").pop() ?? ""}`);
   return result.stdout.trim() ? parse(result.stdout, `AWS's answer to ${args.slice(0, 2).join(" ")}`) : {};
+}
+
+// Gone at once, with no 30-day recovery copy. Fine when it isn't there.
+function deleteSecret(id) {
+  try {
+    aws(["secretsmanager", "delete-secret", "--secret-id", id, "--force-delete-without-recovery", "--query", "Name"]);
+  } catch (error) {
+    if (!/ResourceNotFoundException/.test(error.message)) throw error;
+  }
+}
+
+// The address goes in through standard input. A name is free again a few seconds after
+// its secret is deleted, so a run straight after another waits for that.
+async function createSecret(id, value) {
+  deleteSecret(id);
+  for (let tries = 0; ; tries++) {
+    try {
+      return aws(["secretsmanager", "create-secret", "--name", id, "--description", "InsForge's database address, for the minutes a copy runs (scripts/aws-copy-database.mjs)", "--secret-string", "file:///dev/stdin", "--query", "Name"], value);
+    } catch (error) {
+      if (tries >= 12 || !/scheduled for deletion|InvalidRequestException|ResourceExistsException/.test(error.message)) throw error;
+      await sleep(5_000);
+    }
+  }
 }
 
 function insforge(envName, args) {
@@ -102,14 +127,20 @@ async function run(envName, part, network, overrides) {
     await sleep(10_000);
     outcome = taskOutcome(aws(["ecs", "describe-tasks", "--cluster", CLUSTER, "--tasks", task]).tasks?.[0] ?? {});
   }
-  // Both tasks log to the API's group, under their own name.
+  // Both tasks log to the API's group, under their own name. The last lines can take a
+  // few seconds to arrive after the task stops.
   const stream = `${part}/${part}/${id}`;
-  try {
-    const events = aws(["logs", "get-log-events", "--log-group-name", `/postsocial/${envName}/api`, "--log-stream-name", stream, "--start-from-head"]).events ?? [];
-    for (const event of events) console.log(`  | ${event.message}`);
-  } catch {
-    console.log(`  (its output is in the log group /postsocial/${envName}/api, stream ${stream})`);
+  let events = [];
+  for (let tries = 0; tries < 6 && !events.length; tries++) {
+    if (tries) await sleep(5_000);
+    try {
+      events = aws(["logs", "get-log-events", "--log-group-name", `/postsocial/${envName}/api`, "--log-stream-name", stream, "--start-from-head"]).events ?? [];
+    } catch {
+      // Not there yet.
+    }
   }
+  for (const event of events) console.log(`  | ${event.message}`);
+  if (!events.length) console.log(`  (its output is in the log group /postsocial/${envName}/api, stream ${stream})`);
   if (outcome.state !== "done") throw new Error(`The ${part} task ${outcome.state === "failed" ? `failed (${outcome.detail})` : "was still running after 20 minutes"}.`);
 }
 
@@ -135,8 +166,8 @@ async function main(args) {
   const before = services(envName);
   const network = networkOf(before.api);
   const apiCount = before.api.desiredCount;
-  const source = `postsocial/${envName}/copy-source`;
-  aws(["secretsmanager", "describe-secret", "--secret-id", source, "--query", "Name"]);
+  const source = sourceSecret(envName);
+  aws(["ecs", "describe-task-definition", "--task-definition", `postsocial-${envName}-copy`, "--query", "taskDefinition.family"]);
 
   const address = addressIn(insforge(envName, ["db", "connection-string"]));
   if (!address) throw new Error("InsForge didn't return a database address. Nothing was changed.");
@@ -145,19 +176,17 @@ async function main(args) {
     // 2. Nothing of ours reads or writes while the copy goes in.
     await scale(envName, "worker", 0);
     await scale(envName, "api", 0);
-    // 3. The address goes in through standard input, and comes out again in `finally`.
-    aws(["secretsmanager", "put-secret-value", "--secret-id", source, "--secret-string", "file:///dev/stdin", "--query", "VersionId"], address);
+    // 3. The address exists on AWS from here until `finally`.
+    await createSecret(source, address);
     await run(envName, "copy", network, replace ? { environment: [{ name: "REPLACE", value: "yes" }] } : {});
     // 4. The migrations came with the copy; record them, and set the API's login up again.
     await run(envName, "migrate", network, { command: ["node", "migrate.mjs", "--bootstrap", "--baseline"] });
   } finally {
-    // Twice, so neither the current value nor the one Secrets Manager keeps as "previous"
-    // is the address.
     try {
-      for (const value of [`${BLANK} (cleared)`, BLANK]) aws(["secretsmanager", "put-secret-value", "--secret-id", source, "--secret-string", value, "--query", "VersionId"]);
-      console.log(`${source} is blank again`);
+      deleteSecret(source);
+      console.log(`${source} is deleted`);
     } catch {
-      console.error(`Couldn't blank ${source}. Set it to "${BLANK}" by hand, twice.`);
+      console.error(`Couldn't delete the secret ${source}. Delete it by hand, without a recovery window.`);
     }
     // 5. Whatever happened, the API comes back: a failed copy changed nothing.
     await scale(envName, "api", apiCount).catch((error) => console.error(error.message));

@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { addressIn, migrationGap } from "./aws-copy-database.mjs";
+import { addressIn, migrationGap, sourceSecret } from "./aws-copy-database.mjs";
 
 describe("copying a database to AWS", () => {
   it("finds the database address in what the InsForge CLI prints", () => {
@@ -21,11 +21,17 @@ describe("copying a database to AWS", () => {
 
   it("never prints or stores the address, and refuses prod until cutover", () => {
     const script = readFileSync(new URL("./aws-copy-database.mjs", import.meta.url), "utf8");
-    // The address reaches AWS on standard input only, and is blanked whatever happens.
+    // The address reaches AWS on standard input only, in a secret that is deleted whatever
+    // happens, with no recovery copy.
     expect(script).toContain('"--secret-string", "file:///dev/stdin"');
-    expect(script).not.toMatch(/console\.(log|error)\([^)]*address/);
-    expect(script).not.toMatch(/writeFileSync|appendFileSync/);
-    expect(script).toMatch(/finally \{[\s\S]*put-secret-value/);
+    expect(script).not.toMatch(/console\.(log|error)\([^)]*address\b/);
+    expect(script).not.toMatch(/writeFileSync|appendFileSync|put-secret-value/);
+    expect(script).toMatch(/finally \{[\s\S]*deleteSecret\(source\)/);
+    expect(script).toContain("--force-delete-without-recovery");
+    // The task reads the secret by the name the AWS setup gives it.
+    const config = readFileSync(new URL("../infra/aws/lib/config.ts", import.meta.url), "utf8");
+    expect(config).toContain("`postsocial/${envName}/insforge-address`");
+    expect(sourceSecret("dev")).toBe("postsocial/dev/insforge-address");
     expect(script).toContain('const ENVIRONMENTS = { dev:');
     expect(script).not.toMatch(/prod: \{ api:/);
   });

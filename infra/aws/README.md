@@ -117,8 +117,8 @@ only read. The copy is one transaction: a run that fails leaves the AWS database
 - **It refuses a database that already holds people** unless you add `--replace`, which
   swaps everything there for a fresh copy.
 - **InsForge's database address** reaches the task through the secret
-  `postsocial/<env>/copy-source`, which holds it only while a copy runs. It is never printed
-  or written to a file.
+  `postsocial/<env>/insforge-address`, which the script creates for the run and deletes
+  when it ends, with no recovery copy. It is never printed or written to a file.
 - **The worker stays stopped afterwards.** Two workers on copies of the same data would both
   renew the same platform tokens and publish the same posts. An environment's AWS worker
   starts (`workerTasks` in `lib/config.ts`) only once its InsForge worker is stopped for good.

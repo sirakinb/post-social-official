@@ -57,6 +57,11 @@ export const DATABASE_NAME = "postsocial";
 // created here on purpose: a stack that owned it would reset it.
 export const imageTagParameter = (envName: EnvName) => `/postsocial/${envName}/image-tag`;
 
+// The secret that holds InsForge's database address while a copy runs, and at no other
+// time: scripts/aws-copy-database.mjs creates it, and deletes it when the copy ends. (The
+// name must not end in a hyphen and six characters, which AWS would read as its own suffix.)
+export const copySourceSecret = (envName: EnvName) => `postsocial/${envName}/insforge-address`;
+
 // Names other stacks and the deploy script refer to, so they are fixed here.
 export const CLUSTER_NAME = "postsocial";
 export const deployRoleName = (envName: EnvName) => `postsocial-github-deploy-${envName}`;

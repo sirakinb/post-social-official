@@ -7,7 +7,7 @@
 // runs is decided by the deploy workflow (scripts/aws-deploy.mjs), one commit at a time.
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { Duration, RemovalPolicy, SecretValue, Stack, type StackProps } from "aws-cdk-lib";
+import { Duration, Stack, type StackProps } from "aws-cdk-lib";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecs from "aws-cdk-lib/aws-ecs";
 import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
@@ -16,7 +16,7 @@ import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import * as ssm from "aws-cdk-lib/aws-ssm";
 import type { Construct } from "constructs";
 import { acknowledge } from "./acknowledge";
-import { ACCOUNT, CLUSTER_NAME, CONTAINER_PORT, DATABASE_NAME, deployRoleName, ENVIRONMENTS, imageTagParameter, REGION, type EnvName } from "./config";
+import { ACCOUNT, CLUSTER_NAME, CONTAINER_PORT, copySourceSecret, DATABASE_NAME, deployRoleName, ENVIRONMENTS, imageTagParameter, REGION, type EnvName } from "./config";
 import type { DataStack } from "./data-stack";
 import type { EdgeStack } from "./edge-stack";
 import type { FoundationStack } from "./foundation-stack";
@@ -199,14 +199,10 @@ export class ServicesStack extends Stack {
     // --- Filling the database from a copy of InsForge ----------------------------------
     // Started by hand (scripts/aws-copy-database.mjs), never by a deploy: the GitHub role
     // below is given neither this task nor its roles. It runs Postgres's own tools, signs
-    // in as the owner, and reads InsForge's address from a secret that holds it only while
-    // a copy runs.
-    const copySource = new secretsmanager.Secret(this, "CopySource", {
-      secretName: `postsocial/${envName}/copy-source`,
-      description: `Post Social ${envName}: the InsForge database address, only while a copy runs (scripts/aws-copy-database.mjs)`,
-      secretStringValue: SecretValue.unsafePlainText("not set"),
-      removalPolicy: RemovalPolicy.DESTROY,
-    });
+    // in as the owner, and reads InsForge's address from a secret that exists only while a
+    // copy runs: the script creates it and deletes it, so it is named here, not made here.
+    const copySourceArn = `arn:aws:secretsmanager:${REGION}:${ACCOUNT}:secret:${copySourceSecret(envName)}`;
+    const copySource = secretsmanager.Secret.fromSecretPartialArn(this, "CopySource", copySourceArn);
     this.copy = task("copy", 256, 512);
     this.copy.addVolume({ name: "scratch" });
     const copyContainer = this.copy.addContainer("copy", {
@@ -260,7 +256,7 @@ export class ServicesStack extends Stack {
       ],
     });
 
-    acknowledge(copySource, { id: "AwsSolutions-SMG4", reason: "Holds a value only for the minutes a copy runs; the script that starts the copy blanks it afterwards." });
+    acknowledge(this.copy.obtainExecutionRole(), { id: `AwsSolutions-IAM5[Resource::${copySourceArn}-??????]`, reason: "One secret by name: the six characters are the suffix AWS adds to it, which changes each time the copy script creates it." });
     for (const definition of [apiTask, workerTask, this.migrate, this.copy]) {
       acknowledge(definition, PLAIN_SETTINGS);
       acknowledge(definition.obtainExecutionRole(), { id: "AwsSolutions-IAM5[Resource::*]", reason: "ecr:GetAuthorizationToken has no resource to limit it to; pulling images and reading secrets name their own." });
