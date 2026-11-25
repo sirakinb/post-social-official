@@ -20,6 +20,7 @@ export type EnvConfig = {
   backupDays: number;
   // Prod only: the database can't be deleted by a deploy or by mistake.
   protect: boolean;
+<<<<<<< HEAD
   // What the app and PostHog call this environment (APP_ENV).
   appEnv: "dev" | "production";
   // Copies of the API behind the load balancer.
@@ -50,3 +51,13 @@ export const imageTagParameter = (envName: EnvName) => `/postsocial/${envName}/i
 // Names other stacks and the deploy script refer to, so they are fixed here.
 export const CLUSTER_NAME = "postsocial";
 export const deployRoleName = (envName: EnvName) => `postsocial-github-deploy-${envName}`;
+=======
+};
+
+export const ENVIRONMENTS: Record<EnvName, EnvConfig> = {
+  dev: { apiDomain: "api-dev.postsocial.xyz", deployBranch: "dev", githubEnvironment: "Development", backupDays: 1, protect: false },
+  prod: { apiDomain: "api.postsocial.xyz", deployBranch: "main", githubEnvironment: "Production", backupDays: 7, protect: true },
+};
+
+export const ENV_NAMES = Object.keys(ENVIRONMENTS) as EnvName[];
+>>>>>>> origin/dev

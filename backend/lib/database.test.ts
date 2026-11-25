@@ -1,6 +1,10 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
+<<<<<<< HEAD
 import { assertUtc, databaseAddress, DatabaseError, poolConfig, poolSql, userSql } from "./database";
+=======
+import { assertUtc, DatabaseError, poolConfig, poolSql, userSql } from "./database";
+>>>>>>> origin/dev
 
 const USER = "11111111-2222-4333-8444-555555555555";
 
@@ -71,6 +75,7 @@ describe("userSql", () => {
   });
 });
 
+<<<<<<< HEAD
 describe("databaseAddress", () => {
   const env = (values: Record<string, string>) => (name: string) => values[name];
   const parts = { DATABASE_HOST: "db.example.rds.amazonaws.com", DATABASE_NAME: "postsocial", DATABASE_PASSWORD: "app-password", DATABASE_OWNER_USERNAME: "postsocial_admin", DATABASE_OWNER_PASSWORD: "owner-password" };
@@ -98,6 +103,8 @@ describe("databaseAddress", () => {
   });
 });
 
+=======
+>>>>>>> origin/dev
 describe("poolConfig", () => {
   const ca = () => "CERT";
 

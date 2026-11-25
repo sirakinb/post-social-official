@@ -10,7 +10,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Caller } from "../lib/access";
 import { createKey } from "../lib/api/keys";
 import { assertUtc, DatabaseError, poolConfig, poolSql, userSql } from "../lib/database";
+<<<<<<< HEAD
 import { scramVerifier, setPasswordStatement } from "../lib/scram";
+=======
+>>>>>>> origin/dev
 import { provisionWorkspace } from "../lib/signup";
 import { createService } from "../service";
 
@@ -18,7 +21,10 @@ const enabled = process.env.POSTSOCIAL_PG_TESTS === "1";
 const port = process.env.LOCAL_DB_PORT ?? "55432";
 const adminUrl = process.env.DATABASE_URL ?? `postgres://app_admin:local@127.0.0.1:${port}/postsocial`;
 const userUrl = process.env.DATABASE_USER_URL ?? `postgres://app_user:local@127.0.0.1:${port}/postsocial`;
+<<<<<<< HEAD
 const ownerUrl = process.env.DATABASE_OWNER_URL ?? `postgres://postsocial_admin:local@127.0.0.1:${port}/postsocial`;
+=======
+>>>>>>> origin/dev
 
 describe.skipIf(!enabled)("the backend on plain Postgres", () => {
   const adminPool = new pg.Pool(poolConfig({ url: adminUrl, max: 4 }));
@@ -157,6 +163,7 @@ describe.skipIf(!enabled)("the backend on plain Postgres", () => {
       expect((await call("/api/v1/accounts")).status).toBe(401);
     });
   });
+<<<<<<< HEAD
 
   it("a login can sign in with a password that was only ever sent to the database as a hash", async () => {
     // What migrate.mjs --bootstrap does on AWS for app_admin, on a throwaway login here.
@@ -185,4 +192,6 @@ describe.skipIf(!enabled)("the backend on plain Postgres", () => {
       await owner.end();
     }
   });
+=======
+>>>>>>> origin/dev
 });

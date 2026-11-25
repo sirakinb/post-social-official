@@ -12,7 +12,10 @@
 import { readFileSync } from "node:fs";
 import type { PoolConfig } from "pg";
 import type { Sql } from "./access";
+<<<<<<< HEAD
 import type { Env } from "./settings";
+=======
+>>>>>>> origin/dev
 
 type QueryResult = { rows?: unknown[] } | Array<{ rows?: unknown[] }>;
 export type Queryable = { query: (text: string, values?: unknown[]) => Promise<QueryResult> };
@@ -82,6 +85,7 @@ export function userSql(pool: Connectable, userId: string): Sql {
   };
 }
 
+<<<<<<< HEAD
 // Where the database is and who signs in. Either one address, or its parts: on AWS the host
 // is plain configuration and only the password comes from Secrets Manager, so no connection
 // string with a password in it exists anywhere.
@@ -90,12 +94,17 @@ export type DatabaseAddress =
   | { host: string; port?: number; database: string; user: string; password: string };
 
 export type DatabaseSettings = DatabaseAddress & {
+=======
+export type DatabaseSettings = {
+  url: string; // postgres://user:password@host:5432/name
+>>>>>>> origin/dev
   caFile?: string | null; // certificate authority to trust (AWS's RDS bundle, in the image)
   max?: number;
   statementTimeoutMs?: number;
   applicationName?: string;
 };
 
+<<<<<<< HEAD
 // The login the API and the worker use. bootstrap.sql creates it; it runs as project_admin.
 export const APP_LOGIN = "app_admin";
 
@@ -124,15 +133,35 @@ function parseAddress(address: DatabaseAddress) {
   let url: URL;
   try {
     url = new URL(address.url);
+=======
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]", "host.docker.internal"]);
+
+// Connection settings from a database address. Built by hand rather than passed as a
+// connection string, because `pg` lets a string's sslmode override the options given next to
+// it. Connections are encrypted and the server's certificate is checked, except to a
+// database on this machine or when the address says sslmode=disable (local development).
+export function poolConfig(settings: DatabaseSettings, readFile: (path: string) => string = (path) => readFileSync(path, "utf8")): PoolConfig {
+  let url: URL;
+  try {
+    url = new URL(settings.url);
+>>>>>>> origin/dev
   } catch {
     throw new Error("The database address is not a valid URL."); // never echo it: it holds the password
   }
   if (url.protocol !== "postgres:" && url.protocol !== "postgresql:") throw new Error("The database address must start with postgres://");
+<<<<<<< HEAD
+=======
+  const database = decodeURIComponent(url.pathname.replace(/^\//, ""));
+  if (!url.hostname || !database) throw new Error("The database address needs a host and a database name.");
+
+  const plain = url.searchParams.get("sslmode") === "disable" || (LOCAL_HOSTS.has(url.hostname) && !url.searchParams.get("sslmode"));
+>>>>>>> origin/dev
   return {
     host: url.hostname,
     port: url.port ? Number(url.port) : 5432,
     user: decodeURIComponent(url.username),
     password: decodeURIComponent(url.password),
+<<<<<<< HEAD
     database: decodeURIComponent(url.pathname.replace(/^\//, "")),
     sslmode: url.searchParams.get("sslmode"),
   };
@@ -152,6 +181,8 @@ export function poolConfig(settings: DatabaseSettings, readFile: (path: string) 
     port,
     user,
     password,
+=======
+>>>>>>> origin/dev
     database,
     ssl: plain ? false : { rejectUnauthorized: true, ...(settings.caFile ? { ca: readFile(settings.caFile) } : {}) },
     max: settings.max ?? 10,

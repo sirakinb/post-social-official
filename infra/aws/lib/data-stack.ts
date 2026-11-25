@@ -7,7 +7,11 @@ import * as rds from "aws-cdk-lib/aws-rds";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import type { Construct } from "constructs";
 import { acknowledge } from "./acknowledge";
+<<<<<<< HEAD
 import { DATABASE_NAME, ENVIRONMENTS, type EnvName } from "./config";
+=======
+import { ENVIRONMENTS, type EnvName } from "./config";
+>>>>>>> origin/dev
 
 export interface DataStackProps extends StackProps {
   envName: EnvName;
@@ -19,8 +23,11 @@ export class DataStack extends Stack {
   readonly workerSecurityGroup: ec2.SecurityGroup;
   readonly database: rds.DatabaseInstance;
   readonly settings: { api: secretsmanager.Secret; worker: secretsmanager.Secret };
+<<<<<<< HEAD
   // The password of app_admin, the login the API and worker use.
   readonly appLogin: secretsmanager.Secret;
+=======
+>>>>>>> origin/dev
   readonly logGroups: { api: logs.LogGroup; worker: logs.LogGroup };
 
   constructor(scope: Construct, id: string, props: DataStackProps) {
@@ -58,7 +65,11 @@ export class DataStack extends Stack {
       maxAllocatedStorage: 100,
       storageType: rds.StorageType.GP3,
       storageEncrypted: true,
+<<<<<<< HEAD
       databaseName: DATABASE_NAME,
+=======
+      databaseName: "postsocial",
+>>>>>>> origin/dev
       // The owner login, used for setup and migrations only. The API and worker sign in
       // with their own, narrower logins, kept in their settings below.
       credentials: rds.Credentials.fromGeneratedSecret("postsocial_admin", { secretName: `postsocial/${envName}/database-admin` }),
@@ -91,6 +102,7 @@ export class DataStack extends Stack {
       });
     this.settings = { api: settings("api"), worker: settings("worker") };
 
+<<<<<<< HEAD
     // The API's and worker's database login. Its password is made up inside AWS and never
     // leaves it: the migration task gives it to the database (as a hash), the services read
     // it at start. To rotate: change it here in AWS, then run a deploy.
@@ -101,6 +113,8 @@ export class DataStack extends Stack {
       removalPolicy: RemovalPolicy.RETAIN,
     });
 
+=======
+>>>>>>> origin/dev
     const serviceLogs = (service: "api" | "worker") =>
       new logs.LogGroup(this, `${service}Logs`, { logGroupName: `/postsocial/${envName}/${service}`, retention: logs.RetentionDays.ONE_MONTH, removalPolicy: keep });
     this.logGroups = { api: serviceLogs("api"), worker: serviceLogs("worker") };
@@ -112,7 +126,10 @@ export class DataStack extends Stack {
       { id: "AwsSolutions-SMG4", reason: "The owner login is used for setup and migrations only; rotate it by hand when someone with access leaves." },
     );
     if (!protect) acknowledge(this.database, { id: "AwsSolutions-RDS10", reason: "Dev holds test data and is rebuilt freely; prod has deletion protection." });
+<<<<<<< HEAD
     acknowledge(this.appLogin, { id: "AwsSolutions-SMG4", reason: "Rotated by hand: change the value, then run a deploy, which gives the database the new password before the services restart with it." });
+=======
+>>>>>>> origin/dev
     for (const secret of Object.values(this.settings)) {
       acknowledge(secret, { id: "AwsSolutions-SMG4", reason: "Holds third-party keys (platforms, Stripe, R2) that are rotated at their source, not by AWS." });
     }
