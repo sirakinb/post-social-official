@@ -40,6 +40,7 @@
   "exclude": [
     "node_modules",
     "ops/convex-forwarder",
+    "infra/aws",
     "adzo-tests"
   ]
 }

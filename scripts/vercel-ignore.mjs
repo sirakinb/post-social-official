@@ -22,6 +22,7 @@ const NOT_WEBSITE = [
   /^adzo-tests\//,
   /^submission\//,
   /^ops\//,
+  /^infra\//,
   /^cli\//,
   /^\.github\//,
   /^backend\/functions\//,
