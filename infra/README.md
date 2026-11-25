@@ -5,6 +5,8 @@ What Post Social runs on today, for migration planning (InsForge to AWS) and onb
 not our deploy path. How we deploy today: `docs/environments.md`. How the code fits
 together: `docs/architecture.md`.
 
+The AWS setup itself, as code: `infra/aws/` (see its README).
+
 ## Services
 
 | Service | Runs on today | Size / shape | Code | Likely AWS home |
