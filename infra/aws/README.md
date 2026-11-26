@@ -17,7 +17,7 @@ from InsForge: `tasks/aws-migration.md`. What runs where today: `infra/README.md
 | `PostSocialData-dev` | Dev's Postgres 15 database (private, encrypted), the firewall groups for its API and worker, its settings (`postsocial/dev/api`, `postsocial/dev/worker`), the keys made inside AWS (database logins, the sign-in key) and logs | About $17 a month |
 | `PostSocialData-prod` | The same for prod, with deletion protection and 7 days of automatic backups | About $16 a month |
 | `PostSocialServices-dev` | Dev's API (1 container behind the load balancer at `api-dev.postsocial.xyz`), its worker (running since 2026-11-26, when dev's website moved to this backend), the migration task, the task that fills the database from InsForge, and what dev's GitHub role may roll out | About $23 a month |
-| `PostSocialServices-prod` | The same for prod: 2 API containers at `api.postsocial.xyz` and a larger worker | About $40 a month |
+| `PostSocialServices-prod` | The same for prod: 2 API containers at `api.postsocial.xyz` and a larger worker (created 2026-11-26; the worker stays off until prod's cutover) | About $40 a month |
 
 The services are their own stack per environment, so a service change can never replace a
 database. Costs are list prices for containers running all month, each with a public address.
@@ -105,6 +105,13 @@ The services stack starts containers, so it needs images to start and settings t
 After that every push to `dev` that touches the backend deploys by itself
 (`.github/workflows/deploy-aws-dev.yml`, `scripts/aws-deploy.mjs`).
 
+Prod's services were brought up the same way on 2026-11-26, with two differences: the first
+build was recorded and rolled out by hand (the build dev had tested), and its deploys come
+from the release workflow (`.github/workflows/release.yml`), switched by two repository
+variables. `AWS_PROD_DEPLOY=on` makes a release also roll out AWS prod. `PROD_BACKEND=aws`,
+set at the cutover, makes it skip InsForge's database, functions and worker, so a release
+can never start InsForge's worker again next to ours.
+
 ### Filling an environment's database from InsForge
 
 `node scripts/aws-copy-database.mjs dev`, from the main checkout, signed in to AWS as the
@@ -129,7 +136,8 @@ only read. The copy is one transaction: a run that fails leaves the AWS database
   default of giving every new table to everyone signed in, and the tokens Google returned at
   past sign-ins. `auth.user_providers` comes along only for `database/migrate-auth.sql`, which carries its
   rows over and removes it.
-- **Prod** is copied once, at cutover; the script refuses it until then.
+- **Prod** is copied at its cutover, and was copied once before as a rehearsal (2026-11-26,
+  with its AWS worker off and nothing pointing at it). The cutover copy needs `--replace`.
 
 To try a change to the copy on your machine: `npm run db:local`, then run
 `database/copy-from-insforge.sh` in a `postgres:15` container against it.

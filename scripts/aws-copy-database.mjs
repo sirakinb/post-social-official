@@ -23,7 +23,7 @@
 // database as it was.
 //
 // Run it from the main checkout (the folder linked to InsForge), signed in to AWS as the
-// `postsocial` profile. Prod is copied once, at cutover, and is switched on here then.
+// `postsocial` profile. Prod is copied at its cutover (and once before, as a rehearsal).
 // It refuses an environment whose worker already runs on AWS (dev since 2026-11-26): that
 // environment's data now lives on AWS, and a copy would overwrite it.
 import { execFileSync, spawnSync } from "node:child_process";
@@ -31,7 +31,9 @@ import { pathToFileURL } from "node:url";
 import { CLUSTER, networkOf, taskOutcome } from "./aws-deploy.mjs";
 
 const ACCOUNT = "039612844713";
-const ENVIRONMENTS = { dev: { api: "https://api-dev.postsocial.xyz" } };
+// Prod was switched on here on 2026-11-26, for its cutover: a rehearsal copy first (its AWS
+// worker off, nothing pointing at it), then the real one in the cutover window.
+const ENVIRONMENTS = { dev: { api: "https://api-dev.postsocial.xyz" }, prod: { api: "https://api.postsocial.xyz" } };
 const AWS = ["--profile", process.env.AWS_PROFILE ?? "postsocial", "--region", "us-east-1"];
 // Must match copySourceSecret in infra/aws/lib/config.ts: the copy task reads this name.
 export const sourceSecret = (envName) => `postsocial/${envName}/insforge-address`;
@@ -95,8 +97,10 @@ async function createSecret(id, value) {
   }
 }
 
+// The wrapper asks for "prod" to be typed before anything on prod; these are reads only
+// (the list of migrations and the database's address).
 function insforge(envName, args) {
-  const result = spawnSync("scripts/insforge-env.sh", [envName, ...args], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
+  const result = spawnSync("scripts/insforge-env.sh", [envName, ...args], { input: "prod\n", encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
   if (result.status !== 0) throw new Error(`InsForge didn't answer for: ${args.slice(0, 2).join(" ")}`);
   return result.stdout;
 }
@@ -155,8 +159,7 @@ async function run(envName, part, network, overrides) {
 async function main(args) {
   const envName = args.find((arg) => !arg.startsWith("--"));
   const replace = args.includes("--replace");
-  if (!envName || args.some((arg) => arg !== envName && arg !== "--replace")) throw new Error("Usage: node scripts/aws-copy-database.mjs dev [--replace]");
-  if (!ENVIRONMENTS[envName]) throw new Error(`Only dev can be copied for now. ${envName === "prod" ? "Prod is copied once, at cutover." : ""}`.trim());
+  if (!envName || !ENVIRONMENTS[envName] || args.some((arg) => arg !== envName && arg !== "--replace")) throw new Error("Usage: node scripts/aws-copy-database.mjs <dev|prod> [--replace]");
 
   const account = aws(["sts", "get-caller-identity"]).Account;
   if (account !== ACCOUNT) throw new Error("Signed in to a different AWS account.");

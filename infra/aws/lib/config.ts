@@ -35,7 +35,8 @@ export type EnvConfig = {
   // 1, or 0 while this environment's worker still runs on InsForge. Never both at once on
   // the same data: two workers would renew the same platform tokens and publish the same
   // posts. Dev went to 1 on 2026-11-26, when the dev website moved to this backend and the
-  // InsForge dev worker was stopped.
+  // InsForge dev worker was stopped. Prod stays at 0 until its cutover: its worker still
+  // runs on InsForge, and the copy script refuses an environment whose AWS worker is on.
   workerTasks: 0 | 1;
   // Where this environment's rule sits on the shared HTTPS listener. Must differ per environment.
   listenerPriority: number;
@@ -43,7 +44,7 @@ export type EnvConfig = {
 
 export const ENVIRONMENTS: Record<EnvName, EnvConfig> = {
   dev: { apiDomain: "api-dev.postsocial.xyz", deployBranch: "dev", githubEnvironment: "Development", backupDays: 1, protect: false, appEnv: "dev", apiTasks: 1, workerCpu: 256, workerTasks: 1, listenerPriority: 20 },
-  prod: { apiDomain: "api.postsocial.xyz", deployBranch: "main", githubEnvironment: "Production", backupDays: 7, protect: true, appEnv: "production", apiTasks: 2, workerCpu: 512, workerTasks: 1, listenerPriority: 10 },
+  prod: { apiDomain: "api.postsocial.xyz", deployBranch: "main", githubEnvironment: "Production", backupDays: 7, protect: true, appEnv: "production", apiTasks: 2, workerCpu: 512, workerTasks: 0, listenerPriority: 10 },
 };
 
 export const ENV_NAMES = Object.keys(ENVIRONMENTS) as EnvName[];
