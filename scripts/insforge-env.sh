@@ -88,6 +88,9 @@ is_read_only() {
     "db migrations list"*|"secrets list"*|"secrets get "*|"config plan"*) return 0 ;;
     "functions list"*|"functions code "*|"schedules list"*|"schedules get "*|"schedules logs "*) return 0 ;;
     "storage buckets"*|"storage list-objects "*|"backups list"*|"backups latest"*) return 0 ;;
+    # Reads the database's address and changes nothing. scripts/aws-copy-database.mjs asks
+    # for it (and hands it to AWS without printing it) to copy an environment to AWS.
+    "db connection-string"*) return 0 ;;
     *) return 1 ;;
   esac
 }
