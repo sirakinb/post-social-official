@@ -1,6 +1,5 @@
-import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
-import { getAccessTokenCookieName } from "@insforge/sdk/ssr";
+import { sessionToken } from "@/lib/sign-in/session";
 import { requestError } from "../../../../../backend/lib/support";
 import { flashCookie, type AccountErrorCode } from "@/lib/beta/flash";
 
@@ -23,7 +22,7 @@ export async function GET(request: NextRequest) {
   };
 
   const base = process.env.CONNECTIONS_BASE_URL;
-  const token = (await cookies()).get(getAccessTokenCookieName())?.value;
+  const token = await sessionToken();
   if (!base) return fail("our_side");
   if (!token) return fail("session_ended");
 

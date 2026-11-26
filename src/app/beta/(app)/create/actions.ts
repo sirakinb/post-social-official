@@ -1,7 +1,7 @@
 "use server";
 
-import { cookies } from "next/headers";
-import { getAccessTokenCookieName } from "@insforge/sdk/ssr";
+import { functionsBaseUrl } from "@/lib/sign-in/rules";
+import { sessionToken } from "@/lib/sign-in/session";
 import { callServer } from "@/lib/beta/workspace";
 import type { CreatorInfo } from "../../../../../backend/lib/connections/tiktok-creator";
 import { UNREACHABLE, requestError } from "../../../../../backend/lib/support";
@@ -14,9 +14,9 @@ const ACTIONS = new Set(["validate", "create", "update", "submit", "get", "resch
 
 export async function callPosts<T = Record<string, unknown>>(action: string, input: Record<string, unknown>): Promise<Result<T>> {
   if (!ACTIONS.has(action)) return { ok: false, error: "That action is not available." };
-  const token = (await cookies()).get(getAccessTokenCookieName())?.value;
+  const token = await sessionToken();
   if (!token) return { ok: false, error: "Your session ended. Sign in again." };
-  const response = await fetch(`${process.env.NEXT_PUBLIC_INSFORGE_URL}/functions/posts`, {
+  const response = await fetch(`${functionsBaseUrl()}/posts`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ action, ...input }),

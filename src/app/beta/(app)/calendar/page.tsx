@@ -1,4 +1,5 @@
-import { loadViewer } from "@/lib/beta/workspace";
+import { callServer, loadViewer } from "@/lib/beta/workspace";
+import { pageReadsViaApi } from "@/lib/sign-in/rules";
 import { getMediaLinks } from "../create/actions";
 import { CalendarView, type CalendarMode, type CalendarPost } from "./calendar-view";
 
@@ -34,11 +35,16 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const to = new Date(anchor + 71 * DAY).toISOString();
   const view: CalendarMode = params.view === "week" || params.view === "list" ? params.view : "month";
 
-  const [scheduled, immediate] = await Promise.all([
-    client.database.from("posts").select(SELECT).eq("workspace_id", workspace.id).gte("scheduled_at", from).lt("scheduled_at", to).neq("status", "draft").limit(800),
-    client.database.from("posts").select(SELECT).eq("workspace_id", workspace.id).is("scheduled_at", null).gte("created_at", from).lt("created_at", to).neq("status", "draft").limit(800),
-  ]);
-  const rows = [...((scheduled.data ?? []) as unknown as Row[]), ...((immediate.data ?? []) as unknown as Row[])];
+  // From our API in one read, or (until every environment has moved) straight from the
+  // database with the person's InsForge session.
+  const fromDatabase = async () => {
+    const [scheduled, immediate] = await Promise.all([
+      client.database.from("posts").select(SELECT).eq("workspace_id", workspace.id).gte("scheduled_at", from).lt("scheduled_at", to).neq("status", "draft").limit(800),
+      client.database.from("posts").select(SELECT).eq("workspace_id", workspace.id).is("scheduled_at", null).gte("created_at", from).lt("created_at", to).neq("status", "draft").limit(800),
+    ]);
+    return [...((scheduled.data ?? []) as unknown as Row[]), ...((immediate.data ?? []) as unknown as Row[])];
+  };
+  const rows = pageReadsViaApi() ? ((await callServer<{ posts: Row[] }>("calendar_page", { workspace_id: workspace.id, from, to }))?.posts ?? []) : await fromDatabase();
 
   const firstMedia = rows.map((r) => [...r.post_media].sort((a, b) => a.position - b.position)[0]?.media_assets ?? null);
   const readyIds = firstMedia.filter((m) => m && m.status === "ready").map((m) => m!.id);

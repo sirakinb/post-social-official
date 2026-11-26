@@ -4,6 +4,8 @@
 // someone will look at them:
 // - dev: builds after each merge, unless the change can't affect the website (worker,
 //   migrations, functions, tests, docs...). So the dev link always shows the latest work.
+//   A commit message with [preview] builds it anyway: the way to pick up a changed setting
+//   in Vercel, which only reaches the site at its next build.
 // - feature branches: build only when the latest commit message contains [preview].
 // - staging and main: never (also turned off in vercel.json).
 import { execFileSync } from "node:child_process";
@@ -22,10 +24,15 @@ const NOT_WEBSITE = [
   /^adzo-tests\//,
   /^submission\//,
   /^ops\//,
+  /^infra\//,
   /^cli\//,
   /^\.github\//,
   /^backend\/functions\//,
   /^backend\/tests\//,
+  // The Node API service for AWS: its entry points, image and database setup.
+  /^backend\/(server|service|migrate)\.ts$/,
+  /^backend\/(Dockerfile|build\.sh|\.dockerignore)$/,
+  /^database\//,
   /^worker\//,
   /^scripts\/(?!vercel-ignore)/,
   /\.test\.tsx?$/,
@@ -56,6 +63,7 @@ export function decide({ ref, message, changedFiles, target = "" }) {
       ? { build: true, reason: "the commit asks for a preview" }
       : { build: false, reason: "feature branches build only when a commit message contains [preview]" };
   }
+  if (PREVIEW_TAG.test(message)) return { build: true, reason: "the commit asks for a build" };
   if (changedFiles === null) return { build: true, reason: "couldn't tell what changed, so building to be safe" };
   const website = changedFiles.filter(affectsWebsite);
   return website.length > 0

@@ -55,6 +55,15 @@ describe("Bluesky sign-in", () => {
     expect(publicJwk(clientJwk)).not.toHaveProperty("d");
   });
 
+  it("uses our own domain as the client id once CONNECTIONS_PUBLIC_URL is set", async () => {
+    const base = await settings();
+    const setting = (name: string) => (name === "CONNECTIONS_PUBLIC_URL" ? "https://www.example.xyz" : base(name));
+    const meta = clientMetadata(setting, "https://www.example.xyz/oauth/bluesky/callback");
+    expect(meta.client_id).toBe("https://www.example.xyz/oauth/bluesky/client-metadata.json");
+    expect(meta.jwks_uri).toBe("https://www.example.xyz/oauth/bluesky/jwks.json");
+    expect(meta.redirect_uris).toEqual(["https://www.example.xyz/oauth/bluesky/callback"]);
+  });
+
   it("pushes the request to the account's own server, retrying with the nonce it asks for", async () => {
     const setting = await settings();
     const calls: string[] = [];

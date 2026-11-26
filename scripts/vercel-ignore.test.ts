@@ -9,7 +9,7 @@ describe("which files count as website changes", () => {
     (file) => expect(affectsWebsite(file)).toBe(true),
   );
 
-  it.each(["worker/src/publish/x.ts", "migrations/20261115120000_x.sql", "backend/functions/api/handler.ts", "backend/lib/billing.test.ts", "docs/environments.md", "e2e/journeys/billing.e2e.ts", ".github/workflows/release.yml", "scripts/deploy-prod.sh", "README.md"])(
+  it.each(["worker/src/publish/x.ts", "infra/aws/lib/data-stack.ts", "migrations/20261115120000_x.sql", "backend/functions/api/handler.ts", "backend/lib/billing.test.ts", "docs/environments.md", "e2e/journeys/billing.e2e.ts", ".github/workflows/release.yml", "scripts/deploy-prod.sh", "README.md", "backend/server.ts", "backend/service.ts", "backend/migrate.ts", "backend/Dockerfile", "backend/build.sh", "database/bootstrap.sql"])(
     "%s doesn't",
     (file) => expect(affectsWebsite(file)).toBe(false),
   );
@@ -34,6 +34,11 @@ describe("decide", () => {
   it("builds dev when website files changed and skips it otherwise", () => {
     expect(decide({ ref: "dev", message: "", changedFiles: ["worker/src/publish/x.ts", "src/app/page.tsx"] }).build).toBe(true);
     expect(decide({ ref: "dev", message: "", changedFiles: ["worker/src/publish/x.ts", "migrations/1.sql", "docs/a.md"] }).build).toBe(false);
+  });
+
+  it("builds dev when the commit asks for it, whatever changed", () => {
+    expect(decide({ ref: "dev", message: "Dev's worker on AWS [preview] (#294)", changedFiles: ["infra/aws/lib/config.ts", "docs/a.md"] }).build).toBe(true);
+    expect(decide({ ref: "staging", message: "Release [preview]", changedFiles: ["src/a.tsx"] }).build).toBe(false);
   });
 
   it("builds dev when it can't tell what changed", () => {

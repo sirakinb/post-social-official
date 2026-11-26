@@ -73,9 +73,28 @@ const nextConfig: NextConfig = {
       { source: "/ingest/:path*", destination: "https://us.i.posthog.com/:path*" },
     ];
     const api = process.env.API_BASE_URL;
-    if (!api) return posthog;
+    const connections = process.env.CONNECTIONS_BASE_URL;
+    // Addresses the platforms call, on our own domain: sign-in callbacks, Bluesky's client
+    // description and key, Meta's deletion, deauthorize and webhook calls, and Stripe's
+    // webhook. They are forwarded to the backend, so moving the backend only changes the
+    // destinations here; nothing changes in a platform's dashboard. YouTube and TikTok have
+    // their own pages (src/app/oauth), which win over the callback rule.
+    const platforms = connections
+      ? [
+          { source: "/oauth/:platform(instagram|facebook|threads|linkedin|bluesky|x)/callback", destination: `${connections}/oauth/:platform/callback` },
+          { source: "/oauth/bluesky/client-metadata.json", destination: `${connections}/oauth/bluesky/client-metadata.json` },
+          { source: "/oauth/bluesky/jwks.json", destination: `${connections}/oauth/bluesky/jwks.json` },
+          { source: "/meta/data-deletion", destination: `${connections}/meta/data-deletion` },
+          { source: "/meta/data-deletion/status", destination: `${connections}/meta/data-deletion/status` },
+          { source: "/meta/deauthorize", destination: `${connections}/meta/deauthorize` },
+          { source: "/meta/webhooks", destination: `${connections}/meta/webhooks` },
+        ]
+      : [];
+    if (!api) return [...posthog, ...platforms];
     return [
       ...posthog,
+      ...platforms,
+      { source: "/stripe/webhook", destination: `${api}/stripe/webhook` },
       { source: "/api/v1/:path*", destination: `${api}/v1/:path*` },
       { source: "/mcp", destination: `${api}/mcp` },
       // Saved profile pictures of connected accounts.

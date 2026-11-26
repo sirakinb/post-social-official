@@ -1,7 +1,6 @@
 "use server";
 
-import { cookies } from "next/headers";
-import { getAccessTokenCookieName } from "@insforge/sdk/ssr";
+import { sessionToken } from "@/lib/sign-in/session";
 import { OUR_SIDE, UNREACHABLE, requestError } from "../../../../../backend/lib/support";
 
 export type KeySummary = { id: string; name: string; prefix: string; mode: "live" | "test"; last_used_at: string | null; revoked_at: string | null; created_at: string };
@@ -11,7 +10,7 @@ export type KeySummary = { id: string; name: string; prefix: string; mode: "live
 async function callKeys<T>(body: Record<string, unknown>): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
   const base = process.env.API_BASE_URL;
   if (!base) return { ok: false, error: OUR_SIDE };
-  const token = (await cookies()).get(getAccessTokenCookieName())?.value;
+  const token = await sessionToken();
   if (!token) return { ok: false, error: "Your session ended. Sign in again." };
   const response = await fetch(`${base}/keys`, {
     method: "POST",

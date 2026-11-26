@@ -1,7 +1,7 @@
 "use server";
 
-import { cookies } from "next/headers";
-import { getAccessTokenCookieName } from "@insforge/sdk/ssr";
+import { functionsBaseUrl } from "@/lib/sign-in/rules";
+import { sessionToken } from "@/lib/sign-in/session";
 import { UNREACHABLE, requestError } from "../../../../../backend/lib/support";
 
 // The web app uses the same `media` function an AI client will, with the person's own
@@ -12,10 +12,10 @@ export type MediaResult<T = Record<string, unknown>> = { ok: true; data: T } | {
 
 export async function callMedia<T = Record<string, unknown>>(payload: { action: string } & Record<string, unknown>): Promise<MediaResult<T>> {
   if (!ACTIONS.has(payload.action)) return { ok: false, error: "That media action is not available." };
-  const token = (await cookies()).get(getAccessTokenCookieName())?.value;
+  const token = await sessionToken();
   if (!token) return { ok: false, error: "Your session ended. Sign in again." };
 
-  const response = await fetch(`${process.env.NEXT_PUBLIC_INSFORGE_URL}/functions/media`, {
+  const response = await fetch(`${functionsBaseUrl()}/media`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(payload),

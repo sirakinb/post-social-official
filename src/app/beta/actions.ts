@@ -19,6 +19,12 @@ import {
   verifyErrorMessage,
 } from "@/lib/insforge/auth-rules";
 import { checkAuthLimit, recordAuthFailure } from "@/lib/security/limits";
+import * as own from "@/lib/sign-in/ours";
+import { ownSignInUrl } from "@/lib/sign-in/rules";
+
+// Each action below does the same thing with whichever sign-in this environment uses:
+// InsForge's, or our own API's when SIGN_IN_URL is set (src/lib/sign-in/rules.ts). The
+// limits, the messages and the screens are the same either way.
 
 // codeRejected: the email code didn't work. The backend says the same for a typo and an expired
 // code, so the form words it by how long ago the code was sent.
@@ -37,15 +43,20 @@ export async function signIn(_previous: FormState, formData: FormData): Promise<
   const limit = await checkAuthLimit("signin", email);
   if (limit.blocked) return { error: limit.blocked };
 
-  const auth = await insforgeAuthActions();
-  const { data, error } = await auth.signInWithPassword({ email, password });
+  const { signedIn, error } = ownSignInUrl() ? await own.signInWithPassword(email, password) : await insforgeSignIn(email, password);
   if (needsEmailVerification(error)) return sendVerificationCode(email);
-  if (error || !data?.user) {
+  if (error || !signedIn) {
     if (wrongAnswer(error)) await recordAuthFailure("signin", email);
     return { error: signInErrorMessage(error ?? { statusCode: 401 }) ?? undefined };
   }
 
   redirect(safeNextPath(field(formData, "next")));
+}
+
+async function insforgeSignIn(email: string, password: string) {
+  const auth = await insforgeAuthActions();
+  const { data, error } = await auth.signInWithPassword({ email, password });
+  return { signedIn: Boolean(data?.user), error };
 }
 
 // A wrong password or code (not the service being busy or down).
@@ -61,8 +72,7 @@ async function sendVerificationCode(email: string): Promise<FormState> {
   const limit = await checkAuthLimit("reset_request", email);
   if (limit.blocked) return { error: limit.blocked };
   if (limit.send) {
-    const client = createServerClient();
-    const { error } = await client.auth.resendVerificationEmail({ email });
+    const { error } = ownSignInUrl() ? await own.sendVerificationCode(email) : await createServerClient().auth.resendVerificationEmail({ email });
     if (error && error.statusCode !== undefined && (error.statusCode === 429 || error.statusCode >= 500)) {
       return { error: verifyErrorMessage(error) ?? undefined };
     }
@@ -92,15 +102,20 @@ async function checkEmailCode(_previous: FormState, formData: FormData): Promise
   const limit = await checkAuthLimit("reset_complete", email);
   if (limit.blocked) return { step: "verify", email, error: limit.blocked };
 
-  const auth = await insforgeAuthActions();
-  const { data, error } = await auth.verifyEmail({ email, otp: code });
-  if (error?.statusCode === 400 || (!error && !data?.user)) {
+  const { signedIn, error } = ownSignInUrl() ? await own.verifyEmail(email, code) : await insforgeVerifyEmail(email, code);
+  if (error?.statusCode === 400 || (!error && !signedIn)) {
     await recordAuthFailure("reset_complete", email);
     return { step: "verify", email, codeRejected: true };
   }
-  if (error || !data?.user) return { step: "verify", email, error: verifyErrorMessage(error) ?? undefined };
+  if (error || !signedIn) return { step: "verify", email, error: verifyErrorMessage(error) ?? undefined };
 
   redirect(safeNextPath(field(formData, "next")));
+}
+
+async function insforgeVerifyEmail(email: string, code: string) {
+  const auth = await insforgeAuthActions();
+  const { data, error } = await auth.verifyEmail({ email, otp: code });
+  return { signedIn: Boolean(data?.user), error };
 }
 
 // Open sign-up with an email and password. The workspace is created on the first visit to
@@ -116,8 +131,8 @@ export async function signUp(_previous: FormState, formData: FormData): Promise<
   const limit = await checkAuthLimit("signup", email);
   if (limit.blocked) return { error: limit.blocked };
 
-  const auth = await insforgeAuthActions();
-  const { data, error } = await auth.signUp({ email, password, name });
+  // Our own sign-in always asks for the emailed code before anyone is signed in.
+  const { data, error } = ownSignInUrl() ? { data: null, error: (await own.signUp(email, password, name)).error } : await (await insforgeAuthActions()).signUp({ email, password, name });
   if (error) {
     // Status and error code only, so a rejected site key or an outage shows up in the logs
     // without recording who tried to sign up.
@@ -133,7 +148,8 @@ export async function signUp(_previous: FormState, formData: FormData): Promise<
 // Google sign-in (and sign-up): sends the person to Google with a PKCE challenge. The
 // verifier waits in a short-lived httpOnly cookie for the callback route to finish.
 export async function startGoogleSignIn(formData: FormData) {
-  if (!signupOpen()) redirect(BETA_LOGIN);
+  // Google sign-in exists on InsForge only (and its button is hidden there too).
+  if (!signupOpen() || ownSignInUrl()) redirect(BETA_LOGIN);
   const requestHeaders = await headers();
   const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
   const proto = requestHeaders.get("x-forwarded-proto") ?? (host?.startsWith("localhost") ? "http" : "https");
@@ -155,8 +171,8 @@ export async function startGoogleSignIn(formData: FormData) {
 }
 
 export async function signOut() {
-  const auth = await insforgeAuthActions();
-  await auth.signOut();
+  if (ownSignInUrl()) await own.signOut();
+  else await (await insforgeAuthActions()).signOut();
   redirect(BETA_LOGIN);
 }
 
@@ -170,8 +186,7 @@ export async function requestPasswordReset(_previous: FormState, formData: FormD
   // Too many reset emails for this address already: answer the same, send nothing more.
   if (!limit.send) return { step: "complete", email, notice: sent };
 
-  const client = createServerClient();
-  const { error } = await client.auth.sendResetPasswordEmail({ email });
+  const { error } = ownSignInUrl() ? await own.sendResetCode(email) : await createServerClient().auth.sendResetPasswordEmail({ email });
   // Same answer whether or not the account exists, so the form cannot be used to find accounts.
   if (error && error.statusCode !== undefined && (error.statusCode === 429 || error.statusCode >= 500)) {
     return { step: "request", email, error: resetErrorMessage(error) ?? undefined };
@@ -192,6 +207,18 @@ export async function completePasswordReset(_previous: FormState, formData: Form
   if (problem) return { step: "complete", email, error: problem };
   const limit = await checkAuthLimit("reset_complete", email);
   if (limit.blocked) return { step: "complete", email, error: limit.blocked };
+
+  if (ownSignInUrl()) {
+    // One call checks the code and sets the password. It also ends every session the
+    // person had, so only this browser's cookie is left to clear.
+    const reset = await own.resetPassword(email, code, newPassword);
+    if (reset.error) {
+      if (reset.wrongCode) await recordAuthFailure("reset_complete", email);
+      return { step: "complete", email, error: resetErrorMessage(reset.error) ?? undefined };
+    }
+    await own.signOut();
+    redirect(`${BETA_LOGIN}?reset=done`);
+  }
 
   const client = createServerClient();
   const exchange = await client.auth.exchangeResetPasswordToken({ email, code });

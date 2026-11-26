@@ -5,8 +5,9 @@ cd "$(dirname "$0")/.."
 rm -rf worker/dist && mkdir -p worker/dist
 npx esbuild worker/src/index.ts --bundle --platform=node --target=node24 --format=esm \
   --banner:js="import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);" \
-  --external:mediainfo.js --external:sharp --log-level=warning --outfile=worker/dist/worker.mjs
+  --external:mediainfo.js --external:sharp --external:pg-native --log-level=warning --outfile=worker/dist/worker.mjs
 # mediainfo.js loads a WebAssembly file at runtime and sharp ships a native image library, so
-# both are installed in the container (worker/package.json) instead of bundled.
+# both are installed in the container (worker/package.json) instead of bundled. pg-native is
+# an optional C binding the Postgres client tries to load; we use the plain client.
 cp worker/package.json worker/dist/
 echo "Built worker/dist ($(du -sh worker/dist | cut -f1))"
