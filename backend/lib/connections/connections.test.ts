@@ -355,6 +355,23 @@ describe("finishing a Facebook connection", () => {
     expect(result.message).toBe("Connected Test Page. Skipped Real Page: already connected to another workspace.");
   });
 
+  it("names the handle when an account connected elsewhere shares its display name with another", async () => {
+    const { http } = fakeHttp([
+      [/api\.instagram\.com\/oauth\/access_token/, { access_token: "short", user_id: 17 }],
+      [/graph\.instagram\.com\/access_token/, { access_token: "long", expires_in: 5184000 }],
+      [/graph\.instagram\.com\/v25\.0\/me/, { id: "1789", username: "akib", name: "Aki" }],
+    ]);
+    const sql = (async (query: string) => {
+      if (query.includes("UPDATE public.oauth_states")) return [{ workspace_id: "w1", user_id: "user-1", return_to: "/beta/accounts", code_verifier_encrypted: null, profile_id: null }];
+      if (query.includes("FROM public.workspace_members")) return [{ role: "owner", actor_id: "a1" }];
+      if (query.includes("workspace_id <> $3")) return [{ id: "other" }];
+      return [];
+    }) as unknown as Sql;
+    const result = await completeConnection({ sql, setting, allowedReturnOrigins: [], http }, "instagram", new URLSearchParams({ state: "s", code: "c" }), "user-1");
+    expect(result.ok).toBe(false);
+    expect(result.message).toBe("Aki (@akib) is already connected to another workspace. Disconnect it there first.");
+  });
+
   it("fails when every Page is connected elsewhere", async () => {
     const { result, inserted } = await finish(["p1", "p2"]);
     expect(inserted).toEqual([]);

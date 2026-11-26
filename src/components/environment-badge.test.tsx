@@ -8,11 +8,18 @@ describe("EnvironmentBadge", () => {
       <EnvironmentBadge
         appEnv="development"
         insforgeUrl="https://syydd6ck-zqc.us-east.insforge.app"
+        ownApiUrl={null}
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent(
       "development · InsForge syydd6ck-zqc.us-east.insforge.app",
     );
+  });
+
+  it("names our own API instead of InsForge when the deployment runs on it", () => {
+    render(<EnvironmentBadge appEnv="preview" insforgeUrl="https://syydd6ck-zqc.us-east.insforge.app" ownApiUrl="https://api-dev.postsocial.xyz/auth" />);
+    expect(screen.getByRole("status")).toHaveTextContent("preview · AWS api-dev.postsocial.xyz");
+    expect(screen.getByRole("status")).not.toHaveTextContent("InsForge");
   });
 
   it("renders nothing in production", () => {
@@ -23,12 +30,12 @@ describe("EnvironmentBadge", () => {
   });
 
   it("still renders when the InsForge URL is missing", () => {
-    render(<EnvironmentBadge appEnv="preview" insforgeUrl="" />);
+    render(<EnvironmentBadge appEnv="preview" insforgeUrl="" ownApiUrl={null} />);
     expect(screen.getByRole("status")).toHaveTextContent("preview · InsForge not set");
   });
 
   it("shows a malformed URL as-is instead of crashing", () => {
-    render(<EnvironmentBadge appEnv="development" insforgeUrl="not a url" />);
+    render(<EnvironmentBadge appEnv="development" insforgeUrl="not a url" ownApiUrl={null} />);
     expect(screen.getByRole("status")).toHaveTextContent("development · InsForge not a url");
   });
 
