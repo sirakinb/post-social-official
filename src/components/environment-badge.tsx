@@ -1,3 +1,5 @@
+import { ownSignInUrl } from "@/lib/sign-in/rules";
+
 // Marks non-production deployments (Vercel Preview, local dev) so nobody mistakes
 // dev data for the real thing. Renders nothing in production.
 export function resolveAppEnv(
@@ -11,12 +13,16 @@ export function resolveAppEnv(
   return nodeEnv === "production" ? "production" : "development";
 }
 
+// ownApiUrl: our own API's sign-in address when this deployment runs on it (SIGN_IN_URL, see
+// src/lib/sign-in/rules.ts). The badge then names that backend, not InsForge.
 export function EnvironmentBadge({
   appEnv = resolveAppEnv(),
   insforgeUrl = process.env.NEXT_PUBLIC_INSFORGE_URL,
+  ownApiUrl = ownSignInUrl(),
 }: {
   appEnv?: string;
   insforgeUrl?: string;
+  ownApiUrl?: string | null;
 }) {
   if (appEnv === "production") return null;
 
@@ -26,7 +32,7 @@ export function EnvironmentBadge({
       aria-label={`Environment: ${appEnv}`}
       className="fixed bottom-3 left-3 z-50 rounded-full bg-amber-400 px-3 py-1 font-mono text-xs font-semibold text-black shadow"
     >
-      {appEnv} · InsForge {hostOf(insforgeUrl)}
+      {appEnv} · {ownApiUrl ? `AWS ${hostOf(ownApiUrl)}` : `InsForge ${hostOf(insforgeUrl)}`}
     </div>
   );
 }
