@@ -111,6 +111,19 @@ describe("proxy: the app under /beta with our own sign-in", () => {
     expect(cookie).toMatchObject({ value: "signed.token", httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: 2592000 });
   });
 
+  it("leaves the cookie alone on a server action, which would otherwise load the whole page again after each one", async () => {
+    const response = await proxy(new NextRequest("https://www.postsocial.xyz/beta/create", { method: "POST", headers: { cookie: "ps_session=signed.token", "next-action": "abc123" } }));
+    expect(response.headers.get("location")).toBeNull();
+    expect(response.cookies.get("ps_session")).toBeUndefined();
+    expect(response.headers.get("set-cookie")).toBeNull();
+    expect(response.headers.get("x-middleware-set-cookie")).toBeNull();
+  });
+
+  it("still turns a signed-out server action away", async () => {
+    const response = await proxy(new NextRequest("https://www.postsocial.xyz/beta/create", { method: "POST", headers: { "next-action": "abc123" } }));
+    expect(new URL(response.headers.get("location")!).pathname).toBe("/beta/login");
+  });
+
   it("sends a signed-in person away from the sign-in page, but never away from the page that clears an ended session", async () => {
     expect(new URL((await proxy(new NextRequest("https://www.postsocial.xyz/beta/login", withSession))).headers.get("location")!).pathname).toBe("/beta");
     expect((await proxy(new NextRequest("https://www.postsocial.xyz/beta/auth/ended?next=/beta", withSession))).headers.get("location")).toBeNull();

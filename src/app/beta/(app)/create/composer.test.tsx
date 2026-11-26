@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { Composer } from "./composer";
+import { callPosts } from "./actions";
 
 vi.mock("./actions", () => ({
   callPosts: vi.fn(async () => ({ ok: true, data: { ok: true, problems: [] } })),
@@ -42,6 +43,35 @@ describe("Composer", () => {
     expect(screen.getByText(/Instagram shares it with your followers if it does well/)).toBeInTheDocument();
     fireEvent.click(within(screen.getByRole("radiogroup", { name: "Instagram post type" })).getByRole("radio", { name: "Image" }));
     expect(screen.queryByRole("radiogroup", { name: "Instagram trial reel" })).toBeNull();
+  });
+
+  it("checks the post once when it changes, not again after every answer or page refresh", async () => {
+    vi.useFakeTimers();
+    try {
+      const validate = vi.mocked(callPosts);
+      validate.mockClear();
+      // Several short waits, each letting the page redraw: one long wait would hide a loop.
+      const settle = async () => {
+        for (let i = 0; i < 8; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(600)));
+      };
+      const editing = { id: "p1", status: "draft", caption: "Hi", scheduledAt: null, mediaIds: [], accounts: [{ accountId: "a1", choice: {} }] };
+      const view = render(<Composer workspaceId="w1" accounts={[account]} library={[]} editing={editing} />);
+      await settle();
+      expect(validate).toHaveBeenCalledTimes(1);
+
+      // The server sends the same accounts again as new objects (any page refresh does).
+      view.rerender(<Composer workspaceId="w1" accounts={[{ ...account }]} library={[]} editing={editing} />);
+      await settle();
+      expect(validate).toHaveBeenCalledTimes(1);
+
+      // A real change is checked again, once.
+      fireEvent.change(screen.getByRole("textbox", { name: /caption/i }), { target: { value: "Hi there" } });
+      await settle();
+      expect(validate).toHaveBeenCalledTimes(2);
+      expect(validate.mock.calls[1]).toEqual(["validate", expect.objectContaining({ workspace_id: "w1", caption: "Hi there", media_ids: [] })]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("makes connecting an account the main action when there is none", () => {
