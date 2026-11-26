@@ -34,14 +34,15 @@ export type EnvConfig = {
   workerCpu: 256 | 512;
   // 1, or 0 while this environment's worker still runs on InsForge. Never both at once on
   // the same data: two workers would renew the same platform tokens and publish the same
-  // posts. Dev goes to 1 on the day the dev website moves to this backend.
+  // posts. Dev went to 1 on 2026-11-26, when the dev website moved to this backend and the
+  // InsForge dev worker was stopped.
   workerTasks: 0 | 1;
   // Where this environment's rule sits on the shared HTTPS listener. Must differ per environment.
   listenerPriority: number;
 };
 
 export const ENVIRONMENTS: Record<EnvName, EnvConfig> = {
-  dev: { apiDomain: "api-dev.postsocial.xyz", deployBranch: "dev", githubEnvironment: "Development", backupDays: 1, protect: false, appEnv: "dev", apiTasks: 1, workerCpu: 256, workerTasks: 0, listenerPriority: 20 },
+  dev: { apiDomain: "api-dev.postsocial.xyz", deployBranch: "dev", githubEnvironment: "Development", backupDays: 1, protect: false, appEnv: "dev", apiTasks: 1, workerCpu: 256, workerTasks: 1, listenerPriority: 20 },
   prod: { apiDomain: "api.postsocial.xyz", deployBranch: "main", githubEnvironment: "Production", backupDays: 7, protect: true, appEnv: "production", apiTasks: 2, workerCpu: 512, workerTasks: 1, listenerPriority: 10 },
 };
 

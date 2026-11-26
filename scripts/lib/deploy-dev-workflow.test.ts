@@ -33,6 +33,17 @@ describe("deploy-dev workflow", () => {
     expect(workflow).not.toMatch(/INSFORGE_USER_API_KEY|VERCEL_TOKEN|db:promote|syydd6ck\.(us-east|function2)/);
   });
 
+  it("never starts a worker on InsForge dev: dev's worker runs on AWS", () => {
+    expect(workflow).not.toMatch(/worker:deploy|flyctl/);
+    expect(workflow).toContain("options: [api, all functions, migrations, everything]");
+    const script = readFileSync(path.join(root, "scripts/deploy-worker.sh"), "utf8");
+    const result = spawnSync("bash", [path.join(root, "scripts/deploy-worker.sh"), "dev"], { encoding: "utf8" });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Dev's worker runs on AWS now");
+    // Refused before anything is built or read.
+    expect(script.indexOf('"$target" == "dev"')).toBeLessThan(script.indexOf("worker/build.sh"));
+  });
+
   it("checks dev answers and records the commit", () => {
     expect(workflow).toContain("/api/v1/openapi.json");
     expect(workflow).toContain("GITHUB_STEP_SUMMARY");

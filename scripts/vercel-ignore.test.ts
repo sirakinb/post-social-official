@@ -36,6 +36,11 @@ describe("decide", () => {
     expect(decide({ ref: "dev", message: "", changedFiles: ["worker/src/publish/x.ts", "migrations/1.sql", "docs/a.md"] }).build).toBe(false);
   });
 
+  it("builds dev when the commit asks for it, whatever changed", () => {
+    expect(decide({ ref: "dev", message: "Dev's worker on AWS [preview] (#294)", changedFiles: ["infra/aws/lib/config.ts", "docs/a.md"] }).build).toBe(true);
+    expect(decide({ ref: "staging", message: "Release [preview]", changedFiles: ["src/a.tsx"] }).build).toBe(false);
+  });
+
   it("builds dev when it can't tell what changed", () => {
     expect(decide({ ref: "dev", message: "", changedFiles: null }).build).toBe(true);
   });

@@ -24,6 +24,8 @@
 //
 // Run it from the main checkout (the folder linked to InsForge), signed in to AWS as the
 // `postsocial` profile. Prod is copied once, at cutover, and is switched on here then.
+// It refuses an environment whose worker already runs on AWS (dev since 2026-11-26): that
+// environment's data now lives on AWS, and a copy would overwrite it.
 import { execFileSync, spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { CLUSTER, networkOf, taskOutcome } from "./aws-deploy.mjs";
@@ -46,6 +48,12 @@ export function migrationGap(insforgeVersions, buildFiles) {
   const theirs = new Set(insforgeVersions.map((version) => String(version).padStart(14, "0")));
   const ours = new Set(buildFiles.map((file) => /^(\d{14})_/.exec(file.split("/").pop())?.[1]).filter(Boolean));
   return { onlyInsforge: [...theirs].filter((version) => !ours.has(version)).sort(), onlyBuild: [...ours].filter((version) => !theirs.has(version)).sort() };
+}
+
+// An environment whose worker runs on AWS lives there: its AWS database is the real one,
+// and a copy would put InsForge's old data over it. (Dev since 2026-11-26.)
+export function livesOnAws(workerService) {
+  return (workerService?.desiredCount ?? 0) > 0;
 }
 
 // A parse error can quote the text it choked on: say only what couldn't be read.
@@ -164,6 +172,9 @@ async function main(args) {
   console.log(`Migrations match: ${applied.length} on InsForge ${envName} and in build ${build.slice(0, 12)}`);
 
   const before = services(envName);
+  if (livesOnAws(before.worker)) {
+    throw new Error(`The ${envName} worker runs on AWS, so the AWS database is the real one and a copy would overwrite it with InsForge's old data. Nothing was changed.`);
+  }
   const network = networkOf(before.api);
   const apiCount = before.api.desiredCount;
   const source = sourceSecret(envName);

@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { addressIn, migrationGap, sourceSecret } from "./aws-copy-database.mjs";
+import { addressIn, livesOnAws, migrationGap, sourceSecret } from "./aws-copy-database.mjs";
 
 describe("copying a database to AWS", () => {
   it("finds the database address in what the InsForge CLI prints", () => {
@@ -17,6 +17,16 @@ describe("copying a database to AWS", () => {
     expect(migrationGap(["20261004034129", "20261122130000", "20261201000000"], files)).toEqual({ onlyInsforge: ["20261201000000"], onlyBuild: [] });
     // A file that isn't a migration is not counted.
     expect(migrationGap(["20261004034129"], ["migrations/20261004034129_core-schema.sql", "migrations/README.md"])).toEqual({ onlyInsforge: [], onlyBuild: [] });
+  });
+
+  it("refuses an environment that already lives on AWS", () => {
+    expect(livesOnAws({ desiredCount: 1 })).toBe(true);
+    expect(livesOnAws({ desiredCount: 0 })).toBe(false);
+    expect(livesOnAws(undefined)).toBe(false);
+    const script = readFileSync(new URL("./aws-copy-database.mjs", import.meta.url), "utf8");
+    // Checked before the services are stopped or anything is copied.
+    expect(script.indexOf("livesOnAws(before.worker)")).toBeGreaterThan(0);
+    expect(script.indexOf("livesOnAws(before.worker)")).toBeLessThan(script.indexOf('await scale(envName, "worker", 0)'));
   });
 
   it("never prints or stores the address, and refuses prod until cutover", () => {

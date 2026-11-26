@@ -43,14 +43,19 @@ database commands and silently hits whichever environment is linked.
 ## Deploying to dev
 
 Dev deploys run from GitHub: Actions → **Deploy to dev** → Run workflow (branch `dev`), then pick
-what to deploy (`api`, all functions, the worker, migrations, or everything) and optionally a
+what to deploy (`api`, all functions, migrations, or everything) and optionally a
 commit SHA from `dev` (empty: the tip of `dev`). It refuses commits that aren't on `dev`, runs one
 at a time (dev is shared), uses only the dev branch's own key (`Development` environment secret
 `INSFORGE_DEV_API_KEY`, which the prod backend refuses) with the scripts in their dev-key mode
 (`INSFORGE_DEV_DIRECT=1`, which refuses prod), checks the dev API answers, and records the commit
 in the run summary. The same commands still work by hand from a Mac (`npm run functions:deploy --
-dev <name>`, `npm run worker:deploy -- dev`, `npm run db:dev`). A Vercel preview never deploys
-the backend.
+dev <name>`, `npm run db:dev`). A Vercel preview never deploys the backend.
+
+Since 2026-11-26 the dev website (dev.postsocial.xyz) runs on AWS dev, which deploys by itself
+on every push to `dev` (see "Node API service"). InsForge dev stays as it was that day: its
+functions and migrations are kept level with `dev` for the database tests and for
+feature-branch previews, and its worker is stopped. `npm run worker:deploy -- dev` refuses
+to run: a second worker would renew the same platform tokens as the one on AWS.
 
 Production releases only from `main` (the `Production` environment accepts no other branch), and
 `main`, `staging` and `dev` only take pull requests that pass the checks. Releases go out on Aki's
@@ -95,7 +100,8 @@ in order to dev, then to prod, exactly the same files.
    again before applying them.
 5. **Deploy the web app.** Previews point at dev and build only when someone will look at
    them (`scripts/vercel-ignore.mjs`): `dev` builds after each merge unless nothing the
-   website uses changed (worker, migrations, functions, tests, docs); a feature branch
+   website uses changed (worker, migrations, functions, tests, docs), or whenever the merge's
+   message contains `[preview]` (the way to pick up a changed Vercel setting); a feature branch
    builds only when its latest commit message contains `[preview]`; `staging` never
    builds. Vercel itself doesn't deploy production on a merge (set in `vercel.json`): the
    release workflow does, after the backend, so the site never goes out ahead of it. By
@@ -191,9 +197,19 @@ that doesn't come up healthy is rolled back by AWS and fails the run. Setting an
 up the first time, and copying its settings (`scripts/aws-copy-settings.mjs`) and its data
 (`scripts/aws-copy-database.mjs`) from InsForge: `infra/aws/README.md`.
 
-**Dev's worker still runs on InsForge.** AWS dev holds a copy of dev's data, taken when the
-copy script was last run, and its worker is stopped: two workers on the same accounts would
-both renew the same platform tokens. The AWS one starts on the day the dev website moves over.
+**Dev runs on AWS (since 2026-11-26).** dev.postsocial.xyz signs people in, reads and
+publishes through `api-dev.postsocial.xyz`, and dev's worker is the AWS one. The last copy
+from InsForge dev was taken that day; from then on AWS dev's database is the real one, and
+`scripts/aws-copy-database.mjs` refuses to copy over it. The InsForge dev worker is stopped
+and must stay stopped: two workers on the same accounts would both renew the same platform
+tokens. What the dev website has in Vercel (Preview, branch `dev`): `SIGN_IN_URL`,
+`API_BASE_URL`, `CONNECTIONS_BASE_URL`, `FUNCTIONS_BASE_URL` and AWS dev's
+`INTERNAL_PROXY_SECRET`. AWS dev's settings also hold `CONNECTIONS_PUBLIC_URL`
+(`https://dev.postsocial.xyz`), so platforms send people back to our own domain, and TikTok's
+test app (the live app can't take a dev address without a review). To go back: remove those
+five Vercel settings, rebuild dev, stop the AWS worker (`workerTasks: 0`) and start the
+InsForge one; what was done on AWS dev in between stays there. Feature-branch previews
+still use InsForge dev (the settings Vercel gives every preview).
 
 **Sign-in.** On AWS the service runs sign-in itself (Better Auth, `backend/lib/auth`), switched
 on by the `AUTH_SECRET` it is given there:
@@ -402,7 +418,7 @@ website; nothing changes for the platforms.
 |---|---|---|
 | R2 bucket | `postsocial-media-dev` (private) | `postsocial-media-prod` (private) |
 | Uploads allowed from | `http://localhost:3333`, `https://post-social-*-app-build-26.vercel.app` | `https://www.postsocial.xyz`, `https://postsocial.xyz` |
-| Worker | `post-social-worker` on InsForge Compute, always on, 1 GB | same, 1 GB |
+| Worker | On AWS (`postsocial-dev-worker`, 1 GB). The InsForge one is stopped | `post-social-worker` on InsForge Compute, always on, 1 GB |
 
 - Media files live in Cloudflare R2 and are never public: browsers upload with short-lived
   signed part links, and readers get short-lived signed links.
@@ -412,8 +428,9 @@ website; nothing changes for the platforms.
 - Functions are bundled and deployed with `npm run functions:deploy -- <dev|prod> <name>`
   (for example `media`). Branches do not carry function code, so deploy to each environment.
 - The worker (`worker/`) processes media jobs and runs the retention and orphan sweeps.
-  Deploy with `npm run worker:deploy -- <dev|prod>`; it reads its settings from that
-  environment's secrets and must stay `--always-on` (it gets no web traffic to wake it).
+  On prod, deploy with `npm run worker:deploy -- prod`; it reads its settings from prod's
+  secrets and must stay `--always-on` (it gets no web traffic to wake it). Dev's worker runs
+  on AWS and deploys with the API on every push to `dev`.
   InsForge Compute has no log viewer yet; failed jobs keep their error in
   `media_jobs.last_error`.
 
