@@ -47,9 +47,14 @@ async function insforgeSession(request: NextRequest, response: NextResponse) {
 // Our own sign-in: the cookie is the session. Whether it is still good is the page's
 // question to the API (currentUser); here it is only pushed out again, as the API does with
 // the session itself, so someone who keeps using the app stays signed in.
+//
+// Only when a page is opened. A cookie set here on a server action's request (a POST) counts
+// to Next.js as the action changing cookies, so it would load the whole page again after
+// every action: the page's data on each background check, sign-out or save.
 function keepOwnSession(request: NextRequest, response: NextResponse) {
   const token = request.cookies.get(SESSION_COOKIE)?.value;
-  if (token) response.cookies.set(SESSION_COOKIE, token, sessionCookieOptions());
+  const openingAPage = request.method === "GET" || request.method === "HEAD";
+  if (token && openingAPage) response.cookies.set(SESSION_COOKIE, token, sessionCookieOptions());
   return token;
 }
 
