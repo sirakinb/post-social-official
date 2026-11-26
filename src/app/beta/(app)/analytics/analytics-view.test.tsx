@@ -212,4 +212,13 @@ describe("whole-account analytics on the Analytics page", () => {
     expect(screen.getAllByText("75%")).toHaveLength(2); // US, and women
     expect(screen.getByText("Women")).toBeTruthy();
   });
+
+  it("lets a card left alone in its row take the whole row, so no empty half shows", () => {
+    show("growth");
+    const audience = screen.getByText("Top countries").closest("li")!;
+    expect(audience.parentElement!.className).toContain("lg:grid-cols-2");
+    expect(audience.className).toContain("lg:last:odd:col-span-2");
+    const followers = audience.closest("section, div")!.ownerDocument.querySelector("ul.sm\\:grid-cols-2 > li")!;
+    expect(followers.className).toContain("sm:last:odd:col-span-2");
+  });
 });

@@ -370,7 +370,7 @@ const GENDERS: Record<string, string> = { F: "Women", M: "Men", U: "Not shared" 
 function AudienceCard({ account: a }: { account: Account }) {
   const parts = AUDIENCE_PARTS.filter((p) => a.audience?.[p.key]?.length);
   return (
-    <li className="bg-ps-surface p-4">
+    <li className={cn("bg-ps-surface p-4", ALONE_IN_ROW.lg)}>
       <div className="flex items-center gap-2">
         <PlatformCardIcon platform={a.platform} size="sm" />
         <span className="min-w-0 flex-1 truncate text-ps-text">{a.name}</span>
@@ -468,6 +468,11 @@ export function PostRow({ post, showSources }: { post: Post; showSources: boolea
 
 // ---------- Growth ----------
 
+// The Growth tab's cards sit two to a row, with the list's own colour showing between them as
+// divider lines. A last card left alone in its row takes the whole row, or that colour fills
+// the empty half and reads as a missing card. Written out in full so Tailwind keeps both.
+const ALONE_IN_ROW = { sm: "sm:last:odd:col-span-2", lg: "lg:last:odd:col-span-2" };
+
 function Growth({ data }: { data: AnalyticsData }) {
   const counted = data.accounts.filter((a) => a.followers !== null);
   return (
@@ -513,7 +518,7 @@ function GrowthCard({ account: a }: { account: Account }) {
   const max = Math.max(...points);
   const path = points.map((v, i) => `${points.length === 1 ? W / 2 : (i * W) / (points.length - 1)},${max === min ? H / 2 : H - 4 - ((v - min) / (max - min)) * (H - 8)}`).join(" ");
   return (
-    <li className="bg-ps-surface p-4">
+    <li className={cn("bg-ps-surface p-4", ALONE_IN_ROW.sm)}>
       <div className="flex items-center gap-2">
         <PlatformCardIcon platform={a.platform} size="sm" />
         <span className="min-w-0 flex-1 truncate text-ps-text">{a.name}</span>
