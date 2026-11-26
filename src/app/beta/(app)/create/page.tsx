@@ -1,4 +1,5 @@
-import { loadViewer } from "@/lib/beta/workspace";
+import { callServer, loadViewer } from "@/lib/beta/workspace";
+import { pageReadsViaApi } from "@/lib/sign-in/rules";
 import type { ComposerAccount, ComposerMedia, ComposerProfile, Cover, Platform, PlatformChoice } from "@/lib/beta/composer-model";
 import { getMediaLinks } from "./actions";
 import { Composer, type EditingPost } from "./composer";
@@ -16,25 +17,44 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
   if (!workspace) return <p className="p-8 text-ps-muted">You are not a member of any workspace yet.</p>;
   if (workspace.role === "reviewer") return <p className="p-8 text-ps-muted">Reviewers can see posts but not create them.</p>;
 
-  const ACCOUNT_COLUMNS = "id, platform, handle, display_name, avatar_url, health, capabilities";
-  const accountsQuery = (columns: string) => client.database.from("connected_accounts").select(columns).eq("workspace_id", workspace.id).neq("health", "disconnected").order("platform");
-  const [withProfiles, { data: mediaRows }, profilesResult] = await Promise.all([
-    accountsQuery(`${ACCOUNT_COLUMNS}, profile_id`),
-    client.database
-      .from("media_assets")
-      .select("id, display_name, file_name, media_type, width, height, duration_seconds")
-      .eq("workspace_id", workspace.id)
-      .eq("status", "ready")
-      .is("hidden_from_library_at", null)
-      .order("created_at", { ascending: false })
-      .limit(48),
-    client.database.from("profiles").select("id, name, color").eq("workspace_id", workspace.id),
-  ]);
-  // Before the profiles migration reaches an environment, read accounts without them.
-  const { data: accountRows } = profilesResult.error || withProfiles.error ? await accountsQuery(ACCOUNT_COLUMNS) : withProfiles;
-  const profiles = ((profilesResult.error ? [] : profilesResult.data ?? []) as ComposerProfile[]).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  const UUID = /^[0-9a-f-]{36}$/i;
+  type AccountRow = { id: string; platform: string; handle: string; display_name: string; avatar_url: string | null; capabilities: { caption_max_chars?: number; video_max_seconds?: number } | null; profile_id?: string | null };
+  type PostRow = { id: string; status: string; caption: string; scheduled_at: string | null; destinations: Array<{ connected_account_id: string; platform: Platform; options: Record<string, unknown> }>; post_media: Array<{ position: number; media_asset_id: string }> };
+  type PendingRow = { id: string; display_name: string | null; file_name: string };
+  // Everything the composer starts from, through our API in one read. Null while the pages
+  // still read straight from the database with the person's InsForge session (below).
+  const viaApi = pageReadsViaApi()
+    ? ((await callServer<{ accounts: AccountRow[]; media: MediaRow[]; profiles: ComposerProfile[]; post: PostRow | null; pending_media: PendingRow | null }>("composer_page", {
+        workspace_id: workspace.id,
+        ...(postId && UUID.test(postId) ? { post_id: postId } : {}),
+        ...(startMedia && UUID.test(startMedia) ? { media_id: startMedia } : {}),
+      })) ?? { accounts: [], media: [], profiles: [], post: null, pending_media: null })
+    : null;
+  const fromDatabase = async () => {
+    const ACCOUNT_COLUMNS = "id, platform, handle, display_name, avatar_url, health, capabilities";
+    const accountsQuery = (columns: string) => client.database.from("connected_accounts").select(columns).eq("workspace_id", workspace.id).neq("health", "disconnected").order("platform");
+    const [withProfiles, { data: mediaRows }, profilesResult] = await Promise.all([
+      accountsQuery(`${ACCOUNT_COLUMNS}, profile_id`),
+      client.database
+        .from("media_assets")
+        .select("id, display_name, file_name, media_type, width, height, duration_seconds")
+        .eq("workspace_id", workspace.id)
+        .eq("status", "ready")
+        .is("hidden_from_library_at", null)
+        .order("created_at", { ascending: false })
+        .limit(48),
+      client.database.from("profiles").select("id, name, color").eq("workspace_id", workspace.id),
+    ]);
+    // Before the profiles migration reaches an environment, read accounts without them.
+    const { data: accountRows } = profilesResult.error || withProfiles.error ? await accountsQuery(ACCOUNT_COLUMNS) : withProfiles;
+    const profiles = ((profilesResult.error ? [] : profilesResult.data ?? []) as ComposerProfile[]).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+    return { accountRows: (accountRows ?? []) as unknown as AccountRow[], mediaRows: (mediaRows ?? []) as MediaRow[], profiles };
+  };
+  const { accountRows, mediaRows, profiles } = viaApi
+    ? { accountRows: viaApi.accounts, mediaRows: viaApi.media, profiles: [...viaApi.profiles].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" })) }
+    : await fromDatabase();
 
-  const accounts: ComposerAccount[] = ((accountRows ?? []) as unknown as Array<{ id: string; platform: string; handle: string; display_name: string; avatar_url: string | null; capabilities: { caption_max_chars?: number; video_max_seconds?: number } | null; profile_id?: string | null }>)
+  const accounts: ComposerAccount[] = accountRows
     .filter((a) => PLATFORMS.includes(a.platform as Platform))
     .map((a) => ({
       id: a.id,
@@ -49,15 +69,17 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
 
   // Editing an existing post (from Calendar or Home).
   let editing: EditingPost | null = null;
-  const UUID = /^[0-9a-f-]{36}$/i;
   if (postId && UUID.test(postId)) {
-    const { data } = await client.database
-      .from("posts")
-      .select("id, status, caption, scheduled_at, destinations(connected_account_id, platform, options), post_media(position, media_asset_id)")
-      .eq("id", postId)
-      .eq("workspace_id", workspace.id)
-      .maybeSingle();
-    const row = data as { id: string; status: string; caption: string; scheduled_at: string | null; destinations: Array<{ connected_account_id: string; platform: Platform; options: Record<string, unknown> }>; post_media: Array<{ position: number; media_asset_id: string }> } | null;
+    const row = viaApi
+      ? viaApi.post
+      : ((
+          await client.database
+            .from("posts")
+            .select("id, status, caption, scheduled_at, destinations(connected_account_id, platform, options), post_media(position, media_asset_id)")
+            .eq("id", postId)
+            .eq("workspace_id", workspace.id)
+            .maybeSingle()
+        ).data as PostRow | null);
     if (row && EDITABLE.includes(row.status)) {
       editing = {
         id: row.id,
@@ -71,12 +93,14 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
     }
   }
 
-  const library = ((mediaRows ?? []) as MediaRow[]).map(toComposerMedia);
+  const library = mediaRows.map(toComposerMedia);
   const coverId = editing?.cover?.kind === "image" ? editing.cover.mediaId : null;
   const missing = editing ? [...editing.mediaIds, ...(coverId ? [coverId] : [])].filter((id) => !library.some((m) => m.id === id)) : [];
   if (missing.length) {
-    const { data } = await client.database.from("media_assets").select("id, display_name, file_name, media_type, width, height, duration_seconds").in("id", missing);
-    library.push(...((data ?? []) as MediaRow[]).map(toComposerMedia));
+    const rows = viaApi
+      ? ((await callServer<{ media: MediaRow[] }>("media_by_ids", { workspace_id: workspace.id, ids: missing }))?.media ?? [])
+      : (((await client.database.from("media_assets").select("id, display_name, file_name, media_type, width, height, duration_seconds").in("id", missing)).data ?? []) as MediaRow[]);
+    library.push(...rows.map(toComposerMedia));
   }
   const { links, posters } = await getMediaLinks(workspace.id, library.map((m) => m.id));
   for (const m of library) {
@@ -88,8 +112,9 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
   // A file still being checked (just sent from the iPhone Shortcut): Create waits for it.
   let waitFor: { id: string; name: string } | null = null;
   if (!editing && startMedia && UUID.test(startMedia) && !initialMedia.length) {
-    const { data } = await client.database.from("media_assets").select("id, display_name, file_name, status").eq("id", startMedia).eq("workspace_id", workspace.id).in("status", ["uploading", "processing"]).maybeSingle();
-    const row = data as { id: string; display_name: string | null; file_name: string } | null;
+    const row = viaApi
+      ? viaApi.pending_media
+      : ((await client.database.from("media_assets").select("id, display_name, file_name, status").eq("id", startMedia).eq("workspace_id", workspace.id).in("status", ["uploading", "processing"]).maybeSingle()).data as PendingRow | null);
     if (row) waitFor = { id: row.id, name: row.display_name ?? row.file_name };
   }
   return <Composer workspaceId={workspace.id} accounts={accounts} profiles={profiles} library={library} editing={editing} initialMedia={initialMedia} waitFor={waitFor} />;

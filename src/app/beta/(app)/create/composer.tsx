@@ -144,16 +144,19 @@ export function Composer({ workspaceId, accounts, profiles = [], library: initia
   );
 
   // Checks against every platform's rules as the post changes (same check as AIs get).
+  // It goes by the post as text: the lists above are built again on every redraw, and the
+  // answer itself causes a redraw, so going by the lists would check again without end.
+  const draft = destinations.length ? JSON.stringify({ caption, media_ids: mediaIds, destinations }) : null;
   const seq = useRef(0);
   useEffect(() => {
-    if (!destinations.length) return;
+    if (!draft) return;
     const n = ++seq.current;
     const timer = setTimeout(async () => {
-      const r = await callPosts<Check>("validate", { workspace_id: workspaceId, caption, media_ids: mediaIds, destinations });
+      const r = await callPosts<Check>("validate", { workspace_id: workspaceId, ...(JSON.parse(draft) as Record<string, unknown>) });
       if (n === seq.current) setCheck(r.ok ? r.data : { ok: false, problems: [r.error] });
     }, 500);
     return () => clearTimeout(timer);
-  }, [destinations, caption, mediaIds, workspaceId]);
+  }, [draft, workspaceId]);
 
   const tiktokIssues = chosen.filter((a) => a.platform === "tiktok").flatMap((a) => tiktokProblems(choiceFor(a.id).tiktok ?? NEW_TIKTOK, creator[a.id] ?? null, media));
   const scheduleIssue = when === "later" && (!at || new Date(at).getTime() < now + 60_000) ? "Pick a time at least a minute from now." : null;

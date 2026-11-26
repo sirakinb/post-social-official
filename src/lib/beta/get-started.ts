@@ -1,6 +1,9 @@
 // The three steps from sign-up to a first post, read from what the workspace already has.
 // Shown on Accounts and as progress in the sidebar until all three are done (or hidden).
 
+import { pageReadsViaApi } from "@/lib/sign-in/rules";
+import { loadFrame } from "./workspace";
+
 export type GetStarted = { account: boolean; ai: boolean; post: boolean };
 
 export const GET_STARTED_HIDDEN_COOKIE = "ps-get-started-hidden";
@@ -11,6 +14,7 @@ const SENT = ["awaiting_approval", "approved", "scheduled", "processing", "publi
 type Client = Awaited<ReturnType<typeof import("@/lib/insforge/server").insforgeServerClient>>;
 
 export async function loadGetStarted(client: Client, workspaceId: string): Promise<GetStarted> {
+  if (pageReadsViaApi()) return (await loadFrame(workspaceId))?.steps ?? { account: false, ai: false, post: false };
   const one = (q: PromiseLike<{ data: unknown[] | null }>) => Promise.resolve(q).then((r) => (r.data ?? []).length > 0, () => false);
   const [account, app, key, post] = await Promise.all([
     one(client.database.from("connected_accounts").select("id").eq("workspace_id", workspaceId).limit(1)),

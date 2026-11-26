@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { FREE_ACCOUNTS } from "@/lib/pricing";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { getAccessTokenCookieName } from "@insforge/sdk/ssr";
-import { BETA_LOGIN } from "@/lib/insforge/auth-rules";
+import { myWorkspaces } from "@/lib/beta/workspace";
+import { pageReadsViaApi } from "@/lib/sign-in/rules";
+import { sessionToken, signedOutPath } from "@/lib/sign-in/session";
 import { currentUser, insforgeServerClient } from "@/lib/insforge/server";
 
 export const metadata = { title: "Usage · Post Social" };
@@ -38,7 +38,7 @@ const day = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString("en
 // The report comes from the same function the REST API and MCP tool use.
 async function loadReport(workspaceId: string, period: string): Promise<Report | null> {
   const base = process.env.API_BASE_URL;
-  const token = (await cookies()).get(getAccessTokenCookieName())?.value;
+  const token = await sessionToken();
   if (!base || !token) return null;
   const response = await fetch(`${base}/keys`, {
     method: "POST",
@@ -77,15 +77,19 @@ function Stat({ label, value, note }: { label: string; value: string; note?: str
   );
 }
 
+async function insforgeMemberships(userId: string) {
+  const client = await insforgeServerClient();
+  const { data } = await client.database.from("workspace_members").select("workspace_id, workspaces(name, slug)").eq("user_id", userId);
+  return (data ?? []) as unknown as Array<{ workspace_id: string; workspaces: { name: string; slug: string } | null }>;
+}
+
 export default async function BetaUsagePage({ searchParams }: { searchParams: Promise<{ workspace?: string; period?: string }> }) {
   const user = await currentUser();
-  if (!user) redirect(`${BETA_LOGIN}?next=/beta/usage`);
+  if (!user) redirect(await signedOutPath("/beta/usage"));
   const { workspace: slug, period: rawPeriod } = await searchParams;
   const period = PERIODS.some((p) => p.id === rawPeriod) ? rawPeriod! : "this_month";
 
-  const client = await insforgeServerClient();
-  const { data } = await client.database.from("workspace_members").select("workspace_id, workspaces(name, slug)").eq("user_id", user.id);
-  const memberships = (data ?? []) as unknown as Array<{ workspace_id: string; workspaces: { name: string; slug: string } | null }>;
+  const memberships = pageReadsViaApi() ? (await myWorkspaces()).map((w) => ({ workspace_id: w.id, workspaces: { name: w.name, slug: w.slug } })) : await insforgeMemberships(user.id);
   const current = memberships.find((m) => m.workspaces?.slug === slug) ?? memberships[0];
   const report = current ? await loadReport(current.workspace_id, period) : null;
   // Free and Paid are billed per account (Tester isn't), so their account card shows no cap.

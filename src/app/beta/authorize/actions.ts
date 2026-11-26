@@ -1,7 +1,6 @@
 "use server";
 
-import { cookies } from "next/headers";
-import { getAccessTokenCookieName } from "@insforge/sdk/ssr";
+import { sessionToken } from "@/lib/sign-in/session";
 import { OUR_SIDE, UNREACHABLE, requestError } from "../../../../backend/lib/support";
 
 export type AuthorizeParams = Record<string, string | undefined>;
@@ -15,7 +14,7 @@ export type ConsentCheck =
 async function callConsent<T>(body: Record<string, unknown>): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
   const base = process.env.API_BASE_URL;
   if (!base) return { ok: false, error: OUR_SIDE };
-  const token = (await cookies()).get(getAccessTokenCookieName())?.value;
+  const token = await sessionToken();
   if (!token) return { ok: false, error: "Your session ended. Sign in again." };
   const response = await fetch(`${base}/oauth/consent`, {
     method: "POST",

@@ -3,7 +3,7 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { getAccessTokenCookieName } from "@insforge/sdk/ssr";
+import { sessionToken } from "@/lib/sign-in/session";
 import { OUR_SIDE, UNREACHABLE, requestError } from "../../../../../backend/lib/support";
 import { flashCookie, type BillingErrorCode } from "@/lib/beta/flash";
 
@@ -14,7 +14,7 @@ const SESSION_ENDED = "Your session ended. Sign in again.";
 async function callBilling<T>(body: Record<string, unknown>): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
   const base = process.env.API_BASE_URL;
   if (!base) return { ok: false, error: OUR_SIDE };
-  const token = (await cookies()).get(getAccessTokenCookieName())?.value;
+  const token = await sessionToken();
   if (!token) return { ok: false, error: SESSION_ENDED };
   const response = await fetch(`${base}/keys`, {
     method: "POST",

@@ -3,9 +3,12 @@
 // (https://atproto.com/specs/oauth). Runtime-neutral: Web Crypto and fetch only, so it runs
 // in the connections function (Deno), the worker (Node) and tests.
 //
-// Our client id is the address of our client metadata, served by the connections function.
+// Our client id is the address of our client metadata, served by the connections function
+// (through the website when CONNECTIONS_PUBLIC_URL is set). Changing that address makes us a
+// new client to Bluesky: every Bluesky account has to reconnect once.
 // Tokens are bound to a per-account DPoP key, so the key, the authorization server and the
 // account's PDS are stored with the tokens.
+import { publicConnectionsUrl } from "./addresses";
 import { randomToken } from "./crypto";
 
 export class AtprotoError extends Error {
@@ -23,7 +26,7 @@ export const BLUESKY_SCOPE = "atproto transition:generic";
 export const DEFAULT_ENTRYWAY = "https://bsky.social";
 export const PUBLIC_APPVIEW = "https://public.api.bsky.app";
 
-export const clientId = (setting: Settings) => `${setting("CONNECTIONS_BASE_URL")}/oauth/bluesky/client-metadata.json`;
+export const clientId = (setting: Settings) => `${publicConnectionsUrl(setting)}/oauth/bluesky/client-metadata.json`;
 
 export type PrivateJwk = JsonWebKey & { kid: string };
 

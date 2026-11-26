@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { Brand } from "@/components/brand";
-import { BETA_LOGIN } from "@/lib/insforge/auth-rules";
+import { myWorkspaces } from "@/lib/beta/workspace";
+import { pageReadsViaApi } from "@/lib/sign-in/rules";
+import { signedOutPath } from "@/lib/sign-in/session";
 import { currentUser, insforgeServerClient } from "@/lib/insforge/server";
 import { checkRequest, type AuthorizeParams } from "./actions";
 import { ConsentForm } from "./consent-form";
@@ -17,21 +19,25 @@ const CAN_DO = [
 ];
 const CANNOT_DO = ["Approve posts", "Connect or disconnect social accounts", "Create API keys or change settings"];
 
+async function insforgeWorkspaces(userId: string) {
+  const client = await insforgeServerClient();
+  const { data } = await client.database.from("workspace_members").select("role, workspace_id, workspaces(name)").eq("user_id", userId);
+  return ((data ?? []) as unknown as Membership[]).map((m) => ({ id: m.workspace_id, name: m.workspaces?.name ?? "Workspace", role: m.role }));
+}
+
 // The consent screen AI apps send people to (OAuth authorization endpoint).
 export default async function AuthorizePage({ searchParams }: { searchParams: Promise<AuthorizeParams> }) {
   const params = await searchParams;
   const user = await currentUser();
   if (!user) {
     const here = new URLSearchParams(Object.entries(params).filter((e): e is [string, string] => typeof e[1] === "string"));
-    redirect(`${BETA_LOGIN}?next=${encodeURIComponent(`/beta/authorize?${here}`)}`);
+    redirect(await signedOutPath(`/beta/authorize?${here}`));
   }
 
   const check = await checkRequest(params);
   if (check.ok && "redirect" in check) redirect(check.redirect);
 
-  const client = await insforgeServerClient();
-  const { data } = await client.database.from("workspace_members").select("role, workspace_id, workspaces(name)").eq("user_id", user.id);
-  const workspaces = ((data ?? []) as unknown as Membership[]).map((m) => ({ id: m.workspace_id, name: m.workspaces?.name ?? "Workspace", role: m.role }));
+  const workspaces = pageReadsViaApi() ? (await myWorkspaces()).map((w) => ({ id: w.id, name: w.name, role: w.role })) : await insforgeWorkspaces(user.id);
 
   return (
     // data-ph-mask: replays hide the email and workspace names shown here.

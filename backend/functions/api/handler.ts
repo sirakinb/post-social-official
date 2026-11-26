@@ -10,6 +10,7 @@
 //   /internal/limits   sign-in and password-reset limits, for our website only (shared secret)
 //   /stripe/webhook    subscription changes from Stripe (signed)
 //   /l/{code}          a tracked link from an automation's DM: counts the click, then redirects (public)
+import { isPageRead, pageActions } from "../../lib/api/pages";
 import { ApiError, type AgentCaller, type Caller, type Sql } from "../../lib/access";
 import { callerForKey, keyActions } from "../../lib/api/keys";
 import { handleMcp } from "../../lib/api/mcp";
@@ -405,9 +406,9 @@ async function personRoute(deps: ApiHandlerDeps, request: Request) {
   const user = await deps.userForToken(bearer(request));
   if (!user) return json(401, errorBody(401, "Sign in to manage API keys and connected apps."), cors);
   try {
-    await enforceLimit(deps.sql, "person_user", user.id);
     const body = await bodyInput(request);
     const name = String(body.action);
+    await enforceLimit(deps.sql, isPageRead(name) ? "person_read" : "person_user", user.id);
     // Stats actions exist only where stats are switched on.
     const statsActions = deps.analyticsPlatforms.length
       ? {
@@ -446,7 +447,7 @@ async function personRoute(deps: ApiHandlerDeps, request: Request) {
       contacts: (_sql: Sql, caller: Caller, input: Record<string, unknown>) => listContacts(inbox, caller, input),
       update_contact: (_sql: Sql, caller: Caller, input: Record<string, unknown>) => updateContact(inbox, caller, input),
     };
-    const actions = { ...allActions, ...statsActions, ...mediaActions, ...billing, ...inboxActions } as Record<string, (sql: Sql, caller: Caller, input: Record<string, unknown>) => Promise<unknown>>;
+    const actions = { ...allActions, ...pageActions, ...statsActions, ...mediaActions, ...billing, ...inboxActions } as Record<string, (sql: Sql, caller: Caller, input: Record<string, unknown>) => Promise<unknown>>;
     if (!Object.hasOwn(actions, name)) throw new ApiError(400, `Unknown action. Use one of: ${Object.keys(actions).join(", ")}.`);
     const caller: Caller = { userId: user.id, displayName: user.name, entryPoint: "ui" };
     return json(200, await actions[name](deps.sql, caller, body), cors);

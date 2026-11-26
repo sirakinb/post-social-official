@@ -1,13 +1,19 @@
 #!/usr/bin/env bash
 # Build and deploy the worker to InsForge Compute.
-#   scripts/deploy-worker.sh <dev|prod>
+#   scripts/deploy-worker.sh prod
+# Dev's worker runs on AWS since 2026-11-26 (it deploys by itself on every push to dev), so
+# this refuses dev: a second worker on InsForge would renew the same platform tokens.
 # Settings are read from the environment's InsForge secrets and passed to the container;
 # nothing secret is written into the repo. Prod deploys need a clean main synced with GitHub.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 target="${1:-}"
-[[ "$target" == "dev" || "$target" == "prod" ]] || { echo "Usage: scripts/deploy-worker.sh <dev|prod>" >&2; exit 1; }
+if [[ "$target" == "dev" ]]; then
+  echo "Dev's worker runs on AWS now and deploys by itself on every push to dev. Starting the InsForge one again would have two workers renewing the same platform tokens, so nothing was deployed." >&2
+  exit 1
+fi
+[[ "$target" == "prod" ]] || { echo "Usage: scripts/deploy-worker.sh prod" >&2; exit 1; }
 export PATH="$HOME/.fly/bin:$PATH"
 command -v flyctl >/dev/null || { echo "Install flyctl first: curl -L https://fly.io/install.sh | sh" >&2; exit 1; }
 
@@ -30,6 +36,9 @@ trap 'rm -f "$env_file"' EXIT
     LINKEDIN_CLIENT_ID LINKEDIN_CLIENT_SECRET BLUESKY_CLIENT_JWK CONNECTIONS_BASE_URL X_CLIENT_ID X_CLIENT_SECRET; do
     echo "$name=$(secret "$name")"
   done
+  # The website address platforms call us at (optional). It must match the connections
+  # function's: Bluesky tokens only renew under the client id they were issued to.
+  echo "CONNECTIONS_PUBLIC_URL=$(secret CONNECTIONS_PUBLIC_URL 2>/dev/null || true)"
   # Dev only publishes to the owner's approved test accounts (platform account ids).
   if [[ "$target" == "dev" ]]; then echo "PUBLISH_ALLOWLIST=$(secret PUBLISH_ALLOWLIST)"; fi
   # Post stats only for platforms switched on in this environment (optional; none on prod

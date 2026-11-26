@@ -82,3 +82,55 @@ describe("proxy: Link headers", () => {
     expect(pricing.headers.get("link")).toBeNull();
   });
 });
+
+describe("proxy: the app under /beta with our own sign-in", () => {
+  beforeEach(() => {
+    vi.stubEnv("SIGN_IN_URL", "https://api.postsocial.test/auth");
+    vi.stubEnv("NODE_ENV", "production");
+  });
+  afterEach(() => vi.unstubAllEnvs());
+  const withSession = { headers: { cookie: "ps_session=signed.token" } };
+
+  it("sends a signed-out visitor to the sign-in page, to come back where they were going", async () => {
+    const response = await proxy(new NextRequest("https://www.postsocial.xyz/beta/calendar?view=week"));
+    const location = new URL(response.headers.get("location")!);
+    expect(location.pathname).toBe("/beta/login");
+    expect(location.searchParams.get("next")).toBe("/beta/calendar?view=week");
+  });
+
+  it("lets signed-out visitors open the sign-in, sign-up and reset pages", async () => {
+    for (const path of ["/beta/login", "/beta/signup", "/beta/reset-password", "/beta/auth/ended"]) {
+      expect((await proxy(new NextRequest(`https://www.postsocial.xyz${path}`))).headers.get("location"), path).toBeNull();
+    }
+  });
+
+  it("lets a browser with a session through and keeps it signed in for another 30 days", async () => {
+    const response = await proxy(new NextRequest("https://www.postsocial.xyz/beta/calendar", withSession));
+    expect(response.headers.get("location")).toBeNull();
+    const cookie = response.cookies.get("ps_session");
+    expect(cookie).toMatchObject({ value: "signed.token", httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: 2592000 });
+  });
+
+  it("leaves the cookie alone on a server action, which would otherwise load the whole page again after each one", async () => {
+    const response = await proxy(new NextRequest("https://www.postsocial.xyz/beta/create", { method: "POST", headers: { cookie: "ps_session=signed.token", "next-action": "abc123" } }));
+    expect(response.headers.get("location")).toBeNull();
+    expect(response.cookies.get("ps_session")).toBeUndefined();
+    expect(response.headers.get("set-cookie")).toBeNull();
+    expect(response.headers.get("x-middleware-set-cookie")).toBeNull();
+  });
+
+  it("still turns a signed-out server action away", async () => {
+    const response = await proxy(new NextRequest("https://www.postsocial.xyz/beta/create", { method: "POST", headers: { "next-action": "abc123" } }));
+    expect(new URL(response.headers.get("location")!).pathname).toBe("/beta/login");
+  });
+
+  it("sends a signed-in person away from the sign-in page, but never away from the page that clears an ended session", async () => {
+    expect(new URL((await proxy(new NextRequest("https://www.postsocial.xyz/beta/login", withSession))).headers.get("location")!).pathname).toBe("/beta");
+    expect((await proxy(new NextRequest("https://www.postsocial.xyz/beta/auth/ended?next=/beta", withSession))).headers.get("location")).toBeNull();
+  });
+
+  it("takes no notice of InsForge's cookies", async () => {
+    const response = await proxy(new NextRequest("https://www.postsocial.xyz/beta/calendar", { headers: { cookie: "insforge_access_token=abc; insforge_refresh_token=def" } }));
+    expect(new URL(response.headers.get("location")!).pathname).toBe("/beta/login");
+  });
+});

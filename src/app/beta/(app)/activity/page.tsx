@@ -2,7 +2,8 @@ import Link from "next/link";
 import { LogsTable } from "@/components/beta/logs-table";
 import { Card } from "@/components/beta/ui";
 import { AREAS, SOURCES, loadLogs, type Area, type LogFilters, type Source } from "@/lib/beta/logs";
-import { loadViewer } from "@/lib/beta/workspace";
+import { callServer, loadViewer } from "@/lib/beta/workspace";
+import { pageReadsViaApi } from "@/lib/sign-in/rules";
 import { LogsFilters } from "./logs-filters";
 
 export const metadata = { title: "Logs · Post Social" };
@@ -24,10 +25,13 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
     actorId: params.who && UUID.test(params.who) ? params.who : null,
     before: params.before && !Number.isNaN(Date.parse(params.before)) ? params.before : null,
   };
-  const [{ logs, hasMore, failed }, { data: actors }] = await Promise.all([
-    loadLogs(client, workspace.id, filters, PAGE),
-    client.database.from("actors").select("id, display_name").eq("workspace_id", workspace.id).in("kind", ["user", "api_key", "oauth_grant"]).order("display_name"),
+  const viaApi = pageReadsViaApi();
+  const [{ logs, hasMore, failed, people }, { data: actorRows }] = await Promise.all([
+    loadLogs(client, workspace.id, filters, PAGE, viaApi ? callServer : null),
+    // Through our API the people to filter by come with the log itself.
+    viaApi ? { data: null } : client.database.from("actors").select("id, display_name").eq("workspace_id", workspace.id).in("kind", ["user", "api_key", "oauth_grant"]).order("display_name"),
   ]);
+  const actors = (people ?? actorRows ?? []) as Array<{ id: string; display_name: string }>;
 
   // A link to this page with some filters changed (paging starts over unless given).
   const href = (change: Partial<Record<keyof Params, string | null>>) => {
@@ -51,7 +55,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
           values={{ level: filters.level, area: filters.area, source: filters.source, who: filters.actorId }}
           areas={Object.entries(AREAS).map(([value, a]) => ({ value, label: a.label }))}
           sources={Object.entries(SOURCES).map(([value, label]) => ({ value, label }))}
-          people={((actors ?? []) as Array<{ id: string; display_name: string }>).map((a) => ({ value: a.id, label: a.display_name }))}
+          people={actors.map((a) => ({ value: a.id, label: a.display_name }))}
         />
         {failed ? <p role="alert" className="m-0 px-4 py-3 text-ps-failed-text">The logs could not be loaded. Refresh the page to try again.</p> : <LogsTable rows={logs} canEdit={workspace.role !== "reviewer"} filtered={Boolean(filters.level === "errors" || filters.area || filters.source || filters.actorId || filters.before)} />}
       </Card>

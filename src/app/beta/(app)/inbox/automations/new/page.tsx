@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card } from "@/components/beta/ui";
 import { callServer, loadViewer } from "@/lib/beta/workspace";
+import { pageReadsViaApi } from "@/lib/sign-in/rules";
 import { AutomationForm } from "../automation-form";
 import type { AccountOption } from "../types";
 
@@ -13,8 +14,12 @@ export default async function NewAutomationPage({ searchParams }: { searchParams
   if (!workspace) return <p className="p-8 text-ps-muted">You are not a member of any workspace yet.</p>;
   const status = await callServer<{ enabled: boolean }>("inbox_status", { workspace_id: workspace.id });
   if (!status?.enabled || workspace.role === "reviewer") notFound();
-  const { data } = await client.database.from("connected_accounts").select("id, platform, handle, display_name").eq("workspace_id", workspace.id).in("platform", ["instagram", "facebook", "threads"]).neq("health", "disconnected").order("display_name");
-  const accounts = (data ?? []) as AccountOption[];
+  // Automations run on Instagram, Facebook Pages and Threads (the Inbox also lists LinkedIn).
+  const accounts = pageReadsViaApi()
+    ? ((await callServer<{ accounts: Array<AccountOption & { external_account_id?: string }> }>("inbox_accounts", { workspace_id: workspace.id }))?.accounts ?? [])
+        .filter((a) => ["instagram", "facebook", "threads"].includes(String(a.platform)))
+        .map(({ external_account_id: _, ...a }) => a as AccountOption)
+    : (((await client.database.from("connected_accounts").select("id, platform, handle, display_name").eq("workspace_id", workspace.id).in("platform", ["instagram", "facebook", "threads"]).neq("health", "disconnected").order("display_name")).data ?? []) as AccountOption[]);
   const back = `/beta/inbox/automations${params.workspace ? `?workspace=${encodeURIComponent(params.workspace)}` : ""}`;
 
   return (

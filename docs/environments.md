@@ -43,14 +43,19 @@ database commands and silently hits whichever environment is linked.
 ## Deploying to dev
 
 Dev deploys run from GitHub: Actions → **Deploy to dev** → Run workflow (branch `dev`), then pick
-what to deploy (`api`, all functions, the worker, migrations, or everything) and optionally a
+what to deploy (`api`, all functions, migrations, or everything) and optionally a
 commit SHA from `dev` (empty: the tip of `dev`). It refuses commits that aren't on `dev`, runs one
 at a time (dev is shared), uses only the dev branch's own key (`Development` environment secret
 `INSFORGE_DEV_API_KEY`, which the prod backend refuses) with the scripts in their dev-key mode
 (`INSFORGE_DEV_DIRECT=1`, which refuses prod), checks the dev API answers, and records the commit
 in the run summary. The same commands still work by hand from a Mac (`npm run functions:deploy --
-dev <name>`, `npm run worker:deploy -- dev`, `npm run db:dev`). A Vercel preview never deploys
-the backend.
+dev <name>`, `npm run db:dev`). A Vercel preview never deploys the backend.
+
+Since 2026-11-26 the dev website (dev.postsocial.xyz) runs on AWS dev, which deploys by itself
+on every push to `dev` (see "Node API service"). InsForge dev stays as it was that day: its
+functions and migrations are kept level with `dev` for the database tests and for
+feature-branch previews, and its worker is stopped. `npm run worker:deploy -- dev` refuses
+to run: a second worker would renew the same platform tokens as the one on AWS.
 
 Production releases only from `main` (the `Production` environment accepts no other branch), and
 `main`, `staging` and `dev` only take pull requests that pass the checks. Releases go out on Aki's
@@ -95,7 +100,8 @@ in order to dev, then to prod, exactly the same files.
    again before applying them.
 5. **Deploy the web app.** Previews point at dev and build only when someone will look at
    them (`scripts/vercel-ignore.mjs`): `dev` builds after each merge unless nothing the
-   website uses changed (worker, migrations, functions, tests, docs); a feature branch
+   website uses changed (worker, migrations, functions, tests, docs), or whenever the merge's
+   message contains `[preview]` (the way to pick up a changed Vercel setting); a feature branch
    builds only when its latest commit message contains `[preview]`; `staging` never
    builds. Vercel itself doesn't deploy production on a merge (set in `vercel.json`): the
    release workflow does, after the backend, so the site never goes out ahead of it. By
@@ -114,6 +120,149 @@ We do not use `branch merge` to promote. A merge leaves the branch dormant, and 
 only way to reuse it is `branch reset`, which rewinds dev to the day it was created
 and drops every migration since. Replaying git migrations keeps dev long-lived.
 If dev ever drifts, reset it and run `npm run db:dev` to replay all migrations.
+
+## Nightly backups to S3
+
+InsForge keeps only its latest nightly backup, so we keep our own copies outside it.
+`.github/workflows/backup-prod.yml` runs every night at about 3am US Eastern, from `main`:
+
+- It asks InsForge for prod's Postgres address (with `INSFORGE_USER_API_KEY`, the release's
+  secret), dumps the whole database with `pg_dump`, and checks the dump holds real data. A
+  wiped or empty database fails the run instead of saving an empty file. It only reads prod.
+- The dump goes to `s3://postsocial-backups-039612844713` (AWS account 039612844713,
+  us-east-1): `daily/postsocial-prod-<date>.dump`, kept 30 days, and on the 1st of each month
+  `monthly/postsocial-prod-<month>.dump`, kept 12 months. The bucket is private, encrypted and
+  versioned; S3 deletes old files by itself.
+- No AWS keys are stored. The job signs in as the role `postsocial-github-backup` through
+  GitHub's identity; the role only trusts `main` of this repository and can only add files to
+  those two folders. It can't read, list or delete them.
+- A failed run is the alert: GitHub emails the repository owner. Run it by hand from the
+  Actions tab ("Back up prod database", Run workflow); tick "monthly" to also save a monthly copy.
+
+To restore, sign in to AWS as an admin (`aws login --profile postsocial`), download a file and
+load it into an empty Postgres 15 database:
+
+```bash
+aws s3 ls s3://postsocial-backups-039612844713/daily/ --profile postsocial
+aws s3 cp s3://postsocial-backups-039612844713/daily/postsocial-prod-<date>.dump . --profile postsocial
+pg_restore --no-owner --no-privileges --dbname "<target database address>" postsocial-prod-<date>.dump
+```
+
+The dump holds every schema (`public`, `auth` and InsForge's own). Add `--schema=public` to
+restore only the app's tables. It holds people's data: delete local copies when done.
+
+## Node API service (for the move to AWS)
+
+Being built alongside InsForge; nothing in production uses it yet. The same four handlers that
+run as InsForge functions (`api`, `connections`, `media`, `posts`) also run as one Node
+service, built from the same code, so the two can't drift apart: each function's settings are
+read in its `deps.ts`, used by both the function's `index.ts` and `backend/service.ts`.
+
+| Path on the service | What it is |
+|---|---|
+| `/api/...` | REST API, MCP server, OAuth for AI apps, Stripe webhook, tracked links |
+| `/connections/...` | Connecting accounts, platform callbacks, Meta's calls |
+| `/media`, `/posts` | Media and post actions (also at `/functions/media` and `/functions/posts`, the paths the web app uses today) |
+| `/healthz` | The service is up. The load balancer's check; it doesn't touch the database |
+| `/readyz` | The service can reach the database. Checked after a deploy |
+
+So on AWS the web environment's `API_BASE_URL` becomes `https://api.postsocial.xyz/api` and
+`CONNECTIONS_BASE_URL` becomes `https://api.postsocial.xyz/connections`.
+
+**Database.** The service and the worker talk to Postgres directly (`backend/lib/database.ts`)
+and get back exactly what InsForge's SQL endpoint returned, so no query changed. The worker
+switches by itself: with `DATABASE_URL` set it uses Postgres, without it InsForge.
+`database/bootstrap.sql` creates what InsForge used to provide (the `auth` schema and the
+roles our migrations name), and `backend/migrate.ts` applies `migrations/` in order.
+
+| Setting | Login | Used by |
+|---|---|---|
+| `DATABASE_URL` | `app_admin`: every session runs as `project_admin`, which owns the tables | The API's own checks and the worker |
+| `DATABASE_USER_URL` | `app_user`: every session runs as `authenticated`, so the access policies apply, and it can't become `project_admin` | Queries for one signed-in person (`userSql`) |
+| `DATABASE_OWNER_URL` | The database's owner | Setup and migrations only (`migrate.mjs`), never the running service |
+| `DATABASE_CA_FILE` | | AWS's certificate bundle for RDS; the images set it. Connections are always encrypted and checked, except to a database on the same machine |
+
+On AWS there is no connection string. The containers get the address in parts
+(`DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`) and only the password from Secrets
+Manager: `DATABASE_PASSWORD` for `app_admin`, and for the migration task
+`DATABASE_OWNER_USERNAME` and `DATABASE_OWNER_PASSWORD`. Every other setting arrives as one
+JSON object in `SETTINGS_JSON` (the secret `postsocial/<env>/api` or `/worker`), which the
+service spreads into its environment at start; anything set on the container itself wins.
+
+**Deploying to AWS dev.** `.github/workflows/deploy-aws-dev.yml` runs on every push to `dev`
+that touches the backend, once the repository variable `AWS_DEV_DEPLOY` is `on`. It builds
+the two images, runs the migration task inside the network, rolls the API and the worker
+(`scripts/aws-deploy.mjs`), and checks `https://api-dev.postsocial.xyz` answers. A build
+that doesn't come up healthy is rolled back by AWS and fails the run. Setting an environment
+up the first time, and copying its settings (`scripts/aws-copy-settings.mjs`) and its data
+(`scripts/aws-copy-database.mjs`) from InsForge: `infra/aws/README.md`.
+
+**Dev runs on AWS (since 2026-11-26).** dev.postsocial.xyz signs people in, reads and
+publishes through `api-dev.postsocial.xyz`, and dev's worker is the AWS one. The last copy
+from InsForge dev was taken that day; from then on AWS dev's database is the real one, and
+`scripts/aws-copy-database.mjs` refuses to copy over it. The InsForge dev worker is stopped
+and must stay stopped: two workers on the same accounts would both renew the same platform
+tokens. What the dev website has in Vercel (Preview, branch `dev`): `SIGN_IN_URL`,
+`API_BASE_URL`, `CONNECTIONS_BASE_URL`, `FUNCTIONS_BASE_URL` and AWS dev's
+`INTERNAL_PROXY_SECRET`. AWS dev's settings also hold `CONNECTIONS_PUBLIC_URL`
+(`https://dev.postsocial.xyz`), so platforms send people back to our own domain, and TikTok's
+test app (the live app can't take a dev address without a review). To go back: remove those
+five Vercel settings, rebuild dev, stop the AWS worker (`workerTasks: 0`) and start the
+InsForge one; what was done on AWS dev in between stays there. Feature-branch previews
+still use InsForge dev (the settings Vercel gives every preview).
+
+**Sign-in.** On AWS the service runs sign-in itself (Better Auth, `backend/lib/auth`), switched
+on by the `AUTH_SECRET` it is given there:
+
+- People stay in `auth.users` with the ids they always had. Beside them are `auth.accounts`
+  (a password's hash, or a Google link), `auth.sessions` and `auth.verifications` (emailed
+  codes, stored hashed). `database/bootstrap.sql` creates them.
+- Passwords are the bcrypt hashes InsForge made, checked as they are, so nobody resets
+  anything. `database/migrate-auth.sql` carries InsForge's records over; the migration task
+  runs it on every deploy and after every data copy, and it changes nothing when there is
+  nothing to carry.
+- An email is confirmed, and a password reset, with a 6-digit code sent through Resend
+  (`backend/lib/auth/emails.ts`): good for 10 minutes and 5 tries. Sessions last 30 days,
+  extended while in use.
+- The routes live under `/auth` and answer only our website's server (the shared
+  `INTERNAL_PROXY_SECRET`), which checks the attempt limits before each call. A browser
+  never talks to them. Only the routes listed in `backend/lib/auth/auth.ts` exist.
+- The website signs people in with InsForge until an environment is switched over. The
+  switch is `SIGN_IN_URL` in that environment's web settings (Vercel), set to the API's
+  sign-in address, e.g. `https://api-dev.postsocial.xyz/auth`. With it set, the sign-in
+  pages, the session check on every `/beta` page and every call the pages make to the API
+  use our own sign-in (`src/lib/sign-in/`); the forms, limits and messages don't change.
+  The browser then holds one cookie, `ps_session`, which page scripts can't read.
+- The same environment must point at our API everywhere, because that session is only good
+  there: `API_BASE_URL` (`…/api`), `CONNECTIONS_BASE_URL` (`…/connections`),
+  `FUNCTIONS_BASE_URL` (`…/functions`, for posts and media), and the same
+  `INTERNAL_PROXY_SECRET` the API has. Until the pages' own data reads go through the API
+  too, an environment can't be switched: they still read through InsForge.
+- **Page reads.** The app's pages have always read what they show straight from the
+  database, with the person's InsForge session. `PAGE_READS=api` in an environment's web
+  settings makes the pages that have been moved ask our API instead
+  (`backend/lib/api/pages.ts`: one action per page, each checking the person belongs to the
+  workspace). It works on InsForge and on AWS alike, so it is tried on dev, then prod,
+  before sign-in moves. Setting `SIGN_IN_URL` implies it. Every read has been moved:
+  the person's workspaces, the app frame (plan, posts this month, getting-started steps),
+  the Accounts page, the composer, the Inbox's account list, the calendar, drafts, the
+  media library, the activity log and the API page. The direct reads stay in the code only
+  for environments where the setting is still off.
+
+Without `AUTH_SECRET`, the service checks tokens with InsForge while `INSFORGE_BASE_URL` is
+set, as the functions do. With neither, nobody can sign in through it (API keys and AI app
+sign-ins still work; they live in our database).
+
+**On your machine** (needs Docker):
+
+```bash
+npm run db:local      # a Postgres 15 set up like the AWS one, with every migration
+npm run test:pg       # the backend's tests on it: data formats, access policies, an API key
+npm run api:build     # backend/dist: server.mjs, migrate.mjs and the SQL they read
+docker build -t postsocial-api backend
+```
+
+`scripts/local-database.sh reset` starts the local database again from nothing; `stop` removes it.
 
 ## Accounts
 
@@ -214,13 +363,62 @@ DPoP-bound tokens, `private_key_jwt`), so nobody types a password into Post Soci
   description. No stats are read (reads are billed too). Set a spending cap in the
   console. When credits run out, posts fail with a plain "X credits ran out" message.
 
+## Platform addresses on our own domain
+
+Platforms can call us on the website's domain instead of the backend's, so the backend can
+move hosts without anything changing in a platform's dashboard. The website forwards these
+paths (`next.config.ts`, from `CONNECTIONS_BASE_URL` and `API_BASE_URL` in the web
+environment, read at build time):
+
+| Path on the website | Goes to | Used by |
+|---|---|---|
+| `/oauth/{instagram,facebook,threads,linkedin,x,bluesky}/callback` | `connections` function | Sign-in callbacks |
+| `/oauth/youtube/callback`, `/oauth/tiktok/callback` | pages on the website (no forwarding) | Google and TikTok sign-in |
+| `/oauth/bluesky/client-metadata.json`, `/oauth/bluesky/jwks.json` | `connections` function | Bluesky's client id and our public key |
+| `/meta/data-deletion`, `/meta/data-deletion/status`, `/meta/deauthorize`, `/meta/webhooks` | `connections` function | Meta (Facebook, Instagram, Threads) |
+| `/stripe/webhook` | `api` function | Stripe |
+
+Forwarding alone changes nothing: platforms keep using the backend's address until the
+`CONNECTIONS_PUBLIC_URL` secret is set (the website's address with no path:
+`https://www.postsocial.xyz` on prod, `https://dev.postsocial.xyz` on dev). Once set, the
+`connections` function and the worker give platforms our domain for sign-in callbacks, the
+Bluesky client id and Meta's deletion status link.
+
+Switching an environment, dev first:
+
+1. Deploy the website with the forwarding rules.
+2. In each platform's dashboard, **add** the new address next to the old one:
+   - **Meta** (Facebook, Instagram and Threads apps): the three redirect addresses
+     `/oauth/facebook/callback`, `/oauth/instagram/callback`, `/oauth/threads/callback`; the
+     data deletion address `/meta/data-deletion`; the deauthorize address `/meta/deauthorize`.
+     A webhook subscription holds one address, so `/meta/webhooks` replaces the old one (same
+     verify token, `META_WEBHOOK_VERIFY_TOKEN`).
+   - **LinkedIn:** `/oauth/linkedin/callback`. **X:** `/oauth/x/callback`.
+   - **Google (YouTube):** nothing; it is already on our domain.
+   - **TikTok:** nothing to add; set `TIKTOK_REDIRECT_URI` to
+     `https://www.postsocial.xyz/oauth/tiktok/callback` once TikTok has approved it.
+   - **Bluesky:** nothing to register. Its client id is the metadata address, so changing it
+     makes us a new app to Bluesky: every Bluesky account has to reconnect once.
+3. Set `CONNECTIONS_PUBLIC_URL` on that environment, then redeploy the `connections` function
+   and the worker together (Bluesky tokens only renew under the client id they were issued to).
+4. Connect one account per platform to check.
+5. **Stripe**, separately: edit the existing webhook endpoint in Stripe's dashboard and change
+   its address to `/stripe/webhook` on our domain. Editing an endpoint keeps its signing
+   secret, so `STRIPE_WEBHOOK_SECRET` stays as it is. (Creating a new endpoint instead would
+   come with a new signing secret.) To go back, edit the address back.
+
+To go back, delete `CONNECTIONS_PUBLIC_URL` and redeploy; the old addresses are still
+registered. Remove them from the dashboards only after the backend has moved. When the backend
+moves, change `CONNECTIONS_BASE_URL` and `API_BASE_URL` in the web environment and redeploy the
+website; nothing changes for the platforms.
+
 ## Media storage, functions and the worker
 
 | | Dev | Prod |
 |---|---|---|
 | R2 bucket | `postsocial-media-dev` (private) | `postsocial-media-prod` (private) |
 | Uploads allowed from | `http://localhost:3333`, `https://post-social-*-app-build-26.vercel.app` | `https://www.postsocial.xyz`, `https://postsocial.xyz` |
-| Worker | `post-social-worker` on InsForge Compute, always on, 1 GB | same, 1 GB |
+| Worker | On AWS (`postsocial-dev-worker`, 1 GB). The InsForge one is stopped | `post-social-worker` on InsForge Compute, always on, 1 GB |
 
 - Media files live in Cloudflare R2 and are never public: browsers upload with short-lived
   signed part links, and readers get short-lived signed links.
@@ -230,8 +428,9 @@ DPoP-bound tokens, `private_key_jwt`), so nobody types a password into Post Soci
 - Functions are bundled and deployed with `npm run functions:deploy -- <dev|prod> <name>`
   (for example `media`). Branches do not carry function code, so deploy to each environment.
 - The worker (`worker/`) processes media jobs and runs the retention and orphan sweeps.
-  Deploy with `npm run worker:deploy -- <dev|prod>`; it reads its settings from that
-  environment's secrets and must stay `--always-on` (it gets no web traffic to wake it).
+  On prod, deploy with `npm run worker:deploy -- prod`; it reads its settings from prod's
+  secrets and must stay `--always-on` (it gets no web traffic to wake it). Dev's worker runs
+  on AWS and deploys with the API on every push to `dev`.
   InsForge Compute has no log viewer yet; failed jobs keep their error in
   `media_jobs.last_error`.
 

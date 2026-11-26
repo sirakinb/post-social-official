@@ -280,6 +280,30 @@ describe("api function", () => {
     const response = await handler()(new Request("https://fn/keys", { method: "POST", body: JSON.stringify({ action: "list" }) }));
     expect(response.status).toBe(401);
   });
+
+  it("serves the web app's page reads to the signed-in person, on their own wider allowance", async () => {
+    const limits: unknown[][] = [];
+    const sql = (async (query: string, params: unknown[]) => {
+      if (query.includes("take_rate_limit")) {
+        limits.push(params);
+        return [{ wait: 0 }];
+      }
+      return query.includes("workspace_members m JOIN public.workspaces") ? [{ id: "w", name: "Mine", slug: "mine", role: "owner" }] : [];
+    }) as unknown as Sql;
+    const h = handler({ sql, userForToken: async (token) => (token === "session" ? { id: "00000000-0000-4000-8000-000000000001", email: "ada@example.com", name: "Ada" } : null) });
+    const ask = (action: string, token?: string) => h(new Request("https://fn/keys", { method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {}, body: JSON.stringify({ action }) }));
+
+    // Not signed in: nothing is read and nothing is counted.
+    expect((await ask("my_workspaces")).status).toBe(401);
+    expect(limits).toHaveLength(0);
+
+    const mine = await ask("my_workspaces", "session");
+    expect([mine.status, await mine.json()]).toEqual([200, { workspaces: [{ id: "w", name: "Mine", slug: "mine", role: "owner" }] }]);
+    expect(limits[0]).toEqual(["person_read:00000000-0000-4000-8000-000000000001", 600, 60]);
+    // Everything else a person does keeps the tighter one.
+    await ask("list", "session");
+    expect(limits[1]).toEqual(["person_user:00000000-0000-4000-8000-000000000001", 120, 60]);
+  });
 });
 
 describe("post reads", () => {

@@ -32,7 +32,7 @@ export type ConnectionsHandlerDeps = ConnectionDeps & {
   userForToken: (token: string | null) => Promise<SignedInUser | null>;
   webAppHome: string; // where to send people when there is no saved return address
   metaAppSecrets: string[];
-  selfBaseUrl: string; // public base URL of this function, for the deletion status link
+  selfBaseUrl: string; // the address platforms reach this function at, for the deletion status link
   metaWebhookVerifyToken?: string | null; // our answer to Meta's webhook address check
   metaWebhookForward?: WebhookForward | null; // prod only: our test accounts' events passed on to dev
 };

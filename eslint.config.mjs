@@ -21,8 +21,12 @@ export default defineConfig([
     // End-to-end tests run by Adzo, with their own config and packages.
     "adzo-tests/**",
     "worker/dist/**",
+    "backend/dist/**",
     "ops/convex-forwarder/node_modules/**",
     "ops/convex-forwarder/convex/_generated/**",
+    // The AWS setup has its own packages and checks (infra/aws).
+    "infra/aws/node_modules/**",
+    "infra/aws/cdk.out/**",
     "next-env.d.ts",
   ]),
 ]);
