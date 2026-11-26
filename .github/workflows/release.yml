@@ -9,6 +9,18 @@
 # The scripts skip their "Type 'prod'" prompts only here (POST_SOCIAL_RELEASE=prod on GitHub
 # Actions, ref main); everywhere else they still ask.
 #
+# Prod's move to AWS, by two repository variables (Settings → Variables → Actions):
+#   AWS_PROD_DEPLOY = on    also builds the API and worker images and rolls them out on AWS
+#                           prod (api.postsocial.xyz), before anything else. Safe before the
+#                           cutover: nothing points at AWS prod and its worker is off.
+#   PROD_BACKEND    = aws   set at the cutover: prod lives on AWS, so steps 1 to 3 (InsForge's
+#                           database, functions and worker) are skipped. This matters most for
+#                           the worker: deploying InsForge's would start it again, and two
+#                           workers would publish the same posts and renew the same tokens.
+# The AWS job signs in as postsocial-github-deploy-prod through GitHub's own identity (no
+# stored keys); that role trusts only `main` and can only push images and roll prod's services.
+# This repository is public, so are these logs: the AWS steps print names and states only.
+#
 # Secrets (Settings → Secrets and variables → Actions), added by Aki:
 #   INSFORGE_USER_API_KEY  InsForge dashboard → Profile → API Keys (a uak_ key)
 #   VERCEL_TOKEN           Vercel → Account Settings → Tokens
@@ -40,9 +52,93 @@ env:
   GITHUB_REPO_ID: "1394110583"
   SITE_URL: https://www.postsocial.xyz
   API_URL: https://syydd6ck.function2.insforge.app/api/v1/openapi.json
+  AWS_REGION: us-east-1
+  AWS_ROLE: arn:aws:iam::039612844713:role/postsocial-github-deploy-prod
+  REGISTRY: 039612844713.dkr.ecr.us-east-1.amazonaws.com
+  AWS_API_URL: https://api.postsocial.xyz
 
 jobs:
+  # The backend on AWS prod: the same steps as dev's (.github/workflows/deploy-aws-dev.yml).
+  aws:
+    if: github.repository == 'sirakinb/post-social-official' && github.ref == 'refs/heads/main' && vars.AWS_PROD_DEPLOY == 'on'
+    # ARM64, like the containers on AWS, so the images build natively.
+    runs-on: ubuntu-24.04-arm
+    environment: production
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write # lets the job sign in to AWS without stored keys
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      - name: Build the bundles
+        run: |
+          backend/build.sh
+          worker/build.sh
+
+      - name: Sign in to AWS
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ env.AWS_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: deploy-prod-${{ github.run_id }}
+
+      # The ARM64 runner image doesn't promise the AWS tool the way the x86 one does.
+      - name: AWS command-line tool
+        run: |
+          set -euo pipefail
+          if ! command -v aws >/dev/null; then
+            curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o "$RUNNER_TEMP/awscli.zip"
+            unzip -q "$RUNNER_TEMP/awscli.zip" -d "$RUNNER_TEMP"
+            sudo "$RUNNER_TEMP/aws/install"
+          fi
+          aws --version
+
+      - name: Build and push the images
+        run: |
+          set -euo pipefail
+          aws ecr get-login-password | docker login --username AWS --password-stdin "$REGISTRY" >/dev/null
+          for part in api worker; do
+            image="$REGISTRY/postsocial/$part:$GITHUB_SHA"
+            # A re-run of the same commit: the image is already there and can't be replaced.
+            if aws ecr describe-images --repository-name "postsocial/$part" --image-ids "imageTag=$GITHUB_SHA" >/dev/null 2>&1; then
+              echo "postsocial/$part:$GITHUB_SHA is already in the registry"
+              continue
+            fi
+            folder=$([[ "$part" == "api" ]] && echo backend || echo worker)
+            docker build --quiet --platform linux/arm64 --provenance=false -t "$image" "$folder"
+            docker push --quiet "$image"
+            echo "Pushed postsocial/$part:$GITHUB_SHA"
+          done
+
+      # Runs the migration task inside the network, then rolls the API and the worker. AWS
+      # goes back to the old build by itself if the new one doesn't come up healthy.
+      - name: Migrate and roll out
+        id: deploy
+        run: node scripts/aws-deploy.mjs prod "$GITHUB_SHA"
+
+      - name: Check AWS prod answers
+        if: steps.deploy.outputs.result == 'deployed'
+        run: |
+          set -euo pipefail
+          # /healthz: the service is up. /readyz: it can reach its database.
+          for path in healthz readyz; do
+            curl -fsS --retry 6 --retry-delay 5 --retry-all-errors --max-time 15 "$AWS_API_URL/$path" -o /dev/null
+            echo "$AWS_API_URL/$path answers"
+          done
+          curl -fsS --retry 3 --retry-delay 5 --max-time 20 "$AWS_API_URL/api/v1/openapi.json" -o openapi.json
+          python3 -c "import json; d=json.load(open('openapi.json')); n=sum(len(m) for m in d['paths'].values()); print(f'The API answers with {n} operations'); assert n > 0"
+
   release:
+    # After the AWS job when it runs; straight away when it is switched off. A failed AWS
+    # deploy stops the release before the website changes.
+    needs: aws
+    if: ${{ !cancelled() && (needs.aws.result == 'success' || needs.aws.result == 'skipped') }}
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 60
@@ -59,19 +155,26 @@ jobs:
       - name: Check the secrets are set
         run: |
           missing=""
-          [[ -n "$INSFORGE_USER_API_KEY" ]] || missing="$missing INSFORGE_USER_API_KEY"
+          [[ "$PROD_BACKEND" == "aws" || -n "$INSFORGE_USER_API_KEY" ]] || missing="$missing INSFORGE_USER_API_KEY"
           [[ -n "$VERCEL_TOKEN" ]] || missing="$missing VERCEL_TOKEN"
           if [[ -n "$missing" ]]; then echo "::error::Add these repository secrets first:$missing"; exit 1; fi
+          # Once prod lives on AWS, a release without the AWS job would change the website
+          # and leave the backend behind.
+          if [[ "$PROD_BACKEND" == "aws" && "$AWS_RESULT" != "success" ]]; then echo "::error::PROD_BACKEND is aws, so AWS_PROD_DEPLOY must be on."; exit 1; fi
         env:
           INSFORGE_USER_API_KEY: ${{ secrets.INSFORGE_USER_API_KEY }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          PROD_BACKEND: ${{ vars.PROD_BACKEND }}
+          AWS_RESULT: ${{ needs.aws.result }}
 
       - name: Install flyctl (the worker is built with it)
+        if: vars.PROD_BACKEND != 'aws'
         run: |
           curl -fsSL https://fly.io/install.sh | sh -s "$FLYCTL_VERSION"
           echo "$HOME/.fly/bin" >> "$GITHUB_PATH"
 
       - name: Sign in to InsForge and link the project
+        if: vars.PROD_BACKEND != 'aws'
         run: |
           npx -y "$INSFORGE_CLI" login --user-api-key "$INSFORGE_USER_API_KEY"
           npx -y "$INSFORGE_CLI" link --project-id "$INSFORGE_PROJECT_ID" --org-id "$INSFORGE_ORG_ID"
@@ -81,12 +184,14 @@ jobs:
           INSFORGE_USER_API_KEY: ${{ secrets.INSFORGE_USER_API_KEY }}
 
       - name: Database (back up prod, then apply migrations verified on dev)
+        if: vars.PROD_BACKEND != 'aws'
         run: npm run db:promote
 
       # InsForge's deploy command sometimes prints success and then never exits (on a Mac
       # that's Ctrl+C). So each deploy runs in its own process group, counts as done once
       # InsForge reports success, and is then stopped; no success in 4 minutes fails the run.
       - name: Functions
+        if: vars.PROD_BACKEND != 'aws'
         run: |
           for fn in api connections media posts; do
             echo "::group::$fn"
@@ -110,6 +215,7 @@ jobs:
           done
 
       - name: Worker
+        if: vars.PROD_BACKEND != 'aws'
         run: npm run worker:deploy -- prod
 
       - name: Website (Vercel production)
@@ -136,6 +242,10 @@ jobs:
       - name: Check prod answers
         run: |
           curl -fsS --retry 3 --retry-delay 10 --max-time 20 -o /dev/null "$SITE_URL/"
-          curl -fsS --retry 3 --retry-delay 10 --max-time 20 -o /dev/null "$API_URL"
+          # The backend prod lives on: InsForge's function, or our API on AWS after the cutover.
+          if [[ "$PROD_BACKEND" == "aws" ]]; then backend="$AWS_API_URL/readyz"; else backend="$API_URL"; fi
+          curl -fsS --retry 3 --retry-delay 10 --max-time 20 -o /dev/null "$backend"
           curl -fsS --retry 3 --retry-delay 10 --max-time 20 -o /dev/null "$SITE_URL/api/v1/openapi.json"
           echo "Website, API and worker (checked by its deploy) are up."
+        env:
+          PROD_BACKEND: ${{ vars.PROD_BACKEND }}

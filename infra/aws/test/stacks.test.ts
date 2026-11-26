@@ -195,9 +195,9 @@ describe.each(ENV_NAMES)("%s services", (envName) => {
     });
   });
 
-  it("runs one worker, and never two at once", () => {
+  it("runs one worker where the environment lives on AWS (none on prod before its cutover), and never two at once", () => {
     expect(service("worker").Properties).toMatchObject({
-      DesiredCount: 1,
+      DesiredCount: envName === "prod" ? 0 : 1,
       DeploymentConfiguration: { DeploymentCircuitBreaker: { Enable: true, Rollback: true }, MinimumHealthyPercent: 0, MaximumPercent: 100 },
     });
     expect(service("worker").Properties.LoadBalancers).toBeUndefined();

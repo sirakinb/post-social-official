@@ -29,7 +29,7 @@ describe("copying a database to AWS", () => {
     expect(script.indexOf("livesOnAws(before.worker)")).toBeLessThan(script.indexOf('await scale(envName, "worker", 0)'));
   });
 
-  it("never prints or stores the address, and refuses prod until cutover", () => {
+  it("never prints or stores the address, and knows both environments", () => {
     const script = readFileSync(new URL("./aws-copy-database.mjs", import.meta.url), "utf8");
     // The address reaches AWS on standard input only, in a secret that is deleted whatever
     // happens, with no recovery copy.
@@ -42,8 +42,8 @@ describe("copying a database to AWS", () => {
     const config = readFileSync(new URL("../infra/aws/lib/config.ts", import.meta.url), "utf8");
     expect(config).toContain("`postsocial/${envName}/insforge-address`");
     expect(sourceSecret("dev")).toBe("postsocial/dev/insforge-address");
-    expect(script).toContain('const ENVIRONMENTS = { dev:');
-    expect(script).not.toMatch(/prod: \{ api:/);
+    expect(sourceSecret("prod")).toBe("postsocial/prod/insforge-address");
+    expect(script).toContain('const ENVIRONMENTS = { dev: { api: "https://api-dev.postsocial.xyz" }, prod: { api: "https://api.postsocial.xyz" } };');
   });
 
   it("the copy itself changes nothing unless every step works, and leaves InsForge's keys behind", () => {
