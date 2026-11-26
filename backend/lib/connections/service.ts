@@ -159,6 +159,14 @@ async function blueskyIdentity(deps: ConnectionDeps, pendingSealed: string | nul
   }];
 }
 
+// An account's name with its handle, for messages about an account the person can't see in
+// this workspace: two accounts often share a display name ("Aki"), and the handle is what
+// tells them which one the platform handed back. Pages have no handle of their own.
+function namedWithHandle(identity: Pick<Identity, "displayName" | "handle">): string {
+  const handle = identity.handle.replace(/^@/, "");
+  return handle && handle.toLowerCase() !== identity.displayName.toLowerCase() ? `${identity.displayName} (@${handle})` : identity.displayName;
+}
+
 type StateRow = { workspace_id: string; user_id: string | null; return_to: string | null; code_verifier_encrypted: string | null; profile_id: string | null };
 
 // choose: a waiting sign-in where the person picks which new accounts to add.
@@ -240,7 +248,7 @@ export async function completeConnection(deps: ConnectionDeps, platform: Platfor
        WHERE platform = $1 AND external_account_id = $2 AND workspace_id <> $3 AND health <> 'disconnected'`,
       [platform, externalIdOf(identity), session.workspace_id],
     );
-    if (elsewhere) skipped.push(identity.displayName);
+    if (elsewhere) skipped.push(namedWithHandle(identity));
     else available.push(identity);
   }
   if (!available.length) {
@@ -443,7 +451,7 @@ export async function chooseAccounts(deps: ConnectionDeps, caller: Caller, input
        WHERE platform = $1 AND external_account_id = $2 AND workspace_id <> $3 AND health <> 'disconnected'`,
       [pending.platform, identity.externalAccountId, pending.workspace_id],
     );
-    if (elsewhere) skipped.push(identity.displayName);
+    if (elsewhere) skipped.push(namedWithHandle(identity));
     else chosen.push(identity);
   }
   const skippedNote = skipped.length ? ` Skipped ${skipped.join(", ")}: already connected to another workspace.` : "";
