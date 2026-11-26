@@ -1,13 +1,19 @@
 #!/usr/bin/env bash
 # Build and deploy the worker to InsForge Compute.
-#   scripts/deploy-worker.sh <dev|prod>
+#   scripts/deploy-worker.sh prod
+# Dev's worker runs on AWS since 2026-11-26 (it deploys by itself on every push to dev), so
+# this refuses dev: a second worker on InsForge would renew the same platform tokens.
 # Settings are read from the environment's InsForge secrets and passed to the container;
 # nothing secret is written into the repo. Prod deploys need a clean main synced with GitHub.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 target="${1:-}"
-[[ "$target" == "dev" || "$target" == "prod" ]] || { echo "Usage: scripts/deploy-worker.sh <dev|prod>" >&2; exit 1; }
+if [[ "$target" == "dev" ]]; then
+  echo "Dev's worker runs on AWS now and deploys by itself on every push to dev. Starting the InsForge one again would have two workers renewing the same platform tokens, so nothing was deployed." >&2
+  exit 1
+fi
+[[ "$target" == "prod" ]] || { echo "Usage: scripts/deploy-worker.sh prod" >&2; exit 1; }
 export PATH="$HOME/.fly/bin:$PATH"
 command -v flyctl >/dev/null || { echo "Install flyctl first: curl -L https://fly.io/install.sh | sh" >&2; exit 1; }
 

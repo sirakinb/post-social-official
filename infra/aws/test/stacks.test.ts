@@ -195,9 +195,9 @@ describe.each(ENV_NAMES)("%s services", (envName) => {
     });
   });
 
-  it("never runs two workers at once, and none on dev while dev's worker is still on InsForge", () => {
+  it("runs one worker, and never two at once", () => {
     expect(service("worker").Properties).toMatchObject({
-      DesiredCount: envName === "prod" ? 1 : 0,
+      DesiredCount: 1,
       DeploymentConfiguration: { DeploymentCircuitBreaker: { Enable: true, Rollback: true }, MinimumHealthyPercent: 0, MaximumPercent: 100 },
     });
     expect(service("worker").Properties.LoadBalancers).toBeUndefined();

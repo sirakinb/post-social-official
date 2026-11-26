@@ -1,5 +1,9 @@
 # Deploy to the shared dev backend (InsForge branch `dev`) from an exact commit that is already
 # on the `dev` branch, i.e. reviewed and merged through a pull request.
+# Since 2026-11-26 the dev website runs on AWS dev (.github/workflows/deploy-aws-dev.yml, on
+# every push to dev). This workflow keeps InsForge dev's functions and migrations level with
+# dev, which the database tests still use. It no longer deploys the worker: dev's worker runs
+# on AWS, and a second one here would renew the same platform tokens.
 # Run it by hand: Actions → "Deploy to dev" → Run workflow (branch: dev). Choose what to deploy;
 # optionally give a commit SHA from dev (empty: the tip of dev).
 #
@@ -17,7 +21,7 @@ on:
       what:
         description: "What to deploy"
         type: choice
-        options: [api, all functions, worker, migrations, everything]
+        options: [api, all functions, migrations, everything]
         default: api
       sha:
         description: "Commit on dev to deploy (empty: the tip of dev)"
@@ -34,7 +38,6 @@ concurrency:
 env:
   INSFORGE_CLI: "@insforge/cli@0.2.8"
   INSFORGE_DEV_DIRECT: "1"
-  FLYCTL_VERSION: 0.4.111
   DEV_FUNCTIONS_URL: https://syydd6ck-zqc.function2.insforge.app
 
 jobs:
@@ -63,9 +66,8 @@ jobs:
           case "$WHAT" in
             api) parts="api" ;;
             "all functions") parts="functions" ;;
-            worker) parts="worker" ;;
             migrations) parts="migrations" ;;
-            everything) parts="migrations functions worker" ;;
+            everything) parts="migrations functions" ;;
             *) echo "::error::Unknown choice: $WHAT"; exit 1 ;;
           esac
           echo "sha=$full" >> "$GITHUB_OUTPUT"
@@ -116,15 +118,6 @@ jobs:
             echo "::endgroup::"
             grep -qE "Function \"$fn\" (updation|creation) success" "$log" || { echo "::error::The $fn function didn't report a successful deploy."; exit 1; }
           done
-
-      - name: Install flyctl (the worker is built with it)
-        if: contains(steps.pick.outputs.parts, 'worker')
-        run: |
-          curl -fsSL https://fly.io/install.sh | sh -s "$FLYCTL_VERSION"
-          echo "$HOME/.fly/bin" >> "$GITHUB_PATH"
-      - name: Worker
-        if: contains(steps.pick.outputs.parts, 'worker')
-        run: npm run worker:deploy -- dev
 
       - name: Check dev answers
         run: |
