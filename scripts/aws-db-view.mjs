@@ -6,14 +6,16 @@
 // (postsocial-<env>-tunnel), has AWS's session service carry one local port through it to
 // the database, and tells you where to point a database app (TablePlus, Postico, DBeaver,
 // psql): 127.0.0.1, the port it prints, the login app_viewer. That login can only read
-// (database/viewer.sql). Its password is read from AWS and put on the clipboard, never
-// printed; the clipboard is cleared when you close this. With --psql it opens psql for you
-// instead.
+// (database/viewer.sql). Its password is read from AWS and never printed. With TablePlus
+// installed it opens there, already connected. Without it, the password goes on the
+// clipboard for you to paste into your app, and is cleared when you close this. With
+// --psql it opens psql for you instead.
 //
 // Ctrl+C closes the way in and stops the task. Left alone, the task stops by itself after a
 // few hours. Needs your own AWS sign-in (the `postsocial` profile) and AWS's Session Manager
 // plugin (https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html).
 import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import net from "node:net";
 import { pathToFileURL } from "node:url";
 import { CLUSTER, networkOf } from "./aws-deploy.mjs";
@@ -50,6 +52,15 @@ export function sessionParameters(database, localPort) {
 export function connectionDetails(envName, localPort) {
   return [`Host      127.0.0.1`, `Port      ${localPort}`, `User      ${VIEWER_LOGIN}`, `Database  ${DATABASE_NAME}`, `SSL       required (don't verify the certificate: the address is this machine's)`, `Name it   Post Social ${envName} (read-only)`].join("\n");
 }
+
+// What TablePlus opens: one connection, named and coloured so prod is never mistaken for dev.
+// It holds the password, so it is handed to the app and never printed.
+export function tablePlusUrl(envName, localPort, password) {
+  const settings = new URLSearchParams({ name: `Post Social ${envName} (read-only)`, statusColor: envName === "prod" ? "D0312D" : "2E7D32", env: envName === "prod" ? "production" : "development", tLSMode: "1", usePrivateKey: "false", safeModeLevel: "0" });
+  return `postgresql://${VIEWER_LOGIN}:${encodeURIComponent(password)}@127.0.0.1:${localPort}/${DATABASE_NAME}?${settings}`;
+}
+
+const TABLEPLUS = "/Applications/TablePlus.app";
 
 function aws(args) {
   const out = execFileSync("aws", [...args, "--output", "json"], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"], maxBuffer: 16 * 1024 * 1024 });
@@ -149,6 +160,12 @@ async function main(args) {
       process.removeAllListeners("SIGINT");
       process.on("SIGINT", () => {});
       psql.once("exit", () => close(0));
+      return;
+    }
+    const inTablePlus = existsSync(TABLEPLUS) && spawnSync("open", ["-a", TABLEPLUS, tablePlusUrl(envName, localPort, password)], { stdio: "ignore" }).status === 0;
+    if (inTablePlus) {
+      console.log(`\nThe ${envName} database is open in TablePlus, read-only, as "Post Social ${envName} (read-only)".`);
+      console.log("\nLeave this window open while you look. Press Ctrl+C to close the way in.");
       return;
     }
     if (onPath("pbcopy")) {

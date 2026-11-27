@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { connectionDetails, LOCAL_PORTS, sessionParameters, sessionTarget, tunnelState } from "./aws-db-view.mjs";
+import { connectionDetails, LOCAL_PORTS, sessionParameters, sessionTarget, tablePlusUrl, tunnelState } from "./aws-db-view.mjs";
 
 const taskArn = "arn:aws:ecs:us-east-1:039612844713:task/postsocial/0123456789abcdef0123456789abcdef";
 const runtimeId = "0123456789abcdef0123456789abcdef-1234567890";
@@ -51,5 +51,16 @@ describe("what it tells you to type", () => {
     expect(details).toContain("app_viewer");
     expect(details).toContain("Post Social prod (read-only)");
     expect(details).not.toMatch(/password/i);
+  });
+
+  it("opens TablePlus on this machine's end of the way in, as the read-only login, named by environment", () => {
+    const url = new URL(tablePlusUrl("prod", 54320, "p@ss/w:rd"));
+    expect([url.protocol, url.hostname, url.port, url.pathname, url.username]).toEqual(["postgresql:", "127.0.0.1", "54320", "/postsocial", "app_viewer"]);
+    // Whatever the password holds, it stays one piece of the address.
+    expect(decodeURIComponent(url.password)).toBe("p@ss/w:rd");
+    expect(url.searchParams.get("name")).toBe("Post Social prod (read-only)");
+    expect(url.searchParams.get("env")).toBe("production");
+    expect(new URL(tablePlusUrl("dev", 54321, "x")).searchParams.get("env")).toBe("development");
+    expect(url.searchParams.get("statusColor")).not.toBe(new URL(tablePlusUrl("dev", 54321, "x")).searchParams.get("statusColor"));
   });
 });
