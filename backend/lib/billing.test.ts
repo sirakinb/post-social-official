@@ -7,7 +7,7 @@ const WORKSPACE = "22222222-2222-4222-8222-222222222222";
 const REFERRAL = "98288128-0d5f-45a9-88b3-ef95b229f798";
 const person = { userId: "11111111-1111-4111-8111-111111111111", displayName: "Ada", entryPoint: "ui" as const };
 
-type State = { plan_id: string; plan_name: string; connected: number; stripe_customer_id?: string | null; stripe_subscription_id?: string | null; subscription_status?: string | null; billed_quantity?: number | null; x_monthly_cap_cents?: number };
+type State = { plan_id: string; plan_name: string; connected: number; stripe_customer_id?: string | null; stripe_subscription_id?: string | null; subscription_status?: string | null; billed_quantity?: number | null; x_monthly_cap_cents?: number; workspaceGone?: boolean };
 
 // A database that answers the few queries billing makes, and records the rest.
 function fakeSql(state: State, role = "owner") {
@@ -17,6 +17,8 @@ function fakeSql(state: State, role = "owner") {
     if (query.includes("FROM public.plans p")) return [state];
     if (query.includes("FROM auth.users")) return [{ email: "ada@example.com" }];
     writes.push({ query, params });
+    // Saving a subscription answers with a row unless the workspace is gone.
+    if (query.includes("INSERT INTO public.workspace_billing")) return state.workspaceGone ? [] : [{ set_billing_plan: null }];
     return [];
   }) as Sql;
   return { sql, writes };
@@ -275,6 +277,16 @@ describe("setXCap", () => {
 });
 
 describe("handleStripeEvent", () => {
+  it("answers a subscription event for a workspace that no longer exists as received, and bills nothing", async () => {
+    const { sql, writes } = fakeSql({ plan_id: "paid", plan_name: "Paid", connected: 0, workspaceGone: true });
+    const { stripe, calls } = fakeStripe();
+    const event = { type: "customer.subscription.deleted", data: { object: { id: "sub_1", status: "active", customer: "cus_1", metadata: { workspace_id: WORKSPACE } } } };
+    await expect(handleStripeEvent({ sql, stripe, webAppUrl: "" }, event)).resolves.toEqual({ handled: false, reason: "workspace_gone" });
+    // The save only happens where the workspace exists, and no final invoice is attempted.
+    expect(writes[0].query).toContain("WHERE EXISTS (SELECT 1 FROM public.workspaces WHERE id = $1::uuid)");
+    expect(calls).toEqual([]);
+  });
+
   it("records subscription changes and treats deletion as cancelled", async () => {
     const { sql, writes } = fakeSql({ plan_id: "paid", plan_name: "Paid", connected: 3 });
     const event = { type: "customer.subscription.deleted", data: { object: { id: "sub_1", status: "active", customer: "cus_1", metadata: { workspace_id: WORKSPACE } } } };

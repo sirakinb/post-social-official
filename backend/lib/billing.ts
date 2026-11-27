@@ -107,12 +107,16 @@ async function accountsPriceId(stripe: Stripe) {
 }
 
 // Saves what a Stripe subscription says and moves the workspace between Free and Paid.
-export async function recordSubscription(sql: Sql, workspaceId: string, subscription: { id: string; status: string; customer: string; items?: { data?: { quantity?: number }[] } }) {
+// Returns whether the workspace is now paid, or null when the workspace no longer exists
+// (deleted while its subscription was still running): Stripe keeps sending that
+// subscription's events, and there is nothing left to record them on.
+export async function recordSubscription(sql: Sql, workspaceId: string, subscription: { id: string; status: string; customer: string; items?: { data?: { quantity?: number }[] } }): Promise<boolean | null> {
   const paid = PAID_STATUSES.has(subscription.status);
-  await sql(
+  const saved = await sql(
     `WITH saved AS (
        INSERT INTO public.workspace_billing (workspace_id, stripe_customer_id, stripe_subscription_id, subscription_status, billed_quantity, updated_at)
-       VALUES ($1, $2, $3, $4, $5, now())
+       SELECT $1::uuid, $2::text, $3::text, $4::text, $5::int, now()
+       WHERE EXISTS (SELECT 1 FROM public.workspaces WHERE id = $1::uuid)
        ON CONFLICT (workspace_id) DO UPDATE SET
          stripe_customer_id = EXCLUDED.stripe_customer_id,
          stripe_subscription_id = EXCLUDED.stripe_subscription_id,
@@ -124,7 +128,7 @@ export async function recordSubscription(sql: Sql, workspaceId: string, subscrip
      SELECT public.set_billing_plan(workspace_id, $6) FROM saved`,
     [workspaceId, subscription.customer, subscription.id, subscription.status, subscription.items?.data?.[0]?.quantity ?? null, paid],
   );
-  return paid;
+  return saved.length ? paid : null;
 }
 
 // Brings the subscription's quantity in line with the connected accounts. Only connecting an
@@ -328,7 +332,7 @@ export async function confirmCheckout(deps: BillingDeps, caller: Caller, input: 
   const sessionWorkspace = session.metadata?.workspace_id ?? session.client_reference_id;
   if (sessionWorkspace !== workspaceId) throw new ApiError(404, "That checkout wasn't for this workspace.");
   if (session.status !== "complete" || !session.subscription) return { paid: false };
-  return { paid: await recordSubscription(deps.sql, workspaceId, session.subscription) };
+  return { paid: (await recordSubscription(deps.sql, workspaceId, session.subscription)) ?? false };
 }
 
 // Stripe's customer portal: change card, see invoices, cancel.
@@ -440,13 +444,19 @@ async function addUnbilledX(deps: BillingDeps, invoiceId: string, customer: stri
   const stripe = requireStripe(deps);
   const invoice = { id: invoiceId, customer };
   const months = await deps.sql<{ workspace_id: string; month: string; posts: number; link_posts: number; total_cents: number; billed_cents: number }>(
-    `WITH ws AS (SELECT workspace_id FROM public.workspace_billing WHERE stripe_customer_id = $1)
-     SELECT c.workspace_id, to_char(date_trunc('month', c.created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS month,
-            count(*)::int AS posts, count(*) FILTER (WHERE c.with_link)::int AS link_posts, sum(c.cents)::int AS total_cents,
+    // The months are totalled first and what was already billed is looked up per month
+    // after. (Looking it up inside the grouped query is not valid Postgres: "subquery uses
+    // ungrouped column". That version failed on the first real renewal event, 2026-11-26.)
+    `WITH ws AS (SELECT workspace_id FROM public.workspace_billing WHERE stripe_customer_id = $1),
+          monthly AS (
+            SELECT c.workspace_id, date_trunc('month', c.created_at AT TIME ZONE 'UTC')::date AS month,
+                   count(*)::int AS posts, count(*) FILTER (WHERE c.with_link)::int AS link_posts, sum(c.cents)::int AS total_cents
+            FROM public.x_charges c JOIN ws USING (workspace_id)
+            GROUP BY 1, 2)
+     SELECT m.workspace_id, to_char(m.month, 'YYYY-MM-DD') AS month, m.posts, m.link_posts, m.total_cents,
             coalesce((SELECT sum(l.cents)::int FROM public.x_invoice_lines l
-                      WHERE l.workspace_id = c.workspace_id AND l.month = date_trunc('month', c.created_at AT TIME ZONE 'UTC')::date), 0) AS billed_cents
-     FROM public.x_charges c JOIN ws USING (workspace_id)
-     GROUP BY 1, 2 ORDER BY 2`,
+                      WHERE l.workspace_id = m.workspace_id AND l.month = m.month), 0) AS billed_cents
+     FROM monthly m ORDER BY m.month`,
     [invoice.customer],
   );
   let added = 0;
@@ -502,6 +512,8 @@ export async function handleStripeEvent(deps: BillingDeps, event: StripeEvent) {
   if (!workspaceId || !/^[0-9a-f-]{36}$/i.test(workspaceId)) return { handled: false };
   const status = event.type === "customer.subscription.deleted" ? "canceled" : subscription.status;
   const paid = await recordSubscription(deps.sql, workspaceId, { ...subscription, status });
+  // Answered as received, so Stripe stops retrying an event nothing can be done with.
+  if (paid === null) return { handled: false, reason: "workspace_gone" };
   if (event.type === "customer.subscription.deleted" && deps.stripe) {
     const final = await billFinalXUsage(deps, subscription.customer);
     return { handled: true, ...final };
