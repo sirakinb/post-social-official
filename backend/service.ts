@@ -9,12 +9,14 @@
 //   /auth/...          sign-in (backend/lib/auth), for our website's server only
 //   /healthz           the service is up (the load balancer's check; doesn't touch the database)
 //   /readyz            the service can reach the database (checked after a deploy)
+//   /readyz/worker     the worker has shown a sign of life lately (the uptime check)
 //
 // Runtime-neutral, so it is tested without a server. backend/server.ts puts it on a port.
 import { reportError } from "./lib/telemetry";
 import type { Env } from "./lib/settings";
 import type { Handler } from "./lib/node-http";
 import { fromOurWebsite } from "./lib/rate-limit";
+import { workerStatus } from "./lib/worker-heartbeat";
 import { apiDeps, type BackendBase } from "./functions/api/deps";
 import { createApiHandler } from "./functions/api/handler";
 import { connectionsDeps } from "./functions/connections/deps";
@@ -29,6 +31,9 @@ export type ServiceDeps = {
   base: BackendBase;
   // True when the database answers. Used by /readyz only.
   ready: () => Promise<boolean>;
+  // Seconds since the worker's last heartbeat, null if there has never been one. Used by
+  // /readyz/worker only.
+  workerSilence: () => Promise<number | null>;
   // Our own sign-in and the path it answers under. Left out while sign-in is elsewhere.
   auth?: { path: string; handler: Handler };
 };
@@ -70,6 +75,12 @@ export function createService(deps: ServiceDeps): Handler {
     if (path === "/readyz") {
       const ok = await deps.ready().catch(() => false);
       return json(ok ? 200 : 503, { ok });
+    }
+    // The worker has no address of its own, so the uptime check asks here. A database that
+    // doesn't answer counts as a worker that is down: it can't work without one.
+    if (path === "/readyz/worker") {
+      const status = workerStatus(await deps.workerSilence().catch(() => null));
+      return json(status.ok ? 200 : 503, status);
     }
     // Sign-in is called by our website's server, never by a browser or anyone else: without
     // the website's shared secret these routes don't exist. The website checks the attempt
