@@ -10,7 +10,8 @@ const foundation = Template.fromStack(built.foundation);
 const edge = Template.fromStack(built.edge);
 const data = { dev: Template.fromStack(built.data.dev), prod: Template.fromStack(built.data.prod) };
 const services = { dev: Template.fromStack(built.services.dev), prod: Template.fromStack(built.services.prod) };
-const all = [foundation, edge, data.dev, data.prod, services.dev, services.prod];
+const backup = Template.fromStack(built.backups.prod!);
+const all = [foundation, edge, data.dev, data.prod, services.dev, services.prod, backup];
 
 type Resource = { Type: string; Properties: Record<string, unknown>; DeletionPolicy?: string };
 type Statement = { Sid?: string; Action: string | string[]; Effect: string; Resource: unknown; Condition?: Record<string, Record<string, unknown>> };
@@ -366,6 +367,98 @@ describe("what protects prod, and what lets dev be rebuilt", () => {
   it("the shared stacks can't be deleted by mistake", () => {
     expect(built.foundation.terminationProtection).toBe(true);
     expect(built.edge.terminationProtection).toBe(true);
+  });
+});
+
+describe("the nightly backup of prod's database", () => {
+  const [definition] = resources(backup, "AWS::ECS::TaskDefinition");
+  const containers = Object.fromEntries((definition.Properties.ContainerDefinitions as Record<string, unknown>[]).map((c) => [c.Name as string, c]));
+  const names = (list: unknown) => (list as { Name: string }[]).map((item) => item.Name).sort();
+  const policy = (name: string) => resources(backup, "AWS::IAM::Policy").find((p) => p.Properties.PolicyName === name || JSON.stringify(p.Properties.Roles).includes(name))!;
+
+  it("exists for prod only", () => {
+    expect(Object.keys(built.backups)).toEqual(["prod"]);
+    expect(definition.Properties).toMatchObject({ Family: "postsocial-prod-backup", RequiresCompatibilities: ["FARGATE"], RuntimePlatform: { CpuArchitecture: "ARM64" } });
+  });
+
+  it("dumps with Postgres's own tools as the owner, read-only, and refuses a wiped database", () => {
+    const dump = containers.dump;
+    expect(JSON.stringify(dump.Image)).toBe('"public.ecr.aws/docker/library/postgres:15"');
+    const script = (dump.Command as string[])[2];
+    expect((dump.Command as string[]).slice(0, 2)).toEqual(["bash", "-c"]);
+    expect(script).toContain("default_transaction_read_only=on");
+    expect(script).toContain("pg_dump --format=custom");
+    expect(script).toContain("auth.users is empty");
+    expect(names(dump.Secrets)).toEqual(["PGPASSWORD", "PGUSER"]);
+    expect(names(dump.Environment)).toEqual(["BACKUP_NAME", "MIN_BYTES", "MIN_PUBLIC_TABLES", "PGDATABASE", "PGHOST", "PGPORT", "PGSSLMODE", "WORK_DIR"]);
+    expect(dump).toMatchObject({ ReadonlyRootFilesystem: true, Essential: false, MountPoints: [{ ContainerPath: "/work", ReadOnly: false }] });
+  });
+
+  it("uploads only a dump that passed its checks, with no database login of its own", () => {
+    const upload = containers.upload;
+    expect(JSON.stringify(upload.Image)).toMatch(/^"public\.ecr\.aws\/aws-cli\/aws-cli:2\.\d+\.\d+"$/);
+    expect(upload.DependsOn).toEqual([{ ContainerName: "dump", Condition: "SUCCESS" }]);
+    expect(upload.Secrets).toBeUndefined();
+    expect(names(upload.Environment)).toEqual(["BACKUP_NAME", "BUCKET", "HOME", "WORK_DIR"]);
+    expect((upload.Environment as { Name: string; Value: string }[]).find((e) => e.Name === "BUCKET")!.Value).toBe("postsocial-backups-039612844713");
+    expect(upload).toMatchObject({ ReadonlyRootFilesystem: true, Essential: true });
+    expect((upload.Command as string[])[0]).toContain('s3://$BUCKET/daily/');
+  });
+
+  it("lets the task add files to the two backup folders and nothing else", () => {
+    const statements = statementsOf(policy("TaskTaskRole"));
+    expect(statements).toHaveLength(1);
+    expect(actionsOf(statements[0]).sort()).toEqual(["s3:AbortMultipartUpload", "s3:PutObject"]);
+    expect(statements[0].Resource).toEqual(["arn:aws:s3:::postsocial-backups-039612844713/daily/*", "arn:aws:s3:::postsocial-backups-039612844713/monthly/*"]);
+    // Only the owner login and the log stream for the run; no service settings.
+    const reads = JSON.stringify(statementsOf(policy("TaskExecutionRole")).filter((s) => actionsOf(s).includes("secretsmanager:GetSecretValue")).map((s) => s.Resource));
+    expect(reads).toMatch(/DatabaseSecret/);
+    expect(reads).not.toMatch(/Settings|AppLogin|SignIn/);
+  });
+
+  it("is started by AWS every night, inside the network", () => {
+    const nightly = resources(backup, "AWS::Events::Rule").find((r) => r.Properties.Name === "postsocial-prod-backup-nightly")!;
+    expect(nightly.Properties.ScheduleExpression).toBe("cron(17 8 * * ? *)");
+    const [target] = nightly.Properties.Targets as Record<string, unknown>[];
+    expect(target.EcsParameters).toMatchObject({ LaunchType: "FARGATE", TaskCount: 1, NetworkConfiguration: { AwsVpcConfiguration: { AssignPublicIp: "ENABLED" } } });
+    expect(JSON.stringify(target.EcsParameters)).toMatch(/ApiAccess/);
+    expect(JSON.stringify(target.EcsParameters)).toMatch(/publicSubnet/);
+  });
+
+  it("sends a message to the alerts topic when a run fails or never starts", () => {
+    const failed = resources(backup, "AWS::Events::Rule").find((r) => r.Properties.Name === "postsocial-prod-backup-failed")!;
+    expect(failed.Properties.EventPattern).toMatchObject({
+      source: ["aws.ecs"],
+      "detail-type": ["ECS Task State Change"],
+      detail: { group: ["family:postsocial-prod-backup"], lastStatus: ["STOPPED"], $or: [{ containers: { exitCode: [{ "anything-but": 0 }] } }, { stopCode: ["TaskFailedToStart"] }] },
+    });
+    backup.hasResourceProperties("AWS::SNS::Topic", { TopicName: "postsocial-prod-alerts" });
+    expect(JSON.stringify((failed.Properties.Targets as unknown[])[0])).toMatch(/Alerts/);
+    // Who receives it is added by hand: no address lives in the repository.
+    backup.resourceCountIs("AWS::SNS::Subscription", 0);
+    expect(JSON.stringify(backup.toJSON())).not.toMatch(/@[a-z0-9-]+\.(com|xyz)/i);
+  });
+
+  it("lets the GitHub backup role start this one task and watch it, nothing wider", () => {
+    const rights = policy("postsocial-prod-backup-run");
+    expect(rights.Properties.Roles).toEqual(["postsocial-github-backup"]);
+    const bySid = Object.fromEntries(statementsOf(rights).map((s) => [s.Sid, s]));
+    expect(Object.keys(bySid).sort()).toEqual(["HandTheTaskItsRoles", "ReadApiNetwork", "RunBackups", "WatchTasks"]);
+    expect(statementsOf(rights).flatMap(actionsOf).sort()).toEqual(["ecs:DescribeServices", "ecs:DescribeTasks", "ecs:RunTask", "iam:PassRole"]);
+    expect(bySid.RunBackups.Resource).toBe("arn:aws:ecs:us-east-1:039612844713:task-definition/postsocial-prod-backup:*");
+    expect(bySid.RunBackups.Condition?.ArnEquals["ecs:cluster"]).toBeDefined();
+    expect(bySid.WatchTasks.Condition?.ArnEquals["ecs:cluster"]).toBeDefined();
+    expect(bySid.ReadApiNetwork.Resource).toBe("arn:aws:ecs:us-east-1:039612844713:service/postsocial/postsocial-prod-api");
+    expect(bySid.HandTheTaskItsRoles.Resource).toHaveLength(2);
+    expect(bySid.HandTheTaskItsRoles.Condition).toEqual({ StringEquals: { "iam:PassedToService": "ecs-tasks.amazonaws.com" } });
+    expect(statementsOf(rights).filter((s) => s.Resource === "*")).toEqual([]);
+    // A deploy from GitHub can't run a backup or hand it its roles.
+    const deploy = resources(services.prod, "AWS::IAM::Policy").find((p) => p.Properties.PolicyName === "postsocial-prod-deploy")!;
+    expect(JSON.stringify(statementsOf(deploy))).not.toMatch(/backup/i);
+  });
+
+  it("can't be deleted by mistake", () => {
+    expect(built.backups.prod!.terminationProtection).toBe(true);
   });
 });
 
