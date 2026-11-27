@@ -94,7 +94,15 @@ async function main(args) {
   const close = (code) => {
     if (closing) return;
     closing = true;
-    session?.kill("SIGTERM");
+    // The AWS CLI hands the session to a helper process of its own. Stopping the CLI alone
+    // leaves that helper running and holding the local port, so stop the whole group.
+    if (session?.pid) {
+      try {
+        process.kill(-session.pid, "SIGTERM");
+      } catch {
+        session.kill("SIGTERM");
+      }
+    }
     // Only clear the clipboard if it still holds what we put there.
     if (clipboardHoldsPassword) spawnSync("pbcopy", [], { input: "" });
     try {
@@ -118,7 +126,7 @@ async function main(args) {
     }
     if (!target) throw new Error("The task wasn't ready after 3 minutes.");
 
-    session = spawn("aws", ["ssm", "start-session", "--target", target, "--document-name", "AWS-StartPortForwardingSessionToRemoteHost", "--parameters", JSON.stringify(parameters)], { stdio: ["ignore", "ignore", "inherit"] });
+    session = spawn("aws", ["ssm", "start-session", "--target", target, "--document-name", "AWS-StartPortForwardingSessionToRemoteHost", "--parameters", JSON.stringify(parameters)], { stdio: ["ignore", "ignore", "inherit"], detached: true });
     session.once("exit", () => {
       if (!closing) {
         console.error("\nThe session ended.");
@@ -135,7 +143,7 @@ async function main(args) {
     // Read at the last moment, kept in memory only.
     const { password } = JSON.parse(aws(["secretsmanager", "get-secret-value", "--secret-id", `postsocial/${envName}/database-viewer`]).SecretString);
     if (usePsql) {
-      console.log(`Connected to ${envName} as ${VIEWER_LOGIN} (read-only). Type \\q to leave.\n`);
+      console.log(`Opening psql on ${envName} as ${VIEWER_LOGIN} (read-only). Type \\q to leave.\n`);
       const psql = spawn("psql", ["--host", "127.0.0.1", "--port", String(localPort), "--username", VIEWER_LOGIN, "--dbname", DATABASE_NAME], { stdio: "inherit", env: { ...process.env, PGPASSWORD: password, PGSSLMODE: "require" } });
       // Ctrl+C belongs to psql while it runs (it cancels a query); leaving psql closes everything.
       process.removeAllListeners("SIGINT");
