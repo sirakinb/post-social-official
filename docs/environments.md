@@ -123,21 +123,32 @@ If dev ever drifts, reset it and run `npm run db:dev` to replay all migrations.
 
 ## Nightly backups to S3
 
-InsForge keeps only its latest nightly backup, so we keep our own copies outside it.
-`.github/workflows/backup-prod.yml` runs every night at about 3am US Eastern, from `main`:
+The prod database on AWS keeps 7 days of its own automatic backups. On top of that we keep
+dumps in our own bucket, which outlive the database and can be loaded into any Postgres.
 
-- It asks InsForge for prod's Postgres address (with `INSFORGE_USER_API_KEY`, the release's
-  secret), dumps the whole database with `pg_dump`, and checks the dump holds real data. A
-  wiped or empty database fails the run instead of saving an empty file. It only reads prod.
-- The dump goes to `s3://postsocial-backups-039612844713` (AWS account 039612844713,
-  us-east-1): `daily/postsocial-prod-<date>.dump`, kept 30 days, and on the 1st of each month
+- **What runs:** the task `postsocial-prod-backup`, inside our network (the database accepts
+  no connection from anywhere else). Its first container dumps the whole database with
+  `pg_dump` in a read-only session and checks the dump holds real data: a wiped or empty
+  database fails the run instead of saving an empty file. Its second container uploads the
+  file, and only starts if the first one succeeded. Code: `infra/aws/lib/backup-stack.ts`,
+  `database/backup-dump.sh`, `database/backup-upload.sh`.
+- **When:** AWS starts it every night at 08:17 UTC (about 3am US Eastern). Not GitHub:
+  GitHub runs this repository's schedules only a few times a day.
+- **Where it goes:** `s3://postsocial-backups-039612844713` (us-east-1):
+  `daily/postsocial-prod-<date>.dump`, kept 30 days, and on the 1st of each month
   `monthly/postsocial-prod-<month>.dump`, kept 12 months. The bucket is private, encrypted and
-  versioned; S3 deletes old files by itself.
-- No AWS keys are stored. The job signs in as the role `postsocial-github-backup` through
-  GitHub's identity; the role only trusts `main` of this repository and can only add files to
-  those two folders. It can't read, list or delete them.
-- A failed run is the alert: GitHub emails the repository owner. Run it by hand from the
-  Actions tab ("Back up prod database", Run workflow); tick "monthly" to also save a monthly copy.
+  versioned; S3 deletes old files by itself. The task's role can add files to those two
+  folders and nothing else: it can't read, list or delete them.
+- **If a run fails:** AWS sends a message to the topic `postsocial-prod-alerts`. Who gets it
+  is a subscription added by hand in the AWS console (SNS), so no address is in this repo.
+  The run's output is in the log group `/postsocial/prod/api`, streams starting
+  `backup-dump` and `backup-upload`.
+- **By hand:** Actions tab, "Back up prod database", Run workflow; tick "monthly" to also
+  save a monthly copy. It signs in as `postsocial-github-backup` (trusts only `main`), which
+  can start that one task and watch it. Or, signed in to AWS:
+  `node scripts/aws-backup.mjs prod`.
+- **History:** until 2026-11-27 this job dumped InsForge's prod database from a GitHub
+  runner. The file `daily/postsocial-prod-2026-11-26.dump` is that last InsForge dump.
 
 To restore, sign in to AWS as an admin (`aws login --profile postsocial`), download a file and
 load it into an empty Postgres 15 database:
@@ -148,8 +159,8 @@ aws s3 cp s3://postsocial-backups-039612844713/daily/postsocial-prod-<date>.dump
 pg_restore --no-owner --no-privileges --dbname "<target database address>" postsocial-prod-<date>.dump
 ```
 
-The dump holds every schema (`public`, `auth` and InsForge's own). Add `--schema=public` to
-restore only the app's tables. It holds people's data: delete local copies when done.
+The dump holds every schema (`public`, `auth`, `app_meta`). Add `--schema=public` to restore
+only the app's tables. It holds people's data: delete local copies when done.
 
 ## Node API service (for the move to AWS)
 

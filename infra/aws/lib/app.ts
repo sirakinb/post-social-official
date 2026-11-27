@@ -1,7 +1,9 @@
-// The whole setup: what is shared, then per environment a data stack and a services stack.
+// The whole setup: what is shared, then per environment a data stack and a services stack,
+// and for prod the nightly backup.
 import { App, Tags, Validations } from "aws-cdk-lib";
 import { AwsSolutionsChecks } from "cdk-nag";
-import { ACCOUNT, ENVIRONMENTS, ENV_NAMES, REGION, type EnvName } from "./config";
+import { BackupStack } from "./backup-stack";
+import { ACCOUNT, BACKED_UP, ENVIRONMENTS, ENV_NAMES, REGION, type EnvName } from "./config";
 import { DataStack } from "./data-stack";
 import { EdgeStack } from "./edge-stack";
 import { FoundationStack } from "./foundation-stack";
@@ -50,14 +52,29 @@ export function buildApp() {
     ]),
   ) as Record<EnvName, ServicesStack>;
 
+  const backups = Object.fromEntries(
+    BACKED_UP.map((envName) => [
+      envName,
+      new BackupStack(app, `PostSocialBackup-${envName}`, {
+        env,
+        envName,
+        foundation,
+        data: data[envName],
+        description: `Post Social ${envName}: the nightly database backup and its failure alert`,
+        terminationProtection: true,
+      }),
+    ]),
+  ) as Partial<Record<EnvName, BackupStack>>;
+
   Tags.of(app).add("app", "postsocial");
   for (const envName of ENV_NAMES) {
     Tags.of(data[envName]).add("environment", envName);
     Tags.of(services[envName]).add("environment", envName);
+    if (backups[envName]) Tags.of(backups[envName]).add("environment", envName);
   }
   // AWS's own checklist, run on every build. A finding fails the build unless it is
   // acknowledged next to the resource with a written reason (lib/acknowledge.ts).
   Validations.of(app).addPlugins(new AwsSolutionsChecks(app, { verbose: true }));
 
-  return { app, foundation, edge, data, services };
+  return { app, foundation, edge, data, services, backups };
 }
