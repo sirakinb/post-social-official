@@ -76,3 +76,9 @@ export const BACKUP_FOLDERS = ["daily", "monthly"] as const;
 export const BACKUP_GITHUB_ROLE = "postsocial-github-backup";
 // Which environments are backed up nightly. Dev holds test data only.
 export const BACKED_UP: EnvName[] = ["prod"];
+
+// The uptime check (lib/uptime-stack.ts): which environments are watched, and the public
+// website each one is checked through. Dev is not watched: nobody depends on it.
+export const WATCHED: Partial<Record<EnvName, { website: string }>> = { prod: { website: "https://www.postsocial.xyz" } };
+// Minutes in a row a check must fail (or be missing) before a message is sent.
+export const UPTIME_MINUTES_BEFORE_ALERT = 3;

@@ -21,7 +21,7 @@ The AWS setup itself, as code: `infra/aws/` (see its README).
 | Email | Resend | Transactional and alerts | `backend/lib/` | Can stay; or SES |
 | Payments | Stripe | Checkout, subscriptions, webhooks | `backend/lib/billing.ts` | Stays on Stripe; only the webhook address changes |
 | Analytics and errors | PostHog | Events, errors, alerts | `backend/lib/telemetry.ts` | Stays |
-| Uptime check | GitHub Actions, every 5 minutes | | `.github/workflows/uptime.yml` | Stays, or CloudWatch Synthetics |
+| Uptime check | AWS, every minute (since 2026-11-27); GitHub Actions a few times a day as a second opinion | | `infra/aws/lib/uptime-stack.ts`, `.github/workflows/uptime.yml` | Done |
 
 Two environments: prod (`syydd6ck`) and dev (`syydd6ck-zqc`, an InsForge branch with its
 own database, functions, worker and secrets).

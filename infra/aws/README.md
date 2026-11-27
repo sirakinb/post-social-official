@@ -19,6 +19,7 @@ from InsForge: `tasks/aws-migration.md`. What runs where today: `infra/README.md
 | `PostSocialServices-dev` | Dev's API (1 container behind the load balancer at `api-dev.postsocial.xyz`), its worker (running since 2026-11-26, when dev's website moved to this backend), the migration task, the task that fills the database from InsForge, and what dev's GitHub role may roll out | About $23 a month |
 | `PostSocialServices-prod` | The same for prod: 2 API containers at `api.postsocial.xyz` and a larger worker (created 2026-11-26; prod has lived here since its cutover that evening) | About $40 a month |
 | `PostSocialBackup-prod` | The nightly backup of prod's database: a task that dumps it inside the network and uploads the file to the backup bucket, the nightly schedule that starts it, a topic that gets a message when a run fails, and the right for the `postsocial-github-backup` role to start a run by hand | Cents a month |
+| `PostSocialUptime-prod` | The uptime check: a small function that asks prod's website, API and worker every minute, and three alarms (`postsocial-prod-website-down`, `-api-down`, `-worker-down`) that send to the alerts topic after three bad minutes in a row, and again on recovery | About $1 a month |
 
 The services are their own stack per environment, so a service change can never replace a
 database. Costs are list prices for containers running all month, each with a public address.
@@ -49,6 +50,14 @@ database. Costs are list prices for containers running all month, each with a pu
   task in our network, because nothing outside can reach the database, and on AWS's own
   schedule, because GitHub runs this repository's schedules only a few times a day. Who
   receives the failure message is a subscription added by hand to the alerts topic.
+- **The uptime check runs in AWS, and a silent check is an alert.** A function asks the
+  website, the API through it, and the worker (`/readyz/worker`) every minute and records 1
+  or 0 for each; an alarm per check sends to the alerts topic after three minutes of 0 or of
+  nothing at all, so a check that stops running is noticed too. It asks from outside our
+  network and holds no keys. It lives in the same region as the API, so the GitHub check
+  (`.github/workflows/uptime.yml`, a few runs a day) stays as a second opinion from outside
+  AWS. Route 53 health checks were the other choice: they ask from several places at once,
+  about every five seconds, which is half a million requests a month to each address.
 - **Three database logins.** The services sign in as `app_admin`, whose password is made up
   inside AWS (`postsocial/<env>/database-app`). Only the migration task holds the owner
   login. Neither password is ever in this repo, in GitHub or in a connection string.
