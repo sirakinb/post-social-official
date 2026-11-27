@@ -127,6 +127,17 @@ export class BackupStack extends Stack {
     // A message to the alerts topic. Who receives it is a subscription added by hand, so no
     // email address lives in this repository.
     this.alerts = new sns.Topic(this, "Alerts", { topicName: `postsocial-${envName}-alerts`, displayName: `Post Social ${envName} alerts`, enforceSSL: true });
+    // This environment's alarms send here too (lib/uptime-stack.ts). A topic with rules of
+    // its own lets in only who is named, so CloudWatch is named, for our alarms only.
+    this.alerts.addToResourcePolicy(
+      new iam.PolicyStatement({
+        sid: "OurAlarms",
+        actions: ["sns:Publish"],
+        principals: [new iam.ServicePrincipal("cloudwatch.amazonaws.com")],
+        resources: [this.alerts.topicArn],
+        conditions: { StringEquals: { "aws:SourceAccount": ACCOUNT }, ArnLike: { "aws:SourceArn": `arn:aws:cloudwatch:${REGION}:${ACCOUNT}:alarm:postsocial-${envName}-*` } },
+      }),
+    );
     const failed = new events.Rule(this, "Failed", {
       ruleName: `${family}-failed`,
       description: `A ${envName} database backup did not finish`,

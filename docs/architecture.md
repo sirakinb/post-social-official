@@ -116,9 +116,12 @@ every write is tied to the claim, so two workers can never send the same post.
   Platform tokens are encrypted in the database (AES-256-GCM).
 - **Rate limits:** per visitor, key, app and person (`backend/lib/rate-limit.ts`), plus per
   social account so we stay inside each platform's limits.
-- **Monitoring:** PostHog for errors, post outcomes and alerts; a GitHub Actions uptime check
-  every 5 minutes on the site, API and worker. The worker has no address on AWS: it writes a
-  heartbeat to the database every half minute and the API reports it at `/readyz/worker`
+- **Monitoring:** PostHog for errors, post outcomes and alerts; an uptime check in AWS that
+  asks the site, the API and the worker every minute and emails the owner after three bad
+  minutes in a row, and again on recovery (`infra/aws/lib/uptime-stack.ts`). A GitHub Actions
+  check of the same three stays as a second opinion from outside AWS; GitHub runs it only a
+  few times a day. The worker has no address on AWS: it writes a heartbeat to the database
+  every half minute and the API reports it at `/readyz/worker`
   (`backend/lib/worker-heartbeat.ts`).
 - **New-user funnel:** five PostHog events, each credited to the person's id (never their
   email): `user_invited` (`npm run beta:invite`), `$identify` (first sign-in in a browser),

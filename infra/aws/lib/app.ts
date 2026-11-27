@@ -1,13 +1,14 @@
 // The whole setup: what is shared, then per environment a data stack and a services stack,
-// and for prod the nightly backup.
+// and for prod the nightly backup and the uptime check.
 import { App, Tags, Validations } from "aws-cdk-lib";
 import { AwsSolutionsChecks } from "cdk-nag";
 import { BackupStack } from "./backup-stack";
-import { ACCOUNT, BACKED_UP, ENVIRONMENTS, ENV_NAMES, REGION, type EnvName } from "./config";
+import { ACCOUNT, BACKED_UP, ENVIRONMENTS, ENV_NAMES, REGION, WATCHED, type EnvName } from "./config";
 import { DataStack } from "./data-stack";
 import { EdgeStack } from "./edge-stack";
 import { FoundationStack } from "./foundation-stack";
 import { ServicesStack } from "./services-stack";
+import { UptimeStack } from "./uptime-stack";
 
 export function buildApp() {
   const app = new App();
@@ -66,15 +67,36 @@ export function buildApp() {
     ]),
   ) as Partial<Record<EnvName, BackupStack>>;
 
+  // The alarms send to the alerts topic, which lives with the backup: a watched environment
+  // must be a backed-up one.
+  const uptime = Object.fromEntries(
+    (Object.keys(WATCHED) as EnvName[]).map((envName) => {
+      const alerts = backups[envName]?.alerts;
+      if (!alerts) throw new Error(`${envName} is watched but has no alerts topic: add it to BACKED_UP.`);
+      return [
+        envName,
+        new UptimeStack(app, `PostSocialUptime-${envName}`, {
+          env,
+          envName,
+          website: WATCHED[envName]!.website,
+          alerts,
+          description: `Post Social ${envName}: the uptime check and its alarms`,
+          terminationProtection: true,
+        }),
+      ];
+    }),
+  ) as Partial<Record<EnvName, UptimeStack>>;
+
   Tags.of(app).add("app", "postsocial");
   for (const envName of ENV_NAMES) {
     Tags.of(data[envName]).add("environment", envName);
     Tags.of(services[envName]).add("environment", envName);
     if (backups[envName]) Tags.of(backups[envName]).add("environment", envName);
+    if (uptime[envName]) Tags.of(uptime[envName]).add("environment", envName);
   }
   // AWS's own checklist, run on every build. A finding fails the build unless it is
   // acknowledged next to the resource with a written reason (lib/acknowledge.ts).
   Validations.of(app).addPlugins(new AwsSolutionsChecks(app, { verbose: true }));
 
-  return { app, foundation, edge, data, services, backups };
+  return { app, foundation, edge, data, services, backups, uptime };
 }
