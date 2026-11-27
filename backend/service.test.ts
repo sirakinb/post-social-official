@@ -12,12 +12,13 @@ const SETTINGS: Record<string, string> = {
   META_WEBHOOK_VERIFY_TOKEN: "verify-me",
 };
 
-function service(overrides: { sql?: Sql; ready?: () => Promise<boolean>; settings?: Record<string, string | undefined>; auth?: { path: string; handler: (request: Request) => Promise<Response> } } = {}) {
+function service(overrides: { sql?: Sql; ready?: () => Promise<boolean>; workerSilence?: () => Promise<number | null>; settings?: Record<string, string | undefined>; auth?: { path: string; handler: (request: Request) => Promise<Response> } } = {}) {
   const settings = { ...SETTINGS, ...overrides.settings };
   return createService({
     env: (name) => settings[name],
     base: { sql: overrides.sql ?? (vi.fn(async () => []) as unknown as Sql), userForToken: async () => null },
     ready: overrides.ready ?? (async () => true),
+    workerSilence: overrides.workerSilence ?? (async () => 5),
     ...(overrides.auth ? { auth: overrides.auth } : {}),
   });
 }
@@ -37,6 +38,21 @@ describe("the Node service", () => {
     expect((await get(service(), "/readyz")).status).toBe(200);
     expect((await get(service({ ready: async () => false }), "/readyz")).status).toBe(503);
     expect((await get(service({ ready: async () => { throw new Error("down"); } }), "/readyz")).status).toBe(503);
+  });
+
+  it("reports the worker as up only while its heartbeat is recent", async () => {
+    const worker = async (workerSilence: () => Promise<number | null>) => {
+      const response = await get(service({ workerSilence }), "/readyz/worker");
+      return [response.status, await response.text()];
+    };
+    // The uptime check looks for "ok":true in the body.
+    expect(await worker(async () => 12.4)).toEqual([200, '{"ok":true,"seconds":12}']);
+    expect(await worker(async () => 3600)).toEqual([503, '{"ok":false,"seconds":3600}']);
+    // Never beaten, or the database doesn't answer.
+    expect(await worker(async () => null)).toEqual([503, '{"ok":false,"seconds":null}']);
+    expect(await worker(async () => { throw new Error("down"); })).toEqual([503, '{"ok":false,"seconds":null}']);
+    // The database's own readiness is a separate question.
+    expect((await get(service({ workerSilence: async () => null }), "/readyz")).status).toBe(200);
   });
 
   it("serves the API under /api, with the function's name taken off the path", async () => {

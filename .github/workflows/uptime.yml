@@ -1,6 +1,10 @@
 # Uptime: every 5 minutes, check that the website, the API and the publishing worker answer
 # on prod. A failed run is the alert: GitHub emails the repository owner about failed
 # scheduled runs. Addresses live in repository variables (Settings → Variables).
+#
+# The worker has no address of its own on AWS. It writes a heartbeat to the database every
+# half minute while its job loop is alive, and the API reports it: UPTIME_WORKER_URL is the
+# API's /readyz/worker (https://api.postsocial.xyz/readyz/worker), used exactly as written.
 name: uptime
 
 on:
@@ -24,7 +28,7 @@ jobs:
         run: curl -fsS --retry 2 --retry-delay 20 --max-time 20 -o /dev/null "$SITE_URL/api/v1/openapi.json"
         env:
           SITE_URL: ${{ vars.UPTIME_SITE_URL }}
-      - name: Publishing worker (unhealthy if its job loop has stalled for 15 minutes)
-        run: curl -fsS --retry 2 --retry-delay 20 --max-time 20 "$WORKER_URL/" | grep -q '"ok":true'
+      - name: Publishing worker (unhealthy if it has shown no sign of life for 5 minutes)
+        run: curl -fsS --retry 2 --retry-delay 20 --max-time 20 "$WORKER_URL" | grep -q '"ok":true'
         env:
           WORKER_URL: ${{ vars.UPTIME_WORKER_URL }}
