@@ -1,5 +1,6 @@
 // The whole setup: what is shared, then per environment a data stack and a services stack,
-// and for prod the nightly backup and the uptime check.
+// and for prod the nightly backup and the uptime check. Last, the overview dashboard and the
+// alarms that read all of it.
 import { App, Tags, Validations } from "aws-cdk-lib";
 import { AwsSolutionsChecks } from "cdk-nag";
 import { BackupStack } from "./backup-stack";
@@ -7,6 +8,7 @@ import { ACCOUNT, BACKED_UP, ENVIRONMENTS, ENV_NAMES, REGION, WATCHED, type EnvN
 import { DataStack } from "./data-stack";
 import { EdgeStack } from "./edge-stack";
 import { FoundationStack } from "./foundation-stack";
+import { MonitoringStack } from "./monitoring-stack";
 import { ServicesStack } from "./services-stack";
 import { UptimeStack } from "./uptime-stack";
 
@@ -87,6 +89,15 @@ export function buildApp() {
     }),
   ) as Partial<Record<EnvName, UptimeStack>>;
 
+  const monitoring = new MonitoringStack(app, "PostSocialMonitoring", {
+    env,
+    edge,
+    services,
+    alerts: Object.fromEntries((Object.keys(WATCHED) as EnvName[]).map((envName) => [envName, backups[envName]!.alerts])),
+    description: "Post Social: the overview dashboard, and the alarms for errors, health and the database",
+    terminationProtection: true,
+  });
+
   Tags.of(app).add("app", "postsocial");
   for (const envName of ENV_NAMES) {
     Tags.of(data[envName]).add("environment", envName);
@@ -98,5 +109,5 @@ export function buildApp() {
   // acknowledged next to the resource with a written reason (lib/acknowledge.ts).
   Validations.of(app).addPlugins(new AwsSolutionsChecks(app, { verbose: true }));
 
-  return { app, foundation, edge, data, services, backups, uptime };
+  return { app, foundation, edge, data, services, backups, uptime, monitoring };
 }

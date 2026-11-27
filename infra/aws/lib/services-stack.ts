@@ -35,6 +35,8 @@ export class ServicesStack extends Stack {
   readonly worker: ecs.FargateService;
   readonly migrate: ecs.FargateTaskDefinition;
   readonly copy: ecs.FargateTaskDefinition;
+  // The API's place behind the load balancer; the dashboard and alarms read its numbers.
+  readonly apiTargets: elbv2.ApplicationTargetGroup;
 
   constructor(scope: Construct, id: string, props: ServicesStackProps) {
     super(scope, id, props);
@@ -126,7 +128,7 @@ export class ServicesStack extends Stack {
     });
     this.api.node.addDependency(fromLoadBalancer, toApi);
 
-    const targets = new elbv2.ApplicationTargetGroup(this, "ApiTargets", {
+    const targets = (this.apiTargets = new elbv2.ApplicationTargetGroup(this, "ApiTargets", {
       vpc,
       port: CONTAINER_PORT,
       protocol: elbv2.ApplicationProtocol.HTTP,
@@ -134,7 +136,7 @@ export class ServicesStack extends Stack {
       // /healthz doesn't touch the database, so a database blip never empties the pool.
       healthCheck: { path: "/healthz", healthyHttpCodes: "200", interval: Duration.seconds(15), timeout: Duration.seconds(5), healthyThresholdCount: 2, unhealthyThresholdCount: 3 },
       deregistrationDelay: Duration.seconds(30),
-    });
+    }));
     // Attached by hand rather than with the service's helper, which would add firewall
     // rules of its own to groups that belong to other stacks.
     targets.addTarget(this.api.loadBalancerTarget({ containerName: "api", containerPort: CONTAINER_PORT }));
