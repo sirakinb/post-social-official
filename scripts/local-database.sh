@@ -21,8 +21,16 @@ if ! docker ps --format '{{.Names}}' | grep -qx "$NAME"; then
   docker rm -f "$NAME" >/dev/null 2>&1 || true
   docker run -d --name "$NAME" -e POSTGRES_PASSWORD=local -p "127.0.0.1:$PORT:5432" postgres:15 >/dev/null
 fi
-for _ in $(seq 1 60); do docker exec "$NAME" pg_isready -q -U postgres && break; sleep 1; done
-docker exec "$NAME" pg_isready -q -U postgres || { echo "Postgres didn't start." >&2; exit 1; }
+# A new container answers "ready" once during its own setup, then restarts for real. Wait for
+# three ready answers in a row, so the next command doesn't land in that restart (it did, on
+# CI, 2026-11-27: "Postgres didn't start." four seconds after the image was pulled).
+ready=0
+for _ in $(seq 1 90); do
+  if docker exec "$NAME" pg_isready -q -U postgres; then ready=$((ready + 1)); else ready=0; fi
+  [[ "$ready" -ge 3 ]] && break
+  sleep 1
+done
+[[ "$ready" -ge 3 ]] || { echo "Postgres didn't start." >&2; exit 1; }
 
 [[ "${1:-}" == "reset" ]] && psql_as_root -c "DROP DATABASE IF EXISTS postsocial WITH (FORCE)"
 psql_as_root <<'SQL'

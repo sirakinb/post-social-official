@@ -17,7 +17,7 @@ from InsForge: `tasks/aws-migration.md`. What runs where today: `infra/README.md
 | `PostSocialData-dev` | Dev's Postgres 15 database (private, encrypted), the firewall groups for its API and worker, its settings (`postsocial/dev/api`, `postsocial/dev/worker`), the keys made inside AWS (database logins, the sign-in key) and logs | About $17 a month |
 | `PostSocialData-prod` | The same for prod, with deletion protection and 7 days of automatic backups | About $16 a month |
 | `PostSocialServices-dev` | Dev's API (1 container behind the load balancer at `api-dev.postsocial.xyz`), its worker (running since 2026-11-26, when dev's website moved to this backend), the migration task, the task that fills the database from InsForge, and what dev's GitHub role may roll out | About $23 a month |
-| `PostSocialServices-prod` | The same for prod: 2 API containers at `api.postsocial.xyz` and a larger worker (created 2026-11-26; the worker stays off until prod's cutover) | About $40 a month |
+| `PostSocialServices-prod` | The same for prod: 2 API containers at `api.postsocial.xyz` and a larger worker (created 2026-11-26; prod has lived here since its cutover that evening) | About $40 a month |
 
 The services are their own stack per environment, so a service change can never replace a
 database. Costs are list prices for containers running all month, each with a public address.
