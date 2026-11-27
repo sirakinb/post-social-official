@@ -44,6 +44,16 @@ describe("deploy-dev workflow", () => {
     expect(script.indexOf('"$target" == "dev"')).toBeLessThan(script.indexOf("worker/build.sh"));
   });
 
+  it("doesn't rebuild InsForge's prod worker either, unless prod is being moved back on purpose", () => {
+    const script = readFileSync(path.join(root, "scripts/deploy-worker.sh"), "utf8");
+    const result = spawnSync("bash", [path.join(root, "scripts/deploy-worker.sh"), "prod"], { encoding: "utf8", env: { ...process.env, INSFORGE_ROLLBACK: "" } });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Prod's worker runs on AWS now");
+    // Refused before anything is built or read, and only the exact word opens it.
+    expect(script.indexOf('"${INSFORGE_ROLLBACK:-}" != "prod"')).toBeGreaterThan(0);
+    expect(script.indexOf('"${INSFORGE_ROLLBACK:-}" != "prod"')).toBeLessThan(script.indexOf("worker/build.sh"));
+  });
+
   it("checks dev answers and records the commit", () => {
     expect(workflow).toContain("/api/v1/openapi.json");
     expect(workflow).toContain("GITHUB_STEP_SUMMARY");
