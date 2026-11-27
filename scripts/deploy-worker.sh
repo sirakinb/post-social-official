@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # Build and deploy the worker to InsForge Compute.
-#   scripts/deploy-worker.sh prod
-# Dev's worker runs on AWS since 2026-11-26 (it deploys by itself on every push to dev), so
-# this refuses dev: a second worker on InsForge would renew the same platform tokens.
+#   INSFORGE_ROLLBACK=prod scripts/deploy-worker.sh prod
+# Both workers run on AWS since 2026-11-26 (dev's deploys on every push to dev, prod's with
+# each release), and the InsForge ones were deleted. A second worker on InsForge would
+# publish the same posts and renew the same platform tokens, so this refuses dev always and
+# prod unless INSFORGE_ROLLBACK=prod says prod is being moved back to InsForge on purpose
+# (stop AWS prod's worker first: infra/aws/lib/config.ts, workerTasks 0).
 # Settings are read from the environment's InsForge secrets and passed to the container;
 # nothing secret is written into the repo. Prod deploys need a clean main synced with GitHub.
 set -euo pipefail
@@ -13,7 +16,11 @@ if [[ "$target" == "dev" ]]; then
   echo "Dev's worker runs on AWS now and deploys by itself on every push to dev. Starting the InsForge one again would have two workers renewing the same platform tokens, so nothing was deployed." >&2
   exit 1
 fi
-[[ "$target" == "prod" ]] || { echo "Usage: scripts/deploy-worker.sh prod" >&2; exit 1; }
+[[ "$target" == "prod" ]] || { echo "Usage: INSFORGE_ROLLBACK=prod scripts/deploy-worker.sh prod" >&2; exit 1; }
+if [[ "${INSFORGE_ROLLBACK:-}" != "prod" ]]; then
+  echo "Prod's worker runs on AWS now and deploys with each release. Building the InsForge one again would have two workers publishing the same posts and renewing the same platform tokens, so nothing was deployed. Only for moving prod back to InsForge: stop AWS prod's worker first, then run this with INSFORGE_ROLLBACK=prod." >&2
+  exit 1
+fi
 export PATH="$HOME/.fly/bin:$PATH"
 command -v flyctl >/dev/null || { echo "Install flyctl first: curl -L https://fly.io/install.sh | sh" >&2; exit 1; }
 
