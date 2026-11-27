@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { LocalTime } from "@/components/beta/local-time";
 import { Card, Status } from "@/components/beta/ui";
 import { callServer, loadViewer } from "@/lib/beta/workspace";
 import { cn } from "@/lib/utils";
@@ -34,7 +35,6 @@ const FILTERS = [
   { id: "hidden", label: "Hidden" },
 ] as const;
 const PENDING_LABEL: Record<string, string> = { comment_reply: "Reply", private_reply: "DM", hide_comment: "Hiding", unhide_comment: "Unhiding", delete_comment: "Deleting" };
-const when = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
 export default async function CommentsPage({ searchParams }: { searchParams: Promise<{ workspace?: string; account?: string; filter?: string }> }) {
   const params = await searchParams;
@@ -72,7 +72,7 @@ export default async function CommentsPage({ searchParams }: { searchParams: Pro
             <article key={c.id} className={cn("px-4 py-3", c.hidden && "opacity-60")}>
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                 <span className="font-medium">{c.commenter_username ? `@${c.commenter_username}` : c.account.platform === "linkedin" ? "LinkedIn member" : "Someone"}</span>
-                <span className="text-xs text-ps-subtle">{when(c.created_at)} · on {c.post_url ? <a href={c.post_url} target="_blank" rel="noopener noreferrer" className="hover:underline">{c.post_caption?.slice(0, 50) || "a post"}</a> : c.post_caption?.slice(0, 50) || "a post"} · {accountLabel(c.account)}</span>
+                <span className="text-xs text-ps-subtle"><LocalTime iso={c.created_at} /> · on {c.post_url ? <a href={c.post_url} target="_blank" rel="noopener noreferrer" className="hover:underline">{c.post_caption?.slice(0, 50) || "a post"}</a> : c.post_caption?.slice(0, 50) || "a post"} · {accountLabel(c.account)}</span>
                 <span className="ml-auto flex gap-1.5">
                   {c.replied_at && <Status tone="live" label="Replied" />}
                   {c.dm_sent_at && <Status tone="live" label="DMed" />}
@@ -87,7 +87,7 @@ export default async function CommentsPage({ searchParams }: { searchParams: Pro
               ))}
               {(c.replies ?? []).map((r) => (
                 <div key={r.id} className="mt-2 border-l border-ps-line pl-3 text-[13px]">
-                  <span className="text-xs text-ps-subtle">Your reply · {when(r.created_at)}</span>
+                  <span className="text-xs text-ps-subtle">Your reply · <LocalTime iso={r.created_at} /></span>
                   <p className="m-0 whitespace-pre-wrap text-ps-muted">{r.text}</p>
                   {canAct && c.can_delete && <span className="text-xs"><DeleteButton commentId={r.id} label="Delete reply" /></span>}
                 </div>
