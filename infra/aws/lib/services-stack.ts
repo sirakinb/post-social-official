@@ -1,6 +1,6 @@
 // One environment's running pieces: the API behind the shared load balancer, the worker, and
-// the two one-off tasks that work on the database from inside the network (set up and
-// migrate; fill from a copy of InsForge). Kept apart from the data stack so changing a
+// the one-off tasks that work on the database from inside the network (set up and migrate;
+// fill from a copy of InsForge; a way in for looking at the data). Kept apart from the data stack so changing a
 // service can never replace the database.
 //
 // This stack decides the shape (sizes, settings, firewall rules, who may deploy). Which build
@@ -16,7 +16,7 @@ import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import * as ssm from "aws-cdk-lib/aws-ssm";
 import type { Construct } from "constructs";
 import { acknowledge } from "./acknowledge";
-import { ACCOUNT, CLUSTER_NAME, CONTAINER_PORT, copySourceSecret, DATABASE_NAME, deployRoleName, ENVIRONMENTS, imageTagParameter, REGION, type EnvName } from "./config";
+import { ACCOUNT, CLUSTER_NAME, CONTAINER_PORT, copySourceSecret, DATABASE_NAME, deployRoleName, ENVIRONMENTS, imageTagParameter, REGION, TUNNEL_HOURS, type EnvName } from "./config";
 import type { DataStack } from "./data-stack";
 import type { EdgeStack } from "./edge-stack";
 import type { FoundationStack } from "./foundation-stack";
@@ -35,6 +35,7 @@ export class ServicesStack extends Stack {
   readonly worker: ecs.FargateService;
   readonly migrate: ecs.FargateTaskDefinition;
   readonly copy: ecs.FargateTaskDefinition;
+  readonly tunnel: ecs.FargateTaskDefinition;
   // The API's place behind the load balancer; the dashboard and alarms read its numbers.
   readonly apiTargets: elbv2.ApplicationTargetGroup;
 
@@ -200,6 +201,8 @@ export class ServicesStack extends Stack {
         DATABASE_OWNER_PASSWORD: ecs.Secret.fromSecretsManager(owner, "password"),
         // The password app_admin is given (as a hash), so the services can sign in with it.
         DATABASE_PASSWORD: appPassword,
+        // The same for app_viewer, the read-only login a person looks at the data with.
+        DATABASE_VIEWER_PASSWORD: ecs.Secret.fromSecretsManager(data.viewerLogin, "password"),
       },
       logging: ecs.LogDrivers.awsLogs({ logGroup: data.logGroups.api, streamPrefix: "migrate" }),
       readonlyRootFilesystem: true,
@@ -238,6 +241,30 @@ export class ServicesStack extends Stack {
     // Where the dump sits while the task runs; it goes when the task does.
     copyContainer.addMountPoints({ sourceVolume: "scratch", containerPath: "/work", readOnly: false });
 
+    // --- A way in for looking at the data ----------------------------------------------
+    // The database has no public address. To browse it from their own machine, a person
+    // starts this task by hand (scripts/aws-db-view.mjs) and AWS's session service carries
+    // one local port through it to the database. The task holds no login and no settings,
+    // does nothing but wait, and stops by itself after a few hours. Nothing is opened to the
+    // internet: its firewall group (the API's) lets nothing in but the load balancer.
+    this.tunnel = task("tunnel", 256, 512);
+    this.tunnel.addContainer("tunnel", {
+      image: ecs.ContainerImage.fromRegistry("public.ecr.aws/docker/library/alpine:3.24"),
+      command: ["sleep", String(TUNNEL_HOURS * 3600)],
+      logging: ecs.LogDrivers.awsLogs({ logGroup: data.logGroups.api, streamPrefix: "tunnel" }),
+      // Lets the session agent's helper processes be cleaned up. The agent writes to the
+      // container's disk, so this one can't be read-only like the others.
+      linuxParameters: new ecs.LinuxParameters(this, "TunnelInit", { initProcessEnabled: true }),
+    });
+    // What the session agent inside the task needs to talk to AWS's session service.
+    this.tunnel.addToTaskRolePolicy(
+      new iam.PolicyStatement({
+        sid: "CarrySessions",
+        actions: ["ssmmessages:CreateControlChannel", "ssmmessages:CreateDataChannel", "ssmmessages:OpenControlChannel", "ssmmessages:OpenDataChannel"],
+        resources: ["*"],
+      }),
+    );
+
     // --- What the GitHub deploy role may do here ---------------------------------------
     // Added to the role the foundation stack made, which only this environment's branch can
     // use. It can roll these two services and run this migration task, with these roles.
@@ -266,7 +293,8 @@ export class ServicesStack extends Stack {
     });
 
     acknowledge(this.copy.obtainExecutionRole(), { id: `AwsSolutions-IAM5[Resource::${copySourceArn}-??????]`, reason: "One secret by name: the six characters are the suffix AWS adds to it, which changes each time the copy script creates it." });
-    for (const definition of [apiTask, workerTask, this.migrate, this.copy]) {
+    acknowledge(this.tunnel.taskRole, { id: "AwsSolutions-IAM5[Resource::*]", reason: "The session service's four channel actions have no resource to limit them to." });
+    for (const definition of [apiTask, workerTask, this.migrate, this.copy, this.tunnel]) {
       acknowledge(definition, PLAIN_SETTINGS);
       acknowledge(definition.obtainExecutionRole(), { id: "AwsSolutions-IAM5[Resource::*]", reason: "ecr:GetAuthorizationToken has no resource to limit it to; pulling images and reading secrets name their own." });
     }

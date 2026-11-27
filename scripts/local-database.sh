@@ -44,7 +44,7 @@ SQL
 
 backend/build.sh >/dev/null
 DATABASE_OWNER_URL="postgres://postsocial_admin:local@127.0.0.1:$PORT/postsocial" node backend/dist/migrate.mjs --bootstrap
-psql_as_root -d postsocial -c "ALTER ROLE app_admin PASSWORD 'local'" -c "ALTER ROLE app_user PASSWORD 'local'"
+psql_as_root -d postsocial -c "ALTER ROLE app_admin PASSWORD 'local'" -c "ALTER ROLE app_user PASSWORD 'local'" -c "ALTER ROLE app_viewer PASSWORD 'local'"
 
 cat <<TXT
 
@@ -52,4 +52,5 @@ Local database ready:
   DATABASE_OWNER_URL=postgres://postsocial_admin:local@127.0.0.1:$PORT/postsocial   (setup and migrations)
   DATABASE_URL=postgres://app_admin:local@127.0.0.1:$PORT/postsocial                (the API and the worker)
   DATABASE_USER_URL=postgres://app_user:local@127.0.0.1:$PORT/postsocial            (queries for a signed-in person)
+  postgres://app_viewer:local@127.0.0.1:$PORT/postsocial                            (looking at the data; it can only read)
 TXT

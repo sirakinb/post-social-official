@@ -101,6 +101,8 @@ export type DatabaseSettings = DatabaseAddress & {
 
 // The login the API and the worker use. bootstrap.sql creates it; it runs as project_admin.
 export const APP_LOGIN = "app_admin";
+// The login a person looks at the data with. database/viewer.sql creates it; it can only read.
+export const VIEWER_LOGIN = "app_viewer";
 
 // Reads a login's address from settings: "app" is the API's and the worker's own login,
 // "owner" is the database owner's (setup and migrations only). Null when nothing is set.

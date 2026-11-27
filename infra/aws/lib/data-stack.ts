@@ -21,6 +21,8 @@ export class DataStack extends Stack {
   readonly settings: { api: secretsmanager.Secret; worker: secretsmanager.Secret };
   // The password of app_admin, the login the API and worker use.
   readonly appLogin: secretsmanager.Secret;
+  // The password of app_viewer, the read-only login a person looks at the data with.
+  readonly viewerLogin: secretsmanager.Secret;
   // What our own sign-in signs session tokens with (backend/lib/auth).
   readonly signIn: secretsmanager.Secret;
   readonly logGroups: { api: logs.LogGroup; worker: logs.LogGroup };
@@ -103,6 +105,17 @@ export class DataStack extends Stack {
       removalPolicy: RemovalPolicy.RETAIN,
     });
 
+    // The login for looking at the data from a person's own machine (database/viewer.sql,
+    // scripts/aws-db-view.mjs). It can only read. Its password is made up here too, and
+    // read by the migration task (to give it to the database, as a hash) and by whoever
+    // opens the viewer with their own AWS sign-in. No service ever gets it.
+    this.viewerLogin = new secretsmanager.Secret(this, "ViewerLogin", {
+      secretName: `postsocial/${envName}/database-viewer`,
+      description: `Post Social ${envName}: password of app_viewer, the read-only database login for looking at the data`,
+      generateSecretString: { secretStringTemplate: JSON.stringify({ username: "app_viewer" }), generateStringKey: "password", excludePunctuation: true, passwordLength: 40 },
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
+
     // Made up inside AWS and read only by the API. Changing it signs everyone out (their
     // tokens stop checking out); nothing else is lost.
     this.signIn = new secretsmanager.Secret(this, "SignIn", {
@@ -124,6 +137,7 @@ export class DataStack extends Stack {
     );
     if (!protect) acknowledge(this.database, { id: "AwsSolutions-RDS10", reason: "Dev holds test data and is rebuilt freely; prod has deletion protection." });
     acknowledge(this.appLogin, { id: "AwsSolutions-SMG4", reason: "Rotated by hand: change the value, then run a deploy, which gives the database the new password before the services restart with it." });
+    acknowledge(this.viewerLogin, { id: "AwsSolutions-SMG4", reason: "A read-only login used by hand. Rotated like the app login: change the value, then run a deploy, which gives the database the new password." });
     acknowledge(this.signIn, { id: "AwsSolutions-SMG4", reason: "Rotating it signs every person out, so it is changed by hand, on purpose, if it is ever exposed." });
     for (const secret of Object.values(this.settings)) {
       acknowledge(secret, { id: "AwsSolutions-SMG4", reason: "Holds third-party keys (platforms, Stripe, R2) that are rotated at their source, not by AWS." });

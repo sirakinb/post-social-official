@@ -414,6 +414,64 @@ describe.skipIf(!enabled)("the backend on plain Postgres", () => {
     });
   });
 
+  describe("the read-only login for looking at the data", () => {
+    // database/viewer.sql, which migrate.mjs --bootstrap runs after the migrations.
+    const viewer = new pg.Client(poolConfig({ url: process.env.DATABASE_VIEWER_URL ?? `postgres://app_viewer:local@127.0.0.1:${port}/postsocial` }));
+    beforeAll(() => viewer.connect());
+    afterAll(() => viewer.end());
+
+    it("reads every row of every table in public, and the list of people", async () => {
+      // Both people's workspaces: the rules written for signed-in people hide nothing from it.
+      const workspaces = await viewer.query(`select id from public.workspaces where id = any($1::uuid[])`, [[people.ada.workspaceId, people.ben.workspaceId]]);
+      expect(workspaces.rowCount).toBe(2);
+      const users = await viewer.query(`select email from auth.users where id = any($1::uuid[])`, [[people.ada.id, people.ben.id]]);
+      expect(users.rowCount).toBe(2);
+      const [gaps] = (
+        await viewer.query(
+          `select count(*) filter (where not has_table_privilege('app_viewer', c.oid, 'SELECT'))::int as unreadable,
+                  count(*) filter (where c.relrowsecurity and not exists (select from pg_policy p where p.polrelid = c.oid and p.polname = 'viewer_reads'))::int as without_rule,
+                  count(*)::int as tables
+           from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind = 'r'`,
+        )
+      ).rows;
+      expect(gaps.tables).toBeGreaterThanOrEqual(56);
+      expect([gaps.unreadable, gaps.without_rule]).toEqual([0, 0]);
+    });
+
+    it("starts every session read-only, and can't change anything even with that switched off", async () => {
+      expect((await viewer.query(`show default_transaction_read_only`)).rows).toEqual([{ default_transaction_read_only: "on" }]);
+      await expect(viewer.query(`UPDATE public.workspaces SET id = id`)).rejects.toThrow(/read-only transaction/);
+      await viewer.query(`SET default_transaction_read_only = off`);
+      try {
+        const changes = [
+          `UPDATE public.workspaces SET id = id`,
+          `DELETE FROM public.workspaces`,
+          `INSERT INTO public.worker_heartbeat DEFAULT VALUES`,
+          `TRUNCATE public.workspaces CASCADE`,
+          `UPDATE auth.users SET email = email`,
+          `CREATE TABLE public.made_by_viewer (id int)`,
+          `DROP TABLE public.workspaces`,
+        ];
+        for (const change of changes) await expect(viewer.query(change), change).rejects.toThrow(/permission denied|must be owner/);
+      } finally {
+        await viewer.query(`SET default_transaction_read_only = on`);
+      }
+    });
+
+    it("can't read sessions, password hashes or emailed codes, or become another role", async () => {
+      for (const table of ["auth.sessions", "auth.accounts", "auth.verifications"]) await expect(viewer.query(`select 1 from ${table} limit 1`), table).rejects.toThrow(/permission denied/);
+      for (const role of ["project_admin", "app_admin", "postsocial_admin"]) await expect(viewer.query(`SET ROLE ${role}`), role).rejects.toThrow(/permission denied/);
+    });
+
+    it("gives signed-in people nothing new: its rule names app_viewer only, for reading only", async () => {
+      const rules = await sql<{ roles: string; cmd: string }>(`select distinct roles::text as roles, cmd from pg_policies where policyname = 'viewer_reads'`, []);
+      expect(rules).toEqual([{ roles: "{app_viewer}", cmd: "SELECT" }]);
+      // A signed-in person still sees only their own workspace.
+      const mine = await userSql(userPool, people.ada.id)<{ id: string }>(`select id from public.workspaces`, []);
+      expect(mine.map((row) => row.id)).toEqual([people.ada.workspaceId]);
+    });
+  });
+
   it("a login can sign in with a password that was only ever sent to the database as a hash", async () => {
     // What migrate.mjs --bootstrap does on AWS for app_admin, on a throwaway login here.
     const role = `test_login_${suffix.replace(/[^a-z0-9]/g, "_")}`;

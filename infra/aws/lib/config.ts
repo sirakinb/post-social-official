@@ -68,6 +68,10 @@ export const copySourceSecret = (envName: EnvName) => `postsocial/${envName}/ins
 export const CLUSTER_NAME = "postsocial";
 export const deployRoleName = (envName: EnvName) => `postsocial-github-deploy-${envName}`;
 
+// How long a way in for looking at the data stays up if nobody closes it
+// (lib/services-stack.ts, scripts/aws-db-view.mjs).
+export const TUNNEL_HOURS = 4;
+
 // Nightly database backups (lib/backup-stack.ts). The bucket and the GitHub role were made
 // by hand on 2026-11-24, before any of this was code: versioned, private, HTTPS only;
 // daily/ is kept 30 days and monthly/ 12 months by the bucket's own rules.
