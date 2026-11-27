@@ -10,7 +10,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Caller } from "../lib/access";
 import { createKey } from "../lib/api/keys";
 import { accountsPage, activityPage, apiPage, appFrame, calendarPage, composerPage, draftsPage, inboxAccountsList, mediaByIds, mediaPage, myWorkspaces } from "../lib/api/pages";
+import { addXUsageToInvoice, handleStripeEvent, recordSubscription, type Stripe } from "../lib/billing";
 import { assertUtc, DatabaseError, poolConfig, poolSql, userSql } from "../lib/database";
+import { X_PRICES } from "../lib/pricing";
 import { scramVerifier, setPasswordStatement } from "../lib/scram";
 import { provisionWorkspace } from "../lib/signup";
 import { createService } from "../service";
@@ -302,6 +304,68 @@ describe.skipIf(!enabled)("the backend on plain Postgres", () => {
       for (const read of [calendarPage, draftsPage, mediaPage, activityPage, apiPage]) {
         await expect(read(sql, adaCaller(), { workspace_id: ws, from: "2031-03-01T00:00:00Z", to: "2031-04-01T00:00:00Z" })).rejects.toMatchObject({ status: 404 });
       }
+    });
+  });
+
+  // Billing's queries ran only against a stand-in database in the unit tests, and the one
+  // that adds X posts to an invoice turned out not to be valid Postgres (found on the first
+  // real renewal event, 2026-11-26). These run them for real.
+  describe("billing on this database", () => {
+    const customer = `cus_pg_${suffix}`;
+    const calls: Array<{ method: string; path: string; params?: Record<string, unknown> }> = [];
+    const stripe: Stripe = {
+      async request(method, path, params) {
+        calls.push({ method, path, params: params as Record<string, unknown> | undefined });
+        return {} as never;
+      },
+    };
+    const deps = { sql, stripe, webAppUrl: "" };
+
+    it("skips a subscription whose workspace no longer exists, and saves one whose workspace does", async () => {
+      const gone = "00000000-0000-4000-8000-00000000dead";
+      await expect(recordSubscription(sql, gone, { id: "sub_gone", status: "canceled", customer: "cus_gone" })).resolves.toBeNull();
+      expect(await sql(`SELECT 1 FROM public.workspace_billing WHERE workspace_id = $1`, [gone])).toEqual([]);
+      // The webhook answers such an event as received (no error for Stripe to retry) and bills nothing.
+      const event = { type: "customer.subscription.deleted", data: { object: { id: "sub_gone", status: "active", customer: "cus_gone", metadata: { workspace_id: gone } } } };
+      await expect(handleStripeEvent(deps, event)).resolves.toEqual({ handled: false, reason: "workspace_gone" });
+      expect(calls).toEqual([]);
+
+      await expect(recordSubscription(sql, people.ada.workspaceId, { id: `sub_pg_${suffix}`, status: "active", customer, items: { data: [{ quantity: 3 }] } })).resolves.toBe(true);
+      const [row] = await sql<{ subscription_status: string; billed_quantity: number; stripe_customer_id: string }>(
+        `SELECT subscription_status, billed_quantity, stripe_customer_id FROM public.workspace_billing WHERE workspace_id = $1`,
+        [people.ada.workspaceId],
+      );
+      expect(row).toEqual({ subscription_status: "active", billed_quantity: 3, stripe_customer_id: customer });
+    });
+
+    it("adds each month's unbilled X posts to a renewal invoice, and never twice", async () => {
+      // October: a plain post and one with a link, the second in the month's last half hour
+      // (UTC). November: one plain post, half an hour into the month.
+      await sql(
+        `INSERT INTO public.x_charges (destination_id, workspace_id, cents, with_link, created_at) VALUES
+           (gen_random_uuid(), $1, 5, false, '2026-10-05T12:00:00Z'),
+           (gen_random_uuid(), $1, 25, true, '2026-10-31T23:30:00Z'),
+           (gen_random_uuid(), $1, 5, false, '2026-11-01T00:30:00Z')`,
+        [people.ada.workspaceId],
+      );
+      const free = Math.round(X_PRICES.freeMonthly * 100);
+      const october = Math.max(0, 30 - free);
+      const november = Math.max(0, 5 - free);
+      const invoice = { id: `in_pg_${suffix}`, customer, status: "draft", billing_reason: "subscription_cycle" };
+
+      await expect(addXUsageToInvoice(deps, invoice)).resolves.toEqual({ added: october + november });
+      const lines = calls.filter((call) => call.path === "/v1/invoiceitems").map((call) => [call.params?.amount, (call.params?.metadata as { month: string }).month]);
+      expect(lines).toEqual([[october, "2026-10-01"], [november, "2026-11-01"]].filter(([cents]) => Number(cents) > 0));
+      expect(await sql(`SELECT to_char(month, 'YYYY-MM-DD') AS month, cents FROM public.x_invoice_lines WHERE workspace_id = $1 ORDER BY month`, [people.ada.workspaceId])).toEqual(
+        [{ month: "2026-10-01", cents: october }, { month: "2026-11-01", cents: november }].filter((line) => line.cents > 0),
+      );
+
+      // The next invoice finds those months billed already.
+      calls.length = 0;
+      await expect(addXUsageToInvoice(deps, { ...invoice, id: `in_pg_next_${suffix}` })).resolves.toEqual({ added: 0 });
+      expect(calls).toEqual([]);
+      // A customer we have no workspace for: nothing to add, and no error.
+      await expect(addXUsageToInvoice(deps, { ...invoice, customer: "cus_nobody_here" })).resolves.toEqual({ added: 0 });
     });
   });
 
