@@ -1,6 +1,11 @@
-# Uptime: every 5 minutes, check that the website, the API and the publishing worker answer
-# on prod. A failed run is the alert: GitHub emails the repository owner about failed
+# Uptime, the second opinion: check that the website, the API and the publishing worker
+# answer on prod. A failed run is the alert: GitHub emails the repository owner about failed
 # scheduled runs. Addresses live in repository variables (Settings → Variables).
+#
+# The main uptime check runs in AWS every minute (infra/aws/lib/uptime-stack.ts) and emails
+# through the alerts topic. This one stays because it asks from outside AWS: GitHub runs it
+# only a few times a day, whatever the schedule below says (seen 2026-11-27), but it would
+# still notice if the whole AWS region, the check included, went quiet.
 #
 # The worker has no address of its own on AWS. It writes a heartbeat to the database every
 # half minute while its job loop is alive, and the API reports it: UPTIME_WORKER_URL is the

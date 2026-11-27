@@ -11,7 +11,8 @@ const edge = Template.fromStack(built.edge);
 const data = { dev: Template.fromStack(built.data.dev), prod: Template.fromStack(built.data.prod) };
 const services = { dev: Template.fromStack(built.services.dev), prod: Template.fromStack(built.services.prod) };
 const backup = Template.fromStack(built.backups.prod!);
-const all = [foundation, edge, data.dev, data.prod, services.dev, services.prod, backup];
+const uptime = Template.fromStack(built.uptime.prod!);
+const all = [foundation, edge, data.dev, data.prod, services.dev, services.prod, backup, uptime];
 
 type Resource = { Type: string; Properties: Record<string, unknown>; DeletionPolicy?: string };
 type Statement = { Sid?: string; Action: string | string[]; Effect: string; Resource: unknown; Condition?: Record<string, Record<string, unknown>> };
@@ -459,6 +460,76 @@ describe("the nightly backup of prod's database", () => {
 
   it("can't be deleted by mistake", () => {
     expect(built.backups.prod!.terminationProtection).toBe(true);
+  });
+});
+
+describe("the uptime check", () => {
+  const [checker] = resources(uptime, "AWS::Lambda::Function");
+  const alarms = resources(uptime, "AWS::CloudWatch::Alarm");
+  const checks = JSON.parse((checker.Properties.Environment as { Variables: { CHECKS: string } }).Variables.CHECKS) as { name: string; url: string; mustContain?: string }[];
+
+  it("watches prod only: the website, the API through it, and the worker", () => {
+    expect(Object.keys(built.uptime)).toEqual(["prod"]);
+    expect(checks).toEqual([
+      { name: "website", url: "https://www.postsocial.xyz/" },
+      { name: "api", url: "https://www.postsocial.xyz/api/v1/openapi.json" },
+      { name: "worker", url: "https://api.postsocial.xyz/readyz/worker", mustContain: '"ok":true' },
+    ]);
+  });
+
+  it("is run by AWS every minute, with no retries piling up", () => {
+    uptime.hasResourceProperties("AWS::Events::Rule", { ScheduleExpression: "rate(1 minute)", Targets: [Match.objectLike({ RetryPolicy: { MaximumRetryAttempts: 0 } })] });
+    expect(checker.Properties).toMatchObject({ FunctionName: "postsocial-prod-uptime", Handler: "index.handler", Timeout: 30 });
+  });
+
+  it("holds no keys, sits outside our network, and may only write its own log", () => {
+    expect(checker.Properties.VpcConfig).toBeUndefined();
+    expect(Object.keys((checker.Properties.Environment as { Variables: Record<string, string> }).Variables).sort()).toEqual(["CHECKS", "ENVIRONMENT"]);
+    const [role] = resources(uptime, "AWS::IAM::Role");
+    expect(role.Properties.ManagedPolicyArns).toBeUndefined();
+    const statements = resources(uptime, "AWS::IAM::Policy").flatMap(statementsOf);
+    expect(statements).toHaveLength(1);
+    expect(actionsOf(statements[0]).sort()).toEqual(["logs:CreateLogStream", "logs:PutLogEvents"]);
+    expect(JSON.stringify(statements[0].Resource)).toMatch(/Logs/);
+    uptime.hasResourceProperties("AWS::Logs::LogGroup", { LogGroupName: "/postsocial/prod/uptime", RetentionInDays: 30 });
+  });
+
+  it("alerts after three bad minutes in a row, and treats a check that stopped as down", () => {
+    expect(alarms.map((alarm) => alarm.Properties.AlarmName).sort()).toEqual(["postsocial-prod-api-down", "postsocial-prod-website-down", "postsocial-prod-worker-down"]);
+    for (const alarm of alarms) {
+      expect(alarm.Properties).toMatchObject({
+        Namespace: "PostSocial/Uptime",
+        MetricName: "Up",
+        Statistic: "Minimum",
+        Period: 60,
+        ComparisonOperator: "LessThanThreshold",
+        Threshold: 1,
+        EvaluationPeriods: 3,
+        DatapointsToAlarm: 3,
+        TreatMissingData: "breaching",
+      });
+    }
+    // Each alarm reads the number its own check writes.
+    const watched = alarms.map((alarm) => Object.fromEntries((alarm.Properties.Dimensions as { Name: string; Value: string }[]).map((d) => [d.Name, d.Value])));
+    expect(watched.map((d) => d.Check).sort()).toEqual(checks.map((check) => check.name).sort());
+    expect(watched.every((d) => d.Environment === "prod")).toBe(true);
+  });
+
+  it("sends both the alert and the recovery to the alerts topic, which lets our alarms in", () => {
+    for (const alarm of alarms) {
+      expect(JSON.stringify(alarm.Properties.AlarmActions)).toMatch(/PostSocialBackup-prod.*Alerts/);
+      expect(alarm.Properties.OKActions).toEqual(alarm.Properties.AlarmActions);
+    }
+    const [topicPolicy] = resources(backup, "AWS::SNS::TopicPolicy");
+    const ours = statementsOf(topicPolicy).find((s) => s.Sid === "OurAlarms") as Statement & { Principal: unknown };
+    expect(ours.Principal).toEqual({ Service: "cloudwatch.amazonaws.com" });
+    expect(ours.Condition).toEqual({ StringEquals: { "aws:SourceAccount": "039612844713" }, ArnLike: { "aws:SourceArn": "arn:aws:cloudwatch:us-east-1:039612844713:alarm:postsocial-prod-*" } });
+    expect(alarms.every((alarm) => (alarm.Properties.AlarmName as string).startsWith("postsocial-prod-"))).toBe(true);
+    uptime.resourceCountIs("AWS::SNS::Subscription", 0);
+  });
+
+  it("can't be deleted by mistake", () => {
+    expect(built.uptime.prod!.terminationProtection).toBe(true);
   });
 });
 

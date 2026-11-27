@@ -8,6 +8,7 @@
     "noImplicitReturns": true,
     "noUnusedLocals": true,
     "skipLibCheck": true,
+    "allowJs": true,
     "noEmit": true,
     "isolatedModules": true,
     "types": ["node"]
