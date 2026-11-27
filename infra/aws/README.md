@@ -18,6 +18,7 @@ from InsForge: `tasks/aws-migration.md`. What runs where today: `infra/README.md
 | `PostSocialData-prod` | The same for prod, with deletion protection and 7 days of automatic backups | About $16 a month |
 | `PostSocialServices-dev` | Dev's API (1 container behind the load balancer at `api-dev.postsocial.xyz`), its worker (running since 2026-11-26, when dev's website moved to this backend), the migration task, the task that fills the database from InsForge, and what dev's GitHub role may roll out | About $23 a month |
 | `PostSocialServices-prod` | The same for prod: 2 API containers at `api.postsocial.xyz` and a larger worker (created 2026-11-26; prod has lived here since its cutover that evening) | About $40 a month |
+| `PostSocialBackup-prod` | The nightly backup of prod's database: a task that dumps it inside the network and uploads the file to the backup bucket, the nightly schedule that starts it, a topic that gets a message when a run fails, and the right for the `postsocial-github-backup` role to start a run by hand | Cents a month |
 
 The services are their own stack per environment, so a service change can never replace a
 database. Costs are list prices for containers running all month, each with a public address.
@@ -44,6 +45,10 @@ database. Costs are list prices for containers running all month, each with a pu
 - **A bad build rolls itself back.** A new API container must pass `/healthz` behind the load
   balancer before an old one stops; if it doesn't, AWS returns to the previous build and
   the deploy fails. There is only ever one worker: the old one stops before the new starts.
+- **Backups are started by AWS, and say so when they fail.** The nightly dump runs as a
+  task in our network, because nothing outside can reach the database, and on AWS's own
+  schedule, because GitHub runs this repository's schedules only a few times a day. Who
+  receives the failure message is a subscription added by hand to the alerts topic.
 - **Three database logins.** The services sign in as `app_admin`, whose password is made up
   inside AWS (`postsocial/<env>/database-app`). Only the migration task holds the owner
   login. Neither password is ever in this repo, in GitHub or in a connection string.

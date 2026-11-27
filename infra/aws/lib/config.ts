@@ -67,3 +67,12 @@ export const copySourceSecret = (envName: EnvName) => `postsocial/${envName}/ins
 // Names other stacks and the deploy script refer to, so they are fixed here.
 export const CLUSTER_NAME = "postsocial";
 export const deployRoleName = (envName: EnvName) => `postsocial-github-deploy-${envName}`;
+
+// Nightly database backups (lib/backup-stack.ts). The bucket and the GitHub role were made
+// by hand on 2026-11-24, before any of this was code: versioned, private, HTTPS only;
+// daily/ is kept 30 days and monthly/ 12 months by the bucket's own rules.
+export const BACKUP_BUCKET = `postsocial-backups-${ACCOUNT}`;
+export const BACKUP_FOLDERS = ["daily", "monthly"] as const;
+export const BACKUP_GITHUB_ROLE = "postsocial-github-backup";
+// Which environments are backed up nightly. Dev holds test data only.
+export const BACKED_UP: EnvName[] = ["prod"];
