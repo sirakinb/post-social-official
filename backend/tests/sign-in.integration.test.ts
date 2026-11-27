@@ -241,6 +241,7 @@ describe.skipIf(!enabled)("our own sign-in on plain Postgres", () => {
       env: (name) => ({ INTERNAL_PROXY_SECRET: "website-secret", WEB_APP_HOME: "https://www.postsocial.test/beta/accounts", R2_ACCOUNT_ID: "a", R2_BUCKET: "b", R2_ACCESS_KEY_ID: "c", R2_SECRET_ACCESS_KEY: "d", CONNECTIONS_BASE_URL: "https://api.postsocial.test/connections" })[name],
       base: { sql: async () => [], userForToken: auth.userForToken },
       ready: async () => true,
+      workerSilence: async () => null,
       auth: { path: AUTH_PATH, handler: auth.handler },
     });
     const post = (headers: Record<string, string>) => service(new Request(`https://api.postsocial.test${AUTH_PATH}/sign-in/email`, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify({ email: address("nobody"), password: "a-good-password-1" }) }));

@@ -15,6 +15,7 @@ import { assertUtc, DatabaseError, poolConfig, poolSql, userSql } from "../lib/d
 import { X_PRICES } from "../lib/pricing";
 import { scramVerifier, setPasswordStatement } from "../lib/scram";
 import { provisionWorkspace } from "../lib/signup";
+import { recordWorkerBeat, secondsSinceWorkerBeat } from "../lib/worker-heartbeat";
 import { createService } from "../service";
 
 const enabled = process.env.POSTSOCIAL_PG_TESTS === "1";
@@ -118,7 +119,7 @@ describe.skipIf(!enabled)("the backend on plain Postgres", () => {
 
     it("can't reach tables that are for the service only, or change what they can read", async () => {
       const mine = userSql(userPool, people.ada.id);
-      for (const table of ["public.waitlist", "public.rate_limits", "public.workspace_billing", "public.oauth_access_tokens", "auth.users"]) {
+      for (const table of ["public.waitlist", "public.rate_limits", "public.workspace_billing", "public.worker_heartbeat", "public.oauth_access_tokens", "auth.users"]) {
         await expect(mine(`select * from ${table} limit 1`, []), table).rejects.toThrow(/permission denied/);
       }
       await expect(mine(`delete from public.posts where workspace_id = $1 returning id`, [people.ada.workspaceId])).rejects.toThrow(/permission denied/);
@@ -375,8 +376,28 @@ describe.skipIf(!enabled)("the backend on plain Postgres", () => {
       R2_ACCOUNT_ID: "acct", R2_BUCKET: "bucket", R2_ACCESS_KEY_ID: "id", R2_SECRET_ACCESS_KEY: "secret",
       CONNECTIONS_BASE_URL: "https://api.postsocial.xyz/connections",
     };
-    const service = createService({ env: (name) => settings[name], base: { sql, userForToken: async () => null }, ready: async () => (await sql("select 1", [])).length === 1 });
+    const service = createService({ env: (name) => settings[name], base: { sql, userForToken: async () => null }, ready: async () => (await sql("select 1", [])).length === 1, workerSilence: () => secondsSinceWorkerBeat(sql) });
     const call = (path: string, key?: string) => service(new Request(`https://api.postsocial.xyz${path}`, { headers: key ? { Authorization: `Bearer ${key}` } : {} }));
+
+    it("reports the worker as down until it beats, up while the beat is recent, and down again when it goes quiet", async () => {
+      await sql(`DELETE FROM public.worker_heartbeat`, []);
+      const worker = async () => { const response = await call("/readyz/worker"); return [response.status, await response.json()]; };
+      expect(await worker()).toEqual([503, { ok: false, seconds: null }]);
+
+      await recordWorkerBeat(sql);
+      expect(await worker()).toEqual([200, { ok: true, seconds: 0 }]);
+      // A second beat moves the same row forward; there is never more than one.
+      await recordWorkerBeat(sql);
+      expect(await sql(`SELECT count(*)::int AS rows FROM public.worker_heartbeat`, [])).toEqual([{ rows: 1 }]);
+
+      await sql(`UPDATE public.worker_heartbeat SET beat_at = now() - interval '10 minutes'`, []);
+      const [status, body] = await worker();
+      expect([status, body.ok]).toEqual([503, false]);
+      expect(body.seconds).toBeGreaterThanOrEqual(600);
+      expect(await secondsSinceWorkerBeat(sql)).toBeGreaterThanOrEqual(600);
+      // The database itself is fine all along.
+      expect((await call("/readyz")).status).toBe(200);
+    });
 
     it("is ready, and answers an API key the way the InsForge function does", async () => {
       expect((await call("/readyz")).status).toBe(200);

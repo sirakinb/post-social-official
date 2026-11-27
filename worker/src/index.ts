@@ -4,6 +4,7 @@ import "../../backend/lib/load-settings"; // first: spreads SETTINGS_JSON (AWS) 
 import { createServer } from "node:http";
 import pg from "pg";
 import { assertUtc, databaseAddress, poolConfig, poolSql } from "../../backend/lib/database";
+import { recordWorkerBeat, WORKER_BEAT_EVERY_MS } from "../../backend/lib/worker-heartbeat";
 import { createSql } from "../../backend/lib/insforge-admin";
 import { createR2 } from "../../backend/lib/media/r2";
 import { expireUnusedMedia, removeExpiredSignIns, removeOrphanedFiles } from "./cleanup";
@@ -116,10 +117,13 @@ process.on("unhandledRejection", (reason) => {
   void telemetry.captureException(reason, { area: "unhandled rejection" });
 });
 
-// Health check for the platform and the uptime monitor: unhealthy if the job loop has
-// stalled. A long upload can hold one slot for minutes, never all of them for 15.
+// Unhealthy if the job loop has stalled. A long upload can hold one slot for minutes, never
+// all of them for 15.
+const loopAlive = () => Date.now() - lastLoopAt < 15 * 60 * 1000;
+
+// Health check for the platform that runs the container, which replaces an unhealthy one.
 createServer((_request, response) => {
-  const healthy = Date.now() - lastLoopAt < 15 * 60 * 1000;
+  const healthy = loopAlive();
   response.writeHead(healthy ? 200 : 503, { "Content-Type": "application/json" });
   response.end(JSON.stringify({ ok: healthy }));
 }).listen(Number(process.env.PORT ?? 8080));
@@ -132,6 +136,10 @@ process.on("SIGTERM", () => {
 
 log("worker started", { concurrency, retentionDays, publishAllowlist: allowlist.length, database: database ? "postgres" : "insforge" });
 for (let slot = 0; slot < concurrency; slot++) void jobLoop(slot);
+// On AWS nothing outside can call the health check above, so the worker also writes a
+// heartbeat to the database while the loop is alive; the API reports it at /readyz/worker
+// for the uptime monitor. Not on InsForge, where the worker has its own address.
+if (database) void every(WORKER_BEAT_EVERY_MS, "heartbeat", async () => { if (loopAlive()) await recordWorkerBeat(sql); return 0; });
 void every(60 * 60 * 1000, "retention sweep", () => expireUnusedMedia(sql, r2, retentionDays));
 void every(6 * 60 * 60 * 1000, "orphan sweep", () => removeOrphanedFiles(sql, r2));
 void every(60 * 60 * 1000, "sign-in sweep", () => removeExpiredSignIns(sql));

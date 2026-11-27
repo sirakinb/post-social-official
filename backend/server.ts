@@ -17,6 +17,7 @@ import { userForToken } from "./lib/insforge-admin";
 import { nodeListener } from "./lib/node-http";
 import { listOf, type Env } from "./lib/settings";
 import { createTelemetry, flushReports, reportError, setErrorReporter } from "./lib/telemetry";
+import { secondsSinceWorkerBeat } from "./lib/worker-heartbeat";
 import { createService } from "./service";
 
 assertUtc();
@@ -70,6 +71,7 @@ const service = createService({
   env,
   base: { sql, userForToken: auth ? auth.userForToken : insforge ? (token) => userForToken(insforge, token) : async () => null },
   ready: async () => (await sql("select 1 as ok", [])).length === 1,
+  workerSilence: () => secondsSinceWorkerBeat(sql),
   ...(auth ? { auth: { path: AUTH_PATH, handler: auth.handler } } : {}),
 });
 
