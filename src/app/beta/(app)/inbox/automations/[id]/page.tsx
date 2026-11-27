@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { LocalTime } from "@/components/beta/local-time";
 import { Card, Status } from "@/components/beta/ui";
 import { callServer, loadViewer } from "@/lib/beta/workspace";
 import { AutomationForm } from "../automation-form";
@@ -9,7 +10,6 @@ import { AutomationControls } from "./controls";
 export const metadata = { title: "Automation · Post Social" };
 
 const count = (n: number) => n.toLocaleString("en-US");
-const when = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
 function Tile(props: { label: string; value: string; note?: string }) {
   return (
@@ -97,7 +97,7 @@ export default async function AutomationPage({ params, searchParams }: { params:
                 <tbody>
                   {activity.map((r) => (
                     <tr key={r.id} className="border-b border-ps-line align-top last:border-0">
-                      <td className="whitespace-nowrap px-4 py-3 text-ps-subtle">{when(r.created_at)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-ps-subtle"><LocalTime iso={r.created_at} /></td>
                       <td className="px-4 py-3">
                         <span className="font-medium">{r.commenter_username ? (a.account?.platform === "facebook" ? r.commenter_username : `@${r.commenter_username}`) : "Someone"}</span>{" "}
                         <span className="text-ps-muted">{r.comment_text}</span>
