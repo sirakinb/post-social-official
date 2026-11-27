@@ -197,6 +197,23 @@ that doesn't come up healthy is rolled back by AWS and fails the run. Setting an
 up the first time, and copying its settings (`scripts/aws-copy-settings.mjs`) and its data
 (`scripts/aws-copy-database.mjs`) from InsForge: `infra/aws/README.md`.
 
+**Prod runs on AWS (since 2026-11-26, about 8 pm US Eastern).** www.postsocial.xyz signs
+people in, reads and writes through `https://api.postsocial.xyz` (two API containers, one
+worker, its own Postgres). What prod's website has in Vercel (Production): `SIGN_IN_URL`,
+`API_BASE_URL`, `CONNECTIONS_BASE_URL`, `FUNCTIONS_BASE_URL` on that address, and the
+`INTERNAL_PROXY_SECRET` it already had. AWS prod's settings add
+`CONNECTIONS_PUBLIC_URL=https://www.postsocial.xyz`, so platforms come back to our domain
+(Bluesky accounts reconnect once). Stripe's webhook and Meta's three webhooks (Instagram,
+Pages, Threads) call `https://www.postsocial.xyz/stripe/webhook` and `/meta/webhooks`. A
+release rolls AWS and skips InsForge (repository variables `AWS_PROD_DEPLOY=on`,
+`PROD_BACKEND=aws`, see `.github/workflows/release.yml`). InsForge prod's database and
+functions are kept untouched as the way back until about 2026-12-10; its worker was deleted,
+because a compute service that is only stopped starts again when anything requests its
+address. To go back: the four Vercel settings to InsForge's function addresses (remove
+`SIGN_IN_URL` and `FUNCTIONS_BASE_URL`) and a website deploy, `PROD_BACKEND` unset, AWS prod's
+worker to 0, `INSFORGE_ROLLBACK=prod npm run worker:deploy -- prod`, and Stripe's and Meta's
+addresses back; anything saved on AWS since the cutover would need carrying back by hand.
+
 **Dev runs on AWS (since 2026-11-26).** dev.postsocial.xyz signs people in, reads and
 publishes through `api-dev.postsocial.xyz`, and dev's worker is the AWS one. The last copy
 from InsForge dev was taken that day; from then on AWS dev's database is the real one, and
@@ -418,7 +435,7 @@ website; nothing changes for the platforms.
 |---|---|---|
 | R2 bucket | `postsocial-media-dev` (private) | `postsocial-media-prod` (private) |
 | Uploads allowed from | `http://localhost:3333`, `https://post-social-*-app-build-26.vercel.app` | `https://www.postsocial.xyz`, `https://postsocial.xyz` |
-| Worker | On AWS (`postsocial-dev-worker`, 1 GB). The InsForge one is stopped | `post-social-worker` on InsForge Compute, always on, 1 GB |
+| Worker | On AWS (`postsocial-dev-worker`, 1 GB). The InsForge one was deleted | On AWS (`postsocial-prod-worker`, 1 GB). The InsForge one was deleted |
 
 - Media files live in Cloudflare R2 and are never public: browsers upload with short-lived
   signed part links, and readers get short-lived signed links.
