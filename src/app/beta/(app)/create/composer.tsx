@@ -153,7 +153,10 @@ export function Composer({ workspaceId, accounts, profiles = [], library: initia
     const n = ++seq.current;
     const timer = setTimeout(async () => {
       const r = await callPosts<Check>("validate", { workspace_id: workspaceId, ...(JSON.parse(draft) as Record<string, unknown>) });
-      if (n === seq.current) setCheck(r.ok ? r.data : { ok: false, problems: [r.error] });
+      if (n !== seq.current) return;
+      // Over the hourly allowance for checks: show no verdict rather than a problem, so the
+      // person can still publish. The backend checks the post again when it is saved.
+      setCheck(r.ok ? r.data : r.limited ? null : { ok: false, problems: [r.error] });
     }, 500);
     return () => clearTimeout(timer);
   }, [draft, workspaceId]);
