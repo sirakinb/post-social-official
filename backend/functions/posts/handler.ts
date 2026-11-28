@@ -3,6 +3,7 @@
 import { ApiError, type Caller } from "../../lib/access";
 import type { SignedInUser } from "../../lib/insforge-admin";
 import { postActions, type PostsDeps } from "../../lib/publishing/service";
+import { enforceLimit, RateLimitError, retryHeaders } from "../../lib/rate-limit";
 import { originAllowed } from "../media/handler";
 
 export type PostsHandlerDeps = PostsDeps & {
@@ -30,9 +31,14 @@ export function createPostsHandler(deps: PostsHandlerDeps) {
     if (!Object.hasOwn(postActions, name)) return json(400, { error: `Unknown action. Use one of: ${Object.keys(postActions).join(", ")}.` }, cors);
 
     try {
+      await enforceLimit(deps.sql, "posts_user", user.id);
+      // The as-you-type check has an hourly allowance of its own. Going over it stops only
+      // the check: saving and publishing still work, and check the post themselves.
+      if (name === "validate") await enforceLimit(deps.sql, "posts_check_user", user.id, "Too many checks this hour. Your post is still checked when you save or publish it.");
       const caller: Caller = { userId: user.id, displayName: user.name, entryPoint: "ui" };
       return json(200, await postActions[name as keyof typeof postActions](deps, caller, body), cors);
     } catch (error) {
+      if (error instanceof RateLimitError) return json(429, { error: error.message }, { ...cors, ...retryHeaders(error) });
       if (error instanceof ApiError) return json(error.status, { error: error.message }, cors);
       const message = error instanceof Error ? error.message : String(error);
       // Rules enforced by the database come back as plain sentences.

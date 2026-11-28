@@ -36,6 +36,12 @@ export const LIMITS = {
   person_read: { limit: 600, windowSeconds: 60 },
   consent_user: { limit: 30, windowSeconds: 60 },
   media_user: { limit: 300, windowSeconds: 60 },
+  // The web app's post actions (backend/functions/posts). The composer checks a post as it
+  // is typed, so the minute allowance is wide. The hourly one is for that check alone: a
+  // person writing never comes near it, and a page stuck checking is slowed down. (On dev
+  // in November 2026 an old tab checked once a second for a day with nothing in its way.)
+  posts_user: { limit: 300, windowSeconds: 60 },
+  posts_check_user: { limit: 1500, windowSeconds: 3600 },
   media_upload_user: { limit: 100, windowSeconds: 3600 },
 } as const;
 
