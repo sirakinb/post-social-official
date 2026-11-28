@@ -54,9 +54,11 @@ export function connectionDetails(envName, localPort) {
 }
 
 // What TablePlus opens: one connection, named and coloured so prod is never mistaken for dev.
-// It holds the password, so it is handed to the app and never printed.
+// It holds the password, so it is handed to the app and never printed. No encryption setting
+// is named: TablePlus then encrypts by itself, which the database insists on, while naming
+// one ("tLSMode=1") made it not connect at all (tried on dev, 2026-11-27).
 export function tablePlusUrl(envName, localPort, password) {
-  const settings = new URLSearchParams({ name: `Post Social ${envName} (read-only)`, statusColor: envName === "prod" ? "D0312D" : "2E7D32", env: envName === "prod" ? "production" : "development", tLSMode: "1", usePrivateKey: "false", safeModeLevel: "0" });
+  const settings = new URLSearchParams({ name: `Post Social ${envName} (read-only)`, statusColor: envName === "prod" ? "D0312D" : "2E7D32", env: envName === "prod" ? "production" : "development", usePrivateKey: "false", safeModeLevel: "0" });
   return `postgresql://${VIEWER_LOGIN}:${encodeURIComponent(password)}@127.0.0.1:${localPort}/${DATABASE_NAME}?${settings}`;
 }
 
