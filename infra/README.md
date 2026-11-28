@@ -24,6 +24,7 @@ The AWS setup itself, as code: `infra/aws/` (its README lists every stack and wh
 | Analytics and errors | PostHog | Events, errors, alerts | `backend/lib/telemetry.ts` |
 | Nightly backup of prod's database | AWS: a task inside the network, started by AWS at about 3am US Eastern | A dump in our backup bucket, 30 daily and 12 monthly | `infra/aws/lib/backup-stack.ts` |
 | Uptime check | AWS, every minute; GitHub Actions a few times a day as a second opinion | Three alarms that email the owner | `infra/aws/lib/uptime-stack.ts`, `.github/workflows/uptime.yml` |
+| Looking at the data | `npm run db:view -- <dev\|prod>` on your own machine | A read-only login (`app_viewer`) through a private tunnel that closes when you do | `scripts/aws-db-view.mjs`, `database/viewer.sql` |
 | Dashboard and other alarms | AWS CloudWatch | One overview dashboard (`postsocial-overview`), four alarms for errors, health and the database | `infra/aws/lib/monitoring-stack.ts` |
 
 Two environments, prod and dev, each with its own database, API, worker and settings. They

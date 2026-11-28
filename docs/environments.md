@@ -121,6 +121,31 @@ only way to reuse it is `branch reset`, which rewinds dev to the day it was crea
 and drops every migration since. Replaying git migrations keeps dev long-lived.
 If dev ever drifts, reset it and run `npm run db:dev` to replay all migrations.
 
+## Looking at the data
+
+The databases on AWS have no public address, so there is no dashboard with a table browser
+the way InsForge had one. To look at tables and rows from your own machine:
+
+```bash
+npm run db:view -- prod            # or dev; add --psql to open psql instead of using an app
+```
+
+It starts a small task inside our network (`postsocial-<env>-tunnel`), has AWS's session
+service carry one local port through it to the database, and prints what to type into a
+database app (TablePlus, Postico, DBeaver): `127.0.0.1`, port 54320 for prod or 54321 for
+dev, the login `app_viewer`, the database `postsocial`, SSL required. The password goes on
+the clipboard, never on the screen; save it in the app the first time. Leave the command's
+window open while you look, and press Ctrl+C to close: the task stops, and stops by itself
+after four hours if forgotten.
+
+- **What `app_viewer` can do:** read every table in `public`, and the list of people
+  (`auth.users`). It can't change anything, and it can't read sessions, password hashes or
+  emailed codes (`database/viewer.sql`, run after the migrations on every deploy).
+- **What you need once:** your own AWS sign-in (the `postsocial` profile) and AWS's Session
+  Manager plugin.
+- **Its password** is made up inside AWS (`postsocial/<env>/database-viewer`). To change it:
+  change the value there, then run a deploy, which gives the database the new one.
+
 ## Nightly backups to S3
 
 The prod database on AWS keeps 7 days of its own automatic backups. On top of that we keep
@@ -191,6 +216,7 @@ roles our migrations name), and `backend/migrate.ts` applies `migrations/` in or
 | `DATABASE_URL` | `app_admin`: every session runs as `project_admin`, which owns the tables | The API's own checks and the worker |
 | `DATABASE_USER_URL` | `app_user`: every session runs as `authenticated`, so the access policies apply, and it can't become `project_admin` | Queries for one signed-in person (`userSql`) |
 | `DATABASE_OWNER_URL` | The database's owner | Setup and migrations only (`migrate.mjs`), never the running service |
+| (none: used by hand) | `app_viewer`: can only read, and not the sign-in tables | A person looking at the data ("Looking at the data" above) |
 | `DATABASE_CA_FILE` | | AWS's certificate bundle for RDS; the images set it. Connections are always encrypted and checked, except to a database on the same machine |
 
 On AWS there is no connection string. The containers get the address in parts

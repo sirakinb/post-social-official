@@ -63,9 +63,16 @@ database. Costs are list prices for containers running all month, each with a pu
   happened and where to look, because that text is the email. The limits are in
   `lib/config.ts` beside prod's normal numbers on the day they were chosen. All of them
   send to the one alerts topic, which lets in only alarms named `postsocial-<env>-*`.
-- **Three database logins.** The services sign in as `app_admin`, whose password is made up
-  inside AWS (`postsocial/<env>/database-app`). Only the migration task holds the owner
-  login. Neither password is ever in this repo, in GitHub or in a connection string.
+- **Four database logins.** The services sign in as `app_admin`, whose password is made up
+  inside AWS (`postsocial/<env>/database-app`), and as `app_user` for one signed-in person's
+  queries. Only the migration task holds the owner login. A person looks at the data as
+  `app_viewer` (`postsocial/<env>/database-viewer`), which can only read. No password is
+  ever in this repo, in GitHub or in a connection string.
+- **Looking at the data goes through a task, not an open door.** The databases have no
+  public address and no server to hop through. `npm run db:view -- <dev|prod>` starts the
+  small task `postsocial-<env>-tunnel` and has AWS's session service carry one local port
+  through it to the database; the task holds no login, and stops when the command is closed
+  or by itself after four hours. Who may do it is decided by their own AWS sign-in.
 - **Settings arrive as one JSON object** (`SETTINGS_JSON`, from `postsocial/<env>/api` or
   `/worker`). What is set on the container itself wins: the database's address, the
   environment's name and the API's own address can't be overridden by a copied setting.

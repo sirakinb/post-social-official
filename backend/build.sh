@@ -15,4 +15,5 @@ bundle migrate
 cp -R migrations backend/dist/migrations
 cp database/bootstrap.sql backend/dist/bootstrap.sql
 cp database/migrate-auth.sql backend/dist/migrate-auth.sql
+cp database/viewer.sql backend/dist/viewer.sql
 echo "Built backend/dist ($(du -sh backend/dist | cut -f1))"

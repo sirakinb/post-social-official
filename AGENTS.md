@@ -79,7 +79,9 @@ website stays on Vercel. What runs where: `infra/README.md`. Full process:
 - **Watching it.** The CloudWatch dashboard `postsocial-overview`; alarms named
   `postsocial-prod-*`, which email Aki through the topic `postsocial-prod-alerts`; logs
   in `/postsocial/<env>/api` and `/worker` (30 days). A nightly dump of prod's database
-  lands in the backup bucket (`docs/environments.md`, "Nightly backups to S3").
+  lands in the backup bucket (`docs/environments.md`, "Nightly backups to S3"). To look at
+  tables and rows: `npm run db:view -- <dev|prod>`, a read-only login through a private
+  tunnel (`docs/environments.md`, "Looking at the data").
 - **Settings.** Each service reads one JSON secret, `postsocial/<env>/api` or
   `/worker`. Names only in the repo, never values.
 
