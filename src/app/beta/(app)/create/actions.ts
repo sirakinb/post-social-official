@@ -6,7 +6,9 @@ import { callServer } from "@/lib/beta/workspace";
 import type { CreatorInfo } from "../../../../../backend/lib/connections/tiktok-creator";
 import { UNREACHABLE, requestError } from "../../../../../backend/lib/support";
 
-export type Result<T> = { ok: true; data: T } | { ok: false; error: string };
+// limited: the backend said "too many requests" (429). The composer's as-you-type check
+// treats that as "not checked", not as a problem with the post.
+export type Result<T> = { ok: true; data: T } | { ok: false; error: string; limited?: boolean };
 
 // The composer uses the same `posts` function as AIs (validate, create, update, submit),
 // with the person's own session, so it gets exactly the same checks and audit trail.
@@ -24,7 +26,7 @@ export async function callPosts<T = Record<string, unknown>>(action: string, inp
   }).catch(() => null);
   if (!response) return { ok: false, error: UNREACHABLE };
   const body = (await response.json().catch(() => null)) as (T & { error?: string }) | null;
-  if (!response.ok) return { ok: false, error: requestError(response.status, body?.error) };
+  if (!response.ok) return { ok: false, error: requestError(response.status, body?.error), ...(response.status === 429 ? { limited: true } : {}) };
   return { ok: true, data: body as T };
 }
 

@@ -25,6 +25,46 @@ describe("Composer", () => {
     expect(screen.getByRole("button", { name: "Publish now" })).toBeInTheDocument();
   });
 
+  it("still publishes when the as-you-type check is over its hourly allowance, and shows no problem for it", async () => {
+    vi.useFakeTimers();
+    try {
+      const posts = vi.mocked(callPosts);
+      posts.mockClear();
+      posts.mockImplementation(async (action: string) =>
+        action === "validate" ? { ok: false, error: "Too many checks this hour. Your post is still checked when you save or publish it.", limited: true } : ({ ok: true, data: { id: "p1", status: "queued" } } as never),
+      );
+      const editing = { id: "p1", status: "draft", caption: "Hi", scheduledAt: null, mediaIds: [], accounts: [{ accountId: "a1", choice: {} }] };
+      render(<Composer workspaceId="w1" accounts={[account]} library={[]} editing={editing} />);
+      for (let i = 0; i < 3; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(600)));
+      expect(posts).toHaveBeenCalledWith("validate", expect.anything());
+      // Not checked: neither a problem nor "Ready".
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(screen.queryByText(/Too many checks/)).toBeNull();
+      expect(screen.queryByText(/^Ready for/)).toBeNull();
+
+      await act(async () => void fireEvent.click(screen.getByRole("button", { name: "Publish now" })));
+      await act(async () => void (await vi.advanceTimersByTimeAsync(100)));
+      expect(posts).toHaveBeenCalledWith("update", expect.objectContaining({ post_id: "p1" }));
+    } finally {
+      vi.mocked(callPosts).mockImplementation(async () => ({ ok: true, data: { ok: true, problems: [] } }) as never);
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows any other failure of the check as a problem, as before", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(callPosts).mockImplementation(async () => ({ ok: false, error: "Your session ended. Sign in again." }));
+      const editing = { id: "p1", status: "draft", caption: "Hi", scheduledAt: null, mediaIds: [], accounts: [{ accountId: "a1", choice: {} }] };
+      render(<Composer workspaceId="w1" accounts={[account]} library={[]} editing={editing} />);
+      for (let i = 0; i < 3; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(600)));
+      expect(screen.getByRole("alert")).toHaveTextContent("Your session ended. Sign in again.");
+    } finally {
+      vi.mocked(callPosts).mockImplementation(async () => ({ ok: true, data: { ok: true, problems: [] } }) as never);
+      vi.useRealTimers();
+    }
+  });
+
   it("says Schedule before a time is picked", () => {
     render(<Composer workspaceId="w1" accounts={[account]} library={[]} editing={null} />);
     fireEvent.click(screen.getByRole("radio", { name: "Schedule" }));
