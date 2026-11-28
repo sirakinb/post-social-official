@@ -60,6 +60,8 @@ describe("what it tells you to type", () => {
     expect(decodeURIComponent(url.password)).toBe("p@ss/w:rd");
     expect(url.searchParams.get("name")).toBe("Post Social prod (read-only)");
     expect(url.searchParams.get("env")).toBe("production");
+    // Left to TablePlus, which encrypts by itself; naming a mode stopped it connecting.
+    expect(url.searchParams.has("tLSMode")).toBe(false);
     expect(new URL(tablePlusUrl("dev", 54321, "x")).searchParams.get("env")).toBe("development");
     expect(url.searchParams.get("statusColor")).not.toBe(new URL(tablePlusUrl("dev", 54321, "x")).searchParams.get("statusColor"));
   });
