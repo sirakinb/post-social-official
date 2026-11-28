@@ -20,6 +20,7 @@ from InsForge: `tasks/aws-migration.md`. What runs where today: `infra/README.md
 | `PostSocialServices-prod` | The same for prod: 2 API containers at `api.postsocial.xyz` and a larger worker (created 2026-11-26; prod has lived here since its cutover that evening) | About $40 a month |
 | `PostSocialBackup-prod` | The nightly backup of prod's database: a task that dumps it inside the network and uploads the file to the backup bucket, the nightly schedule that starts it, a topic that gets a message when a run fails, and the right for the `postsocial-github-backup` role to start a run by hand | Cents a month |
 | `PostSocialUptime-prod` | The uptime check: a small function that asks prod's website, API and worker every minute, and three alarms (`postsocial-prod-website-down`, `-api-down`, `-worker-down`) that send to the alerts topic after three bad minutes in a row, and again on recovery | About $1 a month |
+| `PostSocialMonitoring` | The overview dashboard `postsocial-overview` (prod and dev: is it up, requests, errors, response time, processor and memory of the API and worker, the database), and four more alarms for prod: `postsocial-prod-api-errors`, `-api-no-healthy-copy`, `-database-storage-low`, `-database-cpu-high` | About 40 cents a month |
 
 The services are their own stack per environment, so a service change can never replace a
 database. Costs are list prices for containers running all month, each with a public address.
@@ -58,9 +59,20 @@ database. Costs are list prices for containers running all month, each with a pu
   (`.github/workflows/uptime.yml`, a few runs a day) stays as a second opinion from outside
   AWS. Route 53 health checks were the other choice: they ask from several places at once,
   about every five seconds, which is half a million requests a month to each address.
-- **Three database logins.** The services sign in as `app_admin`, whose password is made up
-  inside AWS (`postsocial/<env>/database-app`). Only the migration task holds the owner
-  login. Neither password is ever in this repo, in GitHub or in a connection string.
+- **Alarms say what to look at, in plain words.** Every alarm's description names what
+  happened and where to look, because that text is the email. The limits are in
+  `lib/config.ts` beside prod's normal numbers on the day they were chosen. All of them
+  send to the one alerts topic, which lets in only alarms named `postsocial-<env>-*`.
+- **Four database logins.** The services sign in as `app_admin`, whose password is made up
+  inside AWS (`postsocial/<env>/database-app`), and as `app_user` for one signed-in person's
+  queries. Only the migration task holds the owner login. A person looks at the data as
+  `app_viewer` (`postsocial/<env>/database-viewer`), which can only read. No password is
+  ever in this repo, in GitHub or in a connection string.
+- **Looking at the data goes through a task, not an open door.** The databases have no
+  public address and no server to hop through. `npm run db:view -- <dev|prod>` starts the
+  small task `postsocial-<env>-tunnel` and has AWS's session service carry one local port
+  through it to the database; the task holds no login, and stops when the command is closed
+  or by itself after four hours. Who may do it is decided by their own AWS sign-in.
 - **Settings arrive as one JSON object** (`SETTINGS_JSON`, from `postsocial/<env>/api` or
   `/worker`). What is set on the container itself wins: the database's address, the
   environment's name and the API's own address can't be overridden by a copied setting.
