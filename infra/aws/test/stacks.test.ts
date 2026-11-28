@@ -12,7 +12,8 @@ const data = { dev: Template.fromStack(built.data.dev), prod: Template.fromStack
 const services = { dev: Template.fromStack(built.services.dev), prod: Template.fromStack(built.services.prod) };
 const backup = Template.fromStack(built.backups.prod!);
 const uptime = Template.fromStack(built.uptime.prod!);
-const all = [foundation, edge, data.dev, data.prod, services.dev, services.prod, backup, uptime];
+const monitoring = Template.fromStack(built.monitoring);
+const all = [foundation, edge, data.dev, data.prod, services.dev, services.prod, backup, uptime, monitoring];
 
 type Resource = { Type: string; Properties: Record<string, unknown>; DeletionPolicy?: string };
 type Statement = { Sid?: string; Action: string | string[]; Effect: string; Resource: unknown; Condition?: Record<string, Record<string, unknown>> };
@@ -142,12 +143,12 @@ describe.each(ENV_NAMES)("%s database", (envName) => {
 
   it("creates the service settings empty, so no value ever comes from this repo", () => {
     const names = resources(template, "AWS::SecretsManager::Secret").map((s) => s.Properties.Name);
-    expect(names.sort()).toEqual([`postsocial/${envName}/api`, `postsocial/${envName}/database-admin`, `postsocial/${envName}/database-app`, `postsocial/${envName}/sign-in`, `postsocial/${envName}/worker`]);
+    expect(names.sort()).toEqual([`postsocial/${envName}/api`, `postsocial/${envName}/database-admin`, `postsocial/${envName}/database-app`, `postsocial/${envName}/database-viewer`, `postsocial/${envName}/sign-in`, `postsocial/${envName}/worker`]);
     for (const service of ["api", "worker"]) {
       template.hasResourceProperties("AWS::SecretsManager::Secret", { Name: `postsocial/${envName}/${service}`, SecretString: "{}" });
     }
-    // Both database passwords and the sign-in key are generated inside AWS, never written here.
-    for (const login of ["database-admin", "database-app", "sign-in"]) {
+    // The database passwords and the sign-in key are generated inside AWS, never written here.
+    for (const login of ["database-admin", "database-app", "database-viewer", "sign-in"]) {
       template.hasResourceProperties("AWS::SecretsManager::Secret", { Name: `postsocial/${envName}/${login}`, GenerateSecretString: Match.anyValue() });
     }
   });
@@ -179,8 +180,8 @@ describe.each(ENV_NAMES)("%s services", (envName) => {
   const service = (part: string) => resources(template, "AWS::ECS::Service").find((s) => s.Properties.ServiceName === `postsocial-${envName}-${part}`)!;
   const names = (list: unknown) => (list as { Name: string }[]).map((item) => item.Name).sort();
 
-  it("runs the API, the worker and the two database tasks on ARM64 Fargate", () => {
-    expect(Object.keys(definitions).sort()).toEqual(["api", "copy", "migrate", "worker"].map((part) => `postsocial-${envName}-${part}`));
+  it("runs the API, the worker and the three database tasks on ARM64 Fargate", () => {
+    expect(Object.keys(definitions).sort()).toEqual(["api", "copy", "migrate", "tunnel", "worker"].map((part) => `postsocial-${envName}-${part}`));
     for (const definition of Object.values(definitions)) {
       expect(definition.Properties).toMatchObject({ RequiresCompatibilities: ["FARGATE"], NetworkMode: "awsvpc", RuntimePlatform: { CpuArchitecture: "ARM64", OperatingSystemFamily: "LINUX" } });
     }
@@ -261,7 +262,7 @@ describe.each(ENV_NAMES)("%s services", (envName) => {
 
   it("keeps the owner login to the migration task", () => {
     expect(container("migrate").Command).toEqual(["node", "migrate.mjs", "--bootstrap"]);
-    expect(names(container("migrate").Secrets)).toEqual(["DATABASE_OWNER_PASSWORD", "DATABASE_OWNER_USERNAME", "DATABASE_PASSWORD"]);
+    expect(names(container("migrate").Secrets)).toEqual(["DATABASE_OWNER_PASSWORD", "DATABASE_OWNER_USERNAME", "DATABASE_PASSWORD", "DATABASE_VIEWER_PASSWORD"]);
     expect(names(container("migrate").Environment)).toEqual(["DATABASE_HOST", "DATABASE_NAME", "DATABASE_PORT"]);
     expect(JSON.stringify(container("migrate").Secrets)).not.toContain("Settings");
     // Each task can read its own secrets and no other's.
@@ -330,10 +331,11 @@ describe.each(ENV_NAMES)("%s services", (envName) => {
     expect(bySid.HandTasksTheirRoles.Condition).toEqual({ StringEquals: { "iam:PassedToService": "ecs-tasks.amazonaws.com" } });
   });
 
-  it("gives the containers themselves no AWS rights", () => {
+  it("gives the containers themselves no AWS rights, but for the way in's session channels", () => {
     const taskRoles = Object.keys(template.findResources("AWS::IAM::Role")).filter((id) => id.includes("TaskTaskRole"));
-    expect(taskRoles).toHaveLength(4);
-    for (const policy of resources(template, "AWS::IAM::Policy")) expect(JSON.stringify(policy.Properties.Roles)).not.toMatch(/TaskTaskRole/);
+    expect(taskRoles).toHaveLength(5);
+    // The one exception is checked in full under "looking at the data".
+    for (const policy of resources(template, "AWS::IAM::Policy")) expect(JSON.stringify(policy.Properties.Roles)).not.toMatch(/(?<!tunnel)TaskTaskRole/);
     for (const role of resources(template, "AWS::IAM::Role")) expect(role.Properties.ManagedPolicyArns).toBeUndefined();
   });
 });
@@ -463,6 +465,44 @@ describe("the nightly backup of prod's database", () => {
   });
 });
 
+describe("looking at the data from a person's own machine", () => {
+  const containersOf = (template: Template, family: string) =>
+    (resources(template, "AWS::ECS::TaskDefinition").find((definition) => definition.Properties.Family === family)!.Properties.ContainerDefinitions as Record<string, unknown>[])[0];
+  const secretNames = (container: Record<string, unknown>) => ((container.Secrets as { Name: string }[] | undefined) ?? []).map((secret) => secret.Name);
+
+  it.each(ENV_NAMES)("%s has a read-only login whose password is made up inside AWS and kept", (envName) => {
+    const viewer = resources(data[envName], "AWS::SecretsManager::Secret").find((secret) => secret.Properties.Name === `postsocial/${envName}/database-viewer`)!;
+    expect(viewer.Properties.GenerateSecretString).toMatchObject({ SecretStringTemplate: '{"username":"app_viewer"}', GenerateStringKey: "password", PasswordLength: 40 });
+    expect(viewer.DeletionPolicy).toBe("Retain");
+  });
+
+  it.each(ENV_NAMES)("%s: only the migration task is handed that password, never the API or the worker", (envName) => {
+    expect(secretNames(containersOf(services[envName], `postsocial-${envName}-migrate`))).toContain("DATABASE_VIEWER_PASSWORD");
+    for (const part of ["api", "worker"]) expect(secretNames(containersOf(services[envName], `postsocial-${envName}-${part}`))).not.toContain("DATABASE_VIEWER_PASSWORD");
+  });
+
+  it.each(ENV_NAMES)("%s: the way in holds no login and no settings, only waits, and stops by itself", (envName) => {
+    const tunnel = containersOf(services[envName], `postsocial-${envName}-tunnel`);
+    expect(JSON.stringify(tunnel.Image)).toMatch(/^"public\.ecr\.aws\/docker\/library\/alpine:3\.\d+"$/);
+    expect(tunnel.Command).toEqual(["sleep", "14400"]);
+    expect(tunnel.Secrets).toBeUndefined();
+    expect(tunnel.Environment).toBeUndefined();
+    expect(tunnel.PortMappings).toBeUndefined();
+    expect(tunnel.LinuxParameters).toMatchObject({ InitProcessEnabled: true });
+  });
+
+  it.each(ENV_NAMES)("%s: the task may talk to the session service and nothing else, and a deploy can't start it", (envName) => {
+    const rights = resources(services[envName], "AWS::IAM::Policy").find((policy) => JSON.stringify(policy.Properties.Roles).includes("tunnelTaskTaskRole"))!;
+    expect(statementsOf(rights)).toHaveLength(1);
+    expect(actionsOf(statementsOf(rights)[0]).sort()).toEqual(["ssmmessages:CreateControlChannel", "ssmmessages:CreateDataChannel", "ssmmessages:OpenControlChannel", "ssmmessages:OpenDataChannel"]);
+    const deploy = resources(services[envName], "AWS::IAM::Policy").find((policy) => policy.Properties.PolicyName === `postsocial-${envName}-deploy`)!;
+    expect(JSON.stringify(statementsOf(deploy))).not.toMatch(/tunnel/i);
+    // Nor does the task's start-up role read any secret.
+    const startUp = resources(services[envName], "AWS::IAM::Policy").find((policy) => JSON.stringify(policy.Properties.Roles).includes("tunnelTaskExecutionRole"))!;
+    expect(statementsOf(startUp).flatMap(actionsOf).filter((action) => action.startsWith("secretsmanager:"))).toEqual([]);
+  });
+});
+
 describe("the uptime check", () => {
   const [checker] = resources(uptime, "AWS::Lambda::Function");
   const alarms = resources(uptime, "AWS::CloudWatch::Alarm");
@@ -530,6 +570,75 @@ describe("the uptime check", () => {
 
   it("can't be deleted by mistake", () => {
     expect(built.uptime.prod!.terminationProtection).toBe(true);
+  });
+});
+
+describe("the overview dashboard and the other alarms", () => {
+  // An alarm on one labelled number is written out as a one-item list; flatten it to read.
+  type Watched = { MetricStat: { Metric: { Namespace: string; MetricName: string; Dimensions: { Name: string; Value: unknown }[] }; Period: number; Stat: string } };
+  const flat = (properties: Record<string, unknown>) => {
+    const [{ MetricStat: stat }] = properties.Metrics as Watched[];
+    return { ...properties, Namespace: stat.Metric.Namespace, MetricName: stat.Metric.MetricName, Statistic: stat.Stat, Period: stat.Period, Dimensions: stat.Metric.Dimensions };
+  };
+  const alarms = Object.fromEntries(resources(monitoring, "AWS::CloudWatch::Alarm").map((alarm) => [alarm.Properties.AlarmName as string, flat(alarm.Properties) as Record<string, unknown>]));
+  const dimensions = (alarm: Record<string, unknown>) => Object.fromEntries((alarm.Dimensions as { Name: string; Value: unknown }[]).map((d) => [d.Name, d.Value]));
+  const [dashboard] = resources(monitoring, "AWS::CloudWatch::Dashboard");
+  const body = JSON.stringify(dashboard.Properties.DashboardBody);
+
+  it("alarms for prod only, and each one says when it starts and when it clears", () => {
+    expect(Object.keys(alarms).sort()).toEqual(["postsocial-prod-api-errors", "postsocial-prod-api-no-healthy-copy", "postsocial-prod-database-cpu-high", "postsocial-prod-database-storage-low"]);
+    for (const alarm of Object.values(alarms)) {
+      expect(JSON.stringify(alarm.AlarmActions)).toMatch(/PostSocialBackup-prod.*Alerts/);
+      expect(alarm.OKActions).toEqual(alarm.AlarmActions);
+      expect(alarm.AlarmDescription).toMatch(/^Post Social prod: /);
+    }
+    monitoring.resourceCountIs("AWS::SNS::Subscription", 0);
+  });
+
+  it("tells us when the API answers with server errors: 5 in 5 minutes, and silence is not an error", () => {
+    const alarm = alarms["postsocial-prod-api-errors"];
+    expect(alarm).toMatchObject({ Namespace: "AWS/ApplicationELB", MetricName: "HTTPCode_Target_5XX_Count", Statistic: "Sum", Period: 300, ComparisonOperator: "GreaterThanOrEqualToThreshold", Threshold: 5, EvaluationPeriods: 1, TreatMissingData: "notBreaching" });
+    // Prod's own place behind the load balancer, not dev's.
+    expect(JSON.stringify(dimensions(alarm).TargetGroup)).toMatch(/PostSocialServices-prod/);
+    expect(JSON.stringify(dimensions(alarm).LoadBalancer)).toMatch(/PostSocialEdge/);
+  });
+
+  it("tells us when no API container is healthy for 2 minutes, or the count stops arriving", () => {
+    const alarm = alarms["postsocial-prod-api-no-healthy-copy"];
+    expect(alarm).toMatchObject({ MetricName: "HealthyHostCount", Statistic: "Minimum", Period: 60, ComparisonOperator: "LessThanThreshold", Threshold: 1, EvaluationPeriods: 2, TreatMissingData: "breaching" });
+    expect(JSON.stringify(dimensions(alarm).TargetGroup)).toMatch(/PostSocialServices-prod/);
+  });
+
+  it("tells us when prod's database is short of disk or busy for 15 minutes", () => {
+    const storage = alarms["postsocial-prod-database-storage-low"];
+    expect(storage).toMatchObject({ Namespace: "AWS/RDS", MetricName: "FreeStorageSpace", Statistic: "Minimum", ComparisonOperator: "LessThanThreshold", Threshold: 4 * 1024 ** 3, Period: 300, EvaluationPeriods: 3 });
+    const cpu = alarms["postsocial-prod-database-cpu-high"];
+    expect(cpu).toMatchObject({ Namespace: "AWS/RDS", MetricName: "CPUUtilization", Statistic: "Average", ComparisonOperator: "GreaterThanThreshold", Threshold: 85, Period: 300, EvaluationPeriods: 3 });
+    for (const alarm of [storage, cpu]) expect(dimensions(alarm)).toEqual({ DBInstanceIdentifier: "postsocial-prod" });
+  });
+
+  it("uses alarm names the alerts topic lets in", () => {
+    const [topicPolicy] = resources(backup, "AWS::SNS::TopicPolicy");
+    const pattern = (statementsOf(topicPolicy).find((s) => s.Sid === "OurAlarms")!.Condition!.ArnLike["aws:SourceArn"] as string).split(":alarm:")[1];
+    expect(pattern).toBe("postsocial-prod-*");
+    expect(Object.keys(alarms).every((name) => name.startsWith("postsocial-prod-"))).toBe(true);
+  });
+
+  it("shows prod and dev on one dashboard, with all seven alarms at the top", () => {
+    expect(dashboard.Properties.DashboardName).toBe("postsocial-overview");
+    monitoring.resourceCountIs("AWS::CloudWatch::Dashboard", 1);
+    for (const name of ["website-down", "api-down", "worker-down", "api-errors", "api-no-healthy-copy", "database-storage-low", "database-cpu-high"]) expect(body).toContain(`alarm:postsocial-prod-${name}`);
+    for (const envName of ENV_NAMES) {
+      expect(body).toContain(`postsocial-${envName}-api`);
+      expect(body).toContain(`postsocial-${envName}-worker`);
+      expect(body).toMatch(new RegExp(`DBInstanceIdentifier[^a-z]+postsocial-${envName}`));
+      expect(body).toContain(`PostSocialServices-${envName}`);
+    }
+    for (const metric of ["RequestCount", "HTTPCode_Target_5XX_Count", "TargetResponseTime", "CPUUtilization", "MemoryUtilization", "DatabaseConnections", "FreeStorageSpace", "PostSocial/Uptime"]) expect(body).toContain(metric);
+  });
+
+  it("can't be deleted by mistake", () => {
+    expect(built.monitoring.terminationProtection).toBe(true);
   });
 });
 

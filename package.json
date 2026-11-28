@@ -18,6 +18,7 @@
     "deploy:prod": "scripts/deploy-prod.sh",
     "test:db": "INSFORGE_INTEGRATION=1 vitest run backend/tests --testTimeout=60000",
     "db:local": "scripts/local-database.sh",
+    "db:view": "AWS_PROFILE=${AWS_PROFILE:-postsocial} AWS_REGION=${AWS_REGION:-us-east-1} node scripts/aws-db-view.mjs",
     "test:pg": "TZ=UTC POSTSOCIAL_PG_TESTS=1 vitest run backend/tests/postgres.integration.test.ts backend/tests/sign-in.integration.test.ts --testTimeout=60000",
     "api:build": "backend/build.sh",
     "config:dev": "scripts/insforge-env.sh dev config apply",

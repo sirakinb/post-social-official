@@ -68,6 +68,10 @@ export const copySourceSecret = (envName: EnvName) => `postsocial/${envName}/ins
 export const CLUSTER_NAME = "postsocial";
 export const deployRoleName = (envName: EnvName) => `postsocial-github-deploy-${envName}`;
 
+// How long a way in for looking at the data stays up if nobody closes it
+// (lib/services-stack.ts, scripts/aws-db-view.mjs).
+export const TUNNEL_HOURS = 4;
+
 // Nightly database backups (lib/backup-stack.ts). The bucket and the GitHub role were made
 // by hand on 2026-11-24, before any of this was code: versioned, private, HTTPS only;
 // daily/ is kept 30 days and monthly/ 12 months by the bucket's own rules.
@@ -82,3 +86,10 @@ export const BACKED_UP: EnvName[] = ["prod"];
 export const WATCHED: Partial<Record<EnvName, { website: string }>> = { prod: { website: "https://www.postsocial.xyz" } };
 // Minutes in a row a check must fail (or be missing) before a message is sent.
 export const UPTIME_MINUTES_BEFORE_ALERT = 3;
+
+// The other alarms of a watched environment (lib/monitoring-stack.ts). Prod's normal on
+// 2026-11-27, for scale: two server errors in two days, database processor at 5%, 18 of
+// 20 GB of disk free.
+export const API_ERRORS_BEFORE_ALERT = 5; // server errors in 5 minutes
+export const DATABASE_FREE_GB_LIMIT = 4;
+export const DATABASE_CPU_LIMIT = 85; // percent, for 15 minutes
