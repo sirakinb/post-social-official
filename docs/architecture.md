@@ -118,7 +118,10 @@ every write is tied to the claim, so two workers can never send the same post.
   social account so we stay inside each platform's limits.
 - **Monitoring:** PostHog for errors, post outcomes and alerts; an uptime check in AWS that
   asks the site, the API and the worker every minute and emails the owner after three bad
-  minutes in a row, and again on recovery (`infra/aws/lib/uptime-stack.ts`). A GitHub Actions
+  minutes in a row, and again on recovery (`infra/aws/lib/uptime-stack.ts`); four more
+  alarms for server errors, no healthy API container, and the database's disk and
+  processor, with one CloudWatch dashboard, `postsocial-overview`, showing prod and dev
+  (`infra/aws/lib/monitoring-stack.ts`). A GitHub Actions
   check of the same three stays as a second opinion from outside AWS; GitHub runs it only a
   few times a day. The worker has no address on AWS: it writes a heartbeat to the database
   every half minute and the API reports it at `/readyz/worker`
